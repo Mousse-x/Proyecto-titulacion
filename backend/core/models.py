@@ -1,4 +1,5 @@
 from django.db import models
+import uuid
 
 
 # =========================
@@ -52,6 +53,9 @@ class AppUser(models.Model):
     last_login = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
+    # ── Seguridad: bloqueo por intentos fallidos ──
+    failed_login_attempts = models.SmallIntegerField(default=0)
+    is_locked = models.BooleanField(default=False)
 
     class Meta:
         managed = False
@@ -303,3 +307,25 @@ class AuditError(models.Model):
 
     def __str__(self):
         return f"[{self.module}/{self.function_name}] {self.error_message[:60]}"
+
+
+# =========================
+# PASSWORD RESET
+# =========================
+
+class PasswordResetToken(models.Model):
+    """Token de único uso para restablecer contraseña."""
+    user       = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="reset_tokens")
+    token      = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()          # se asigna en la vista
+    used       = models.BooleanField(default=False)
+
+    class Meta:
+        managed  = True                          # Django crea/migra esta tabla
+        db_table = '"core"."password_reset_tokens"'
+        verbose_name = "Token de restablecimiento"
+        verbose_name_plural = "Tokens de restablecimiento"
+
+    def __str__(self):
+        return f"Reset token for user_id={self.user_id} (used={self.used})"

@@ -56,4 +56,8 @@ export const api = {
   },
   stats:        ()   => client.get('/stats/'),
   roles:        ()   => client.get('/roles/'),
+  passwordReset: {
+    request: (email)          => client.post('/auth/password-reset/request/', { email }),
+    confirm: (token, data)    => client.post(`/auth/password-reset/confirm/${token}/`, data),
+  },
 };

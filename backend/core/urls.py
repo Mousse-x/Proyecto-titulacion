@@ -8,12 +8,16 @@ from .views import (
     list_roles,
     list_audit_errors,
     list_audit_logs,
+    request_password_reset,
+    confirm_password_reset,
 )
 
 urlpatterns = [
     # Auth
     path("auth/register/", register_user,   name="register_user"),
     path("auth/login/",    login_user,       name="login_user"),
+    path("auth/password-reset/request/",          request_password_reset, name="password_reset_request"),
+    path("auth/password-reset/confirm/<str:token>/", confirm_password_reset, name="password_reset_confirm"),
 
     # Users
     path("users/",               list_users,       name="list_users"),

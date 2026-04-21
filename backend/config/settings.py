@@ -138,7 +138,24 @@ PASSWORD_HASHERS = [
 ]
 
 # ─── Cifrado de campos sensibles (email) ────────────────────────────
-# ⚠️  Guardar esta clave en un lugar seguro. Si se pierde, los emails
-#     cifrados en la BD NO podrán recuperarse jamás.
 FIELD_ENCRYPTION_KEY = '7elgs3oBEcSARG4Yk_0RnZATRye1iop_lUdtBb_PFlg='
+
+# ─── Email — Brevo SMTP ───────────────────────────────────────────────
+# Backend personalizado que resuelve el error SSL de Python 3.14 con Brevo
+EMAIL_BACKEND       = 'core.email_backend.BrevoEmailBackend'
+EMAIL_HOST          = 'smtp-relay.brevo.com'
+EMAIL_PORT          = 587
+EMAIL_USE_TLS       = True
+EMAIL_HOST_USER     = 'a8d5ed001@smtp-brevo.com'
+EMAIL_HOST_PASSWORD = 'KyXta5h1BqW3j8bL'
+DEFAULT_FROM_EMAIL  = 'SisTransp ESPOCH <sistematransparencia@hotmail.com>'
+
+# URL base del frontend — usada en los links de reset
+FRONTEND_URL = 'http://localhost:5173'
+
+# Tiempo de expiración del token de reset (minutos)
+PASSWORD_RESET_EXPIRY_MINUTES = 30
+
+# False = envío real por SMTP
+DEBUG_RESET_LINK = False
 

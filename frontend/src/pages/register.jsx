@@ -3,7 +3,8 @@ import api from "../services/api";
 
 export default function Register() {
   const [form, setForm] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -21,6 +22,15 @@ export default function Register() {
 
 const handleSubmit = async (e) => {
   e.preventDefault();
+  setError("");
+
+  const firstName = form.firstName.trim();
+  const lastName  = form.lastName.trim();
+
+  if (!firstName || !lastName) {
+    setError("El nombre y el apellido son obligatorios.");
+    return;
+  }
 
   if (form.password !== form.confirmPassword) {
     setError("Las contraseñas no coinciden.");
@@ -28,10 +38,15 @@ const handleSubmit = async (e) => {
   }
 
   try {
-    const response = await api.post("/api/register/", form);
+    const payload = {
+      fullName: `${firstName} ${lastName}`,
+      email: form.email,
+      password: form.password,
+    };
+    const response = await api.post("/api/register/", payload);
     setMessage(response.data.message);
   } catch (err) {
-    setError(err.response?.data?.error || "Error");
+    setError(err.response?.data?.error || "Error al registrar el usuario.");
   }
 };
 
@@ -42,11 +57,23 @@ const handleSubmit = async (e) => {
         <p style={styles.subtitle}>Registro de usuario consultor</p>
 
         <form onSubmit={handleSubmit} style={styles.form}>
-          <label style={styles.label}>Nombre completo</label>
+          <label style={styles.label}>Nombre(s)</label>
           <input
             type="text"
-            name="fullName"
-            value={form.fullName}
+            name="firstName"
+            placeholder="Ej. Juan Carlos"
+            value={form.firstName}
+            onChange={handleChange}
+            style={styles.input}
+            required
+          />
+
+          <label style={styles.label}>Apellido(s)</label>
+          <input
+            type="text"
+            name="lastName"
+            placeholder="Ej. Pérez García"
+            value={form.lastName}
             onChange={handleChange}
             style={styles.input}
             required

@@ -4,7 +4,8 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 
 // Auth
-import Login from './pages/auth/Login';
+import Login         from './pages/auth/Login';
+import ResetPassword from './pages/auth/ResetPassword';
 
 // Admin pages
 import AdminDashboard   from './pages/admin/AdminDashboard';
@@ -39,8 +40,9 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           {/* Public */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/"       element={<Navigate to="/login" replace />} />
+          <Route path="/login"                      element={<Login />} />
+          <Route path="/reset-password/:token"       element={<ResetPassword />} />
+          <Route path="/"                            element={<Navigate to="/login" replace />} />
 
           {/* System Admin — role 1 */}
           <Route path="/admin/dashboard"    element={<ProtectedRoute allowedRoles={[1]}><WithLayout><AdminDashboard /></WithLayout></ProtectedRoute>} />

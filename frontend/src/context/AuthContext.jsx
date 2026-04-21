@@ -21,10 +21,12 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
+  const [errorData, setErrorData] = useState(null);  // payload completo del error
 
   const login = useCallback(async (email, password) => {
     setLoading(true);
     setError(null);
+    setErrorData(null);
 
     try {
       const res = await api.auth.login({ email, password });
@@ -50,9 +52,10 @@ export function AuthProvider({ children }) {
 
     } catch (err) {
       setLoading(false);
-      const msg = err.response?.data?.error
-        || 'Error de conexión. Verifique que el servidor esté activo.';
+      const payload = err.response?.data || {};
+      const msg = payload.error || 'Error de conexión. Verifique que el servidor esté activo.';
       setError(msg);
+      setErrorData(payload);   // guarda el objeto completo {error, remaining, support_email, ...}
       return false;
     }
   }, []);
@@ -68,7 +71,7 @@ export function AuthProvider({ children }) {
   const isAuditor    = user?.role_id === 4;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, error, isAdmin, isUnivAdmin, isAuditor }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, error, errorData, isAdmin, isUnivAdmin, isAuditor }}>
       {children}
     </AuthContext.Provider>
   );

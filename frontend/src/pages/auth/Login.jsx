@@ -6,22 +6,29 @@ import { api } from '../../api/client';
 const ROLE_REDIRECTS = { 1: '/admin/dashboard', 2: '/university/dashboard', 3: '/university/dashboard', 4: '/auditor/dashboard' };
 
 export default function Login() {
-  const { login, loading, error } = useAuth();
+  const { login, loading, error, errorData } = useAuth();
   const navigate = useNavigate();
 
-  // Tab: 'login' | 'register'
+  // Tab: 'login' | 'register' | 'forgot'
   const [tab, setTab] = useState('login');
 
   // Login form
-  const [form, setForm]       = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
 
   // Register form
-  const [regForm, setRegForm]   = useState({ fullName: '', email: '', password: '', confirm: '' });
+  const [regForm, setRegForm] = useState({ fullName: '', email: '', password: '', confirm: '' });
   const [showRegPass, setShowRegPass] = useState(false);
-  const [regLoading, setRegLoading]   = useState(false);
-  const [regError, setRegError]       = useState(null);
-  const [regSuccess, setRegSuccess]   = useState(false);
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState(null);
+  const [regSuccess, setRegSuccess] = useState(false);
+
+  // Forgot password form
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState(null);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotDevLink, setForgotDevLink] = useState(null);  // solo en desarrollo
 
   // ── Login ──────────────────────────────────────────────────────
   const handleLogin = async (e) => {
@@ -55,7 +62,7 @@ export default function Login() {
     try {
       await api.auth.register({
         fullName: regForm.fullName.trim(),
-        email:    regForm.email.trim().toLowerCase(),
+        email: regForm.email.trim().toLowerCase(),
         password: regForm.password,
       });
       setRegSuccess(true);
@@ -66,6 +73,43 @@ export default function Login() {
       setRegLoading(false);
     }
   };
+
+  // ── Forgot password ────────────────────────────────────────────
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setForgotError(null);
+
+    const emailTrimmed = forgotEmail.trim().toLowerCase();
+    if (!emailTrimmed) {
+      setForgotError('Ingresa tu correo electrónico.');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const res = await api.passwordReset.request(emailTrimmed);
+      setForgotSent(true);
+      // En desarrollo el backend devuelve el link directo
+      if (res.data?.dev_reset_link) {
+        setForgotDevLink(res.data.dev_reset_link);
+      }
+    } catch (err) {
+      setForgotError(err.response?.data?.error || 'No se pudo enviar el correo. Intente de nuevo.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const switchTab = (newTab) => {
+    setTab(newTab);
+    setForgotError(null);
+    setForgotSent(false);
+    setForgotEmail('');
+    setForgotDevLink(null);
+    setRegError(null);
+    setRegSuccess(false);
+  };
+
 
   return (
     <div className="login-page">
@@ -114,103 +158,155 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div style={{
-            display: 'flex', gap: 4,
-            background: 'var(--bg-tertiary)',
-            borderRadius: 'var(--radius)',
-            padding: 4,
-            marginBottom: 24,
-          }}>
-            {[
-              { id: 'login',    label: '→ Iniciar sesión' },
-              { id: 'register', label: '✦ Registrarse' },
-            ].map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => { setTab(t.id); setRegError(null); setRegSuccess(false); }}
-                style={{
-                  flex: 1, padding: '9px 0', border: 'none', borderRadius: 'calc(var(--radius) - 2px)',
-                  fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  background: tab === t.id ? 'var(--bg-card)' : 'transparent',
-                  color: tab === t.id ? 'var(--text)' : 'var(--text-subtle)',
-                  boxShadow: tab === t.id ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {/* Tabs — solo login y register, forgot es un panel oculto */}
+          {tab !== 'forgot' && (
+            <div style={{
+              display: 'flex', gap: 4,
+              background: 'var(--bg-tertiary)',
+              borderRadius: 'var(--radius)',
+              padding: 4,
+              marginBottom: 24,
+            }}>
+              {[
+                { id: 'login', label: '→ Iniciar sesión' },
+                { id: 'register', label: '✦ Registrarse' },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => switchTab(t.id)}
+                  style={{
+                    flex: 1, padding: '9px 0', border: 'none', borderRadius: 'calc(var(--radius) - 2px)',
+                    fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    background: tab === t.id ? 'var(--bg-card)' : 'transparent',
+                    color: tab === t.id ? 'var(--text)' : 'var(--text-subtle)',
+                    boxShadow: tab === t.id ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* ── LOGIN PANEL ── */}
           {tab === 'login' && (
             <>
-              <h2 className="login-title">Bienvenido de vuelta</h2>
-              <p className="login-subtitle">Ingresa tus credenciales para acceder al sistema</p>
-
-              <form className="login-form" onSubmit={handleLogin} autoComplete="on">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="login-email">Correo institucional</label>
-                  <input
-                    id="login-email"
-                    type="email"
-                    className="form-input"
-                    placeholder="usuario@institucion.edu.ec"
-                    value={form.email}
-                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                    required
-                    autoComplete="username"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="login-password">Contraseña</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      id="login-password"
-                      type={showPass ? 'text' : 'password'}
-                      className="form-input"
-                      placeholder="••••••••"
-                      value={form.password}
-                      onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                      required
-                      autoComplete="current-password"
-                      style={{ paddingRight: 44 }}
-                    />
+              {errorData?.error === 'ACCOUNT_LOCKED' ? (
+                /* ── Panel cuenta bloqueada ── */
+                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: 12 }}>🔒</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#f87171', marginBottom: 8 }}>
+                    Cuenta bloqueada
+                  </div>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 24, lineHeight: 1.6 }}>
+                    Has superado el número máximo de intentos permitidos.
+                    Tu cuenta ha sido bloqueada por seguridad.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <button
-                      type="button"
-                      onClick={() => setShowPass(v => !v)}
+                      className="btn btn-primary btn-lg"
+                      style={{ width: '100%' }}
+                      onClick={() => switchTab('forgot')}
+                    >
+                      🔑 Restablecer mi contraseña
+                    </button>
+                    <a
+                      href={`mailto:${errorData.support_email}`}
                       style={{
-                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                        background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', fontSize: '1rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '11px 20px', borderRadius: 'var(--radius)',
+                        border: '1px solid var(--border)', background: 'var(--bg-tertiary)',
+                        color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500,
+                        textDecoration: 'none', transition: 'all 0.2s',
                       }}
                     >
-                      {showPass ? '🙈' : '👁️'}
-                    </button>
+                      ✉️ Contactar soporte: {errorData.support_email}
+                    </a>
                   </div>
                 </div>
+              ) : (
+                /* ── Formulario de login ── */
+                <>
+                  <h2 className="login-title">Bienvenido de vuelta</h2>
+                  <p className="login-subtitle">Ingresa tus credenciales para acceder al sistema</p>
 
-                {error && (
-                  <div className="alert alert-danger" style={{ borderRadius: 'var(--radius)' }}>
-                    ⚠️ {error}
-                  </div>
-                )}
+                  <form className="login-form" onSubmit={handleLogin} autoComplete="on">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="login-email">Correo institucional</label>
+                      <input
+                        id="login-email"
+                        type="email"
+                        className="form-input"
+                        placeholder="usuario@institucion.edu.ec"
+                        value={form.email}
+                        onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                        required
+                        autoComplete="username"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="login-password">Contraseña</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          id="login-password"
+                          type={showPass ? 'text' : 'password'}
+                          className="form-input"
+                          placeholder="••••••••"
+                          value={form.password}
+                          onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                          required
+                          autoComplete="current-password"
+                          style={{ paddingRight: 44 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPass(v => !v)}
+                          style={{
+                            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', fontSize: '1rem',
+                          }}
+                        >
+                          {showPass ? '🙈' : '👁️'}
+                        </button>
+                      </div>
+                    </div>
 
-                <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ width: '100%', marginTop: 4 }}>
-                  {loading ? (
-                    <><span className="spinner" style={{ width: 18, height: 18 }} /> Verificando...</>
-                  ) : '→ Ingresar al Sistema'}
-                </button>
-              </form>
+                    {/* Error con intentos restantes */}
+                    {error && (
+                      <div className="alert alert-danger" style={{ borderRadius: 'var(--radius)' }}>
+                        ⚠️ {error}
+                        {errorData?.remaining != null && errorData.remaining > 0 && (
+                          <span style={{ display: 'block', marginTop: 4, fontSize: '0.8rem', opacity: 0.85 }}>
+                            Intentos restantes: <strong>{errorData.remaining}</strong>
+                          </span>
+                        )}
+                      </div>
+                    )}
 
-              <p style={{ textAlign: 'center', marginTop: 20, fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>
-                ¿No tienes cuenta?{' '}
-                <button type="button" onClick={() => setTab('register')}
-                  style={{ background: 'none', border: 'none', color: 'var(--primary-light)', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}>
-                  Regístrate aquí
-                </button>
-              </p>
+                    <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ width: '100%', marginTop: 4 }}>
+                      {loading ? (
+                        <><span className="spinner" style={{ width: 18, height: 18 }} /> Verificando...</>
+                      ) : '→ Ingresar al Sistema'}
+                    </button>
+                  </form>
+
+                  <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>
+                    ¿No tienes cuenta?{' '}
+                    <button type="button" onClick={() => switchTab('register')}
+                      style={{ background: 'none', border: 'none', color: 'var(--primary-light)', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}>
+                      Regístrate aquí
+                    </button>
+                  </p>
+                  <p style={{ textAlign: 'center', marginTop: 8, fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>
+                    <button type="button" onClick={() => switchTab('forgot')}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontWeight: 500, cursor: 'pointer', fontSize: 'inherit', textDecoration: 'underline' }}>
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </p>
+                </>
+              )}
             </>
           )}
 
@@ -320,11 +416,105 @@ export default function Login() {
 
               <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>
                 ¿Ya tienes cuenta?{' '}
-                <button type="button" onClick={() => setTab('login')}
+                <button type="button" onClick={() => switchTab('login')}
                   style={{ background: 'none', border: 'none', color: 'var(--primary-light)', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}>
                   Inicia sesión
                 </button>
               </p>
+            </>
+          )}
+
+          {/* ── FORGOT PASSWORD PANEL ── */}
+          {tab === 'forgot' && (
+            <>
+              {/* Back button */}
+              <button
+                type="button"
+                onClick={() => switchTab('login')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+                  color: 'var(--text-subtle)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 500,
+                  padding: 0, marginBottom: 20,
+                }}
+              >
+                ← Volver al inicio de sesión
+              </button>
+
+              {forgotSent ? (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: 16 }}>📧</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--success)', marginBottom: 8 }}>
+                    ¡Solicitud enviada!
+                  </div>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
+                    Si el correo está registrado en el sistema, recibirás un enlace para
+                    restablecer tu contraseña. Revisa también tu carpeta de spam.
+                  </p>
+
+                  {/* Link de prueba — solo visible en desarrollo */}
+                  {forgotDevLink && (
+                    <div style={{
+                      background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)',
+                      borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: 20, textAlign: 'left',
+                    }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary-light)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        🛠️ Modo desarrollo — link de prueba
+                      </div>
+                      <a
+                        href={forgotDevLink}
+                        style={{ fontSize: '0.8125rem', color: 'var(--primary-light)', wordBreak: 'break-all', lineHeight: 1.5 }}
+                      >
+                        {forgotDevLink}
+                      </a>
+                    </div>
+                  )}
+
+                  <button className="btn btn-primary" onClick={() => switchTab('login')}>
+                    → Ir a iniciar sesión
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h2 className="login-title">Recuperar contraseña</h2>
+                  <p className="login-subtitle">
+                    Ingresa tu correo registrado y te enviaremos un enlace para restablecer tu contraseña.
+                  </p>
+
+                  <form className="login-form" onSubmit={handleForgot} autoComplete="off">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="forgot-email">Correo electrónico</label>
+                      <input
+                        id="forgot-email"
+                        type="email"
+                        className="form-input"
+                        placeholder="usuario@institucion.edu.ec"
+                        value={forgotEmail}
+                        onChange={e => setForgotEmail(e.target.value)}
+                        required
+                        autoComplete="email"
+                      />
+                    </div>
+
+                    {forgotError && (
+                      <div className="alert alert-danger" style={{ borderRadius: 'var(--radius)' }}>
+                        ⚠️ {forgotError}
+                      </div>
+                    )}
+
+                    <button
+                      id="btn-forgot-submit"
+                      type="submit"
+                      className="btn btn-primary btn-lg"
+                      disabled={forgotLoading}
+                      style={{ width: '100%', marginTop: 4 }}
+                    >
+                      {forgotLoading ? (
+                        <><span className="spinner" style={{ width: 18, height: 18 }} /> Enviando...</>
+                      ) : '📧 Enviar enlace de recuperación'}
+                    </button>
+                  </form>
+                </>
+              )}
             </>
           )}
         </div>
