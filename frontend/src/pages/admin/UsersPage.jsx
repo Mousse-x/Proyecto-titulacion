@@ -3,6 +3,7 @@ import DataTable from '../../components/common/DataTable';
 import Modal, { ConfirmModal } from '../../components/common/Modal';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 const EMPTY = { full_name: '', email: '', role_id: 4, is_active: true };
 
@@ -15,6 +16,8 @@ const DEFAULT_ROLES = [
 ];
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
+
   const [users, setUsers]       = useState([]);
   const [roles, setRoles]       = useState(DEFAULT_ROLES);
   const [loading, setLoading]   = useState(true);
@@ -24,6 +27,10 @@ export default function UsersPage() {
   const [editing, setEditing]   = useState(null);
   const [form, setForm]         = useState(EMPTY);
   const [saving, setSaving]     = useState(false);
+
+  // ── Conteo de admins (role_id=1) para controlar el límite de 2 ──
+  const adminCount = users.filter(u => u.role_id === 1).length;
+  const adminLimitReached = adminCount >= 2;
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -39,22 +46,32 @@ export default function UsersPage() {
   }, []);
 
   useEffect(() => {
-    // Cargar roles desde el endpoint del backend
     api.roles()
       .then(res => { if (Array.isArray(res.data) && res.data.length) setRoles(res.data); })
-      .catch(() => {}); // Usar DEFAULT_ROLES si falla
-
+      .catch(() => {});
     fetchUsers();
   }, [fetchUsers]);
 
+  // ── Helpers de protección ──────────────────────────────────────
+  const isSelf        = (u) => u.id === currentUser?.id;
+  const isSuperadmin  = (u) => u.is_superadmin === true;
+  const isProtected   = (u) => isSelf(u) || isSuperadmin(u);
+
   const openCreate = () => { setEditing(null); setForm(EMPTY); setModal(true); };
-  const openEdit   = (u)  => { setEditing(u); setForm({ full_name: u.full_name, email: u.email, role_id: u.role_id, is_active: u.is_active }); setModal(true); };
+  const openEdit   = (u)  => {
+    setEditing(u);
+    setForm({ full_name: u.full_name, email: u.email, role_id: u.role_id, is_active: u.is_active });
+    setModal(true);
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       if (editing) {
-        await api.users.update(editing.id, form);
+        await api.users.update(editing.id, {
+          ...form,
+          _requester_id: currentUser?.id,  // ← identificador del actor
+        });
       } else {
         await api.users.create({ ...form, password: 'admin123' });
       }
@@ -79,11 +96,31 @@ export default function UsersPage() {
 
   const handleToggle = async (u) => {
     try {
-      await api.users.update(u.id, { is_active: !u.is_active });
+      await api.users.update(u.id, {
+        is_active: !u.is_active,
+        _requester_id: currentUser?.id,
+      });
       await fetchUsers();
     } catch (err) {
-      alert('Error al cambiar el estado del usuario.');
+      alert(err.response?.data?.error || 'Error al cambiar el estado del usuario.');
     }
+  };
+
+  // ── Tooltip de por qué está deshabilitado ─────────────────────
+  const getEditTooltip = (u) => {
+    if (isSelf(u))       return 'No puedes editar tu propia cuenta desde este panel';
+    if (isSuperadmin(u)) return 'El superadministrador está protegido';
+    return 'Editar usuario';
+  };
+  const getToggleTooltip = (u) => {
+    if (isSelf(u))       return 'No puedes desactivar tu propia cuenta';
+    if (isSuperadmin(u)) return 'El superadministrador siempre debe estar activo';
+    return u.is_active ? 'Desactivar cuenta' : 'Activar cuenta';
+  };
+  const getDeleteTooltip = (u) => {
+    if (isSuperadmin(u)) return 'El superadministrador no puede eliminarse';
+    if (isSelf(u))       return 'No puedes eliminar tu propia cuenta';
+    return 'Eliminar usuario';
   };
 
   const columns = [
@@ -94,7 +131,19 @@ export default function UsersPage() {
             {v.split(' ').slice(0, 2).map(n => n[0]).join('')}
           </div>
           <div>
-            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{v}</div>
+            <div style={{ fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {v}
+              {row.is_superadmin && (
+                <span title="Superadministrador — protegido" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700, letterSpacing: '0.03em' }}>
+                  SUPER
+                </span>
+              )}
+              {isSelf(row) && (
+                <span title="Eres tú" style={{ fontSize: '0.65rem', background: 'linear-gradient(135deg,var(--primary),var(--secondary))', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>
+                  TÚ
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{row.email}</div>
           </div>
         </div>
@@ -106,17 +155,46 @@ export default function UsersPage() {
       render: (v) => <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{v ? new Date(v).toLocaleDateString('es-EC') : '—'}</span>
     },
     { key: 'id', label: 'Acciones', sortable: false,
-      render: (_, row) => (
-        <div className="table-actions">
-          <button className="btn btn-secondary btn-sm" onClick={() => openEdit(row)}>✏️</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => handleToggle(row)} title={row.is_active ? 'Desactivar' : 'Activar'}>
-            {row.is_active ? '🔒' : '🔓'}
-          </button>
-          <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: row.id })}>🗑️</button>
-        </div>
-      )
+      render: (_, row) => {
+        const protected_ = isProtected(row);
+        const cannotDelete = isSuperadmin(row) || isSelf(row);
+        return (
+          <div className="table-actions">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => !protected_ && openEdit(row)}
+              disabled={protected_}
+              title={getEditTooltip(row)}
+              style={protected_ ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+            >✏️</button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => !protected_ && handleToggle(row)}
+              disabled={protected_}
+              title={getToggleTooltip(row)}
+              style={protected_ ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+            >
+              {row.is_active ? '🔒' : '🔓'}
+            </button>
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => !cannotDelete && setConfirm({ open: true, id: row.id })}
+              disabled={cannotDelete}
+              title={getDeleteTooltip(row)}
+              style={cannotDelete ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+            >🗑️</button>
+          </div>
+        );
+      }
     },
   ];
+
+  // ── Aviso de límite de admins ─────────────────────────────────
+  const adminLimitWarning = adminLimitReached && (
+    <div className="alert alert-info" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+      🛡️ <span>Límite alcanzado: ya hay <strong>2 administradores del sistema</strong> (1 superadmin + 1 admin). Para añadir otro, primero elimina el admin secundario.</span>
+    </div>
+  );
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -139,10 +217,17 @@ export default function UsersPage() {
             <div key={r.id} className="card card-sm" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px' }}>
               <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{r.name}</span>
               <span style={{ fontWeight: 700, color: 'var(--text)', fontSize: '1.125rem' }}>{count}</span>
+              {r.id === 1 && (
+                <span style={{ fontSize: '0.7rem', color: adminLimitReached ? 'var(--danger, #ef4444)' : 'var(--text-subtle)', fontWeight: 600 }}>
+                  {adminLimitReached ? '(límite)' : `/ 2 máx`}
+                </span>
+              )}
             </div>
           );
         })}
       </div>
+
+      {adminLimitWarning}
 
       <div className="card">
         {loading ? (
@@ -188,9 +273,28 @@ export default function UsersPage() {
           </div>
           <div className="form-group">
             <label className="form-label">Rol *</label>
-            <select className="form-input" value={form.role_id} onChange={e => setForm(p => ({ ...p, role_id: Number(e.target.value) }))}>
-              {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            <select
+              className="form-input"
+              value={form.role_id}
+              onChange={e => setForm(p => ({ ...p, role_id: Number(e.target.value) }))}
+            >
+              {roles.map(r => {
+                // Deshabilitar role_id=1 si ya hay 2 admins (y no estamos editando a alguien que ya es admin)
+                const isAdminRole = r.id === 1;
+                const targetIsAlreadyAdmin = editing?.role_id === 1;
+                const disabled = isAdminRole && adminLimitReached && !targetIsAlreadyAdmin;
+                return (
+                  <option key={r.id} value={r.id} disabled={disabled}>
+                    {r.name}{disabled ? ' (límite alcanzado)' : ''}
+                  </option>
+                );
+              })}
             </select>
+            {form.role_id === 1 && adminLimitReached && editing?.role_id !== 1 && (
+              <p style={{ fontSize: '0.8rem', color: 'var(--danger, #ef4444)', marginTop: 4 }}>
+                ⚠️ Límite de 2 administradores alcanzado.
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <input type="checkbox" id="user-active" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} />

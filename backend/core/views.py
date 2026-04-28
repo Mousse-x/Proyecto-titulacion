@@ -266,6 +266,7 @@ def list_users(request):
     if request.method == "GET":
         try:
             users = AppUser.objects.select_related("role", "university").order_by("id")
+            superadmin_id = _get_superadmin_id()
             data = [
                 {
                     "id":              u.id,
@@ -276,6 +277,7 @@ def list_users(request):
                     "university_id":   u.university_id,
                     "university_name": u.university.name if u.university else None,
                     "is_active":       u.is_active,
+                    "is_superadmin":   u.id == superadmin_id,   # ← protegido
                     "last_login":      u.last_login.isoformat() if u.last_login else None,
                     "created_at":      u.created_at.isoformat() if u.created_at else None,
                 }
@@ -298,6 +300,15 @@ def list_users(request):
 
         if not email_raw or not full_name:
             return JsonResponse({"error": "Nombre y email son obligatorios"}, status=400)
+
+        # ── Regla: máximo 2 usuarios con role_id=1 ──────────────────────
+        if int(role_id) == 1:
+            admin_count = AppUser.objects.filter(role_id=1).count()
+            if admin_count >= 2:
+                return JsonResponse(
+                    {"error": "Solo puede haber 2 administradores del sistema (1 superadmin + 1 admin). Elimine uno antes de crear otro."},
+                    status=400,
+                )
 
         email_idx = hash_email(email_raw)
         if AppUser.objects.filter(email_hash=email_idx).exists():
@@ -324,6 +335,13 @@ def list_users(request):
     return JsonResponse({"error": "Método no permitido"}, status=405)
 
 
+# ─── Helper: obtiene el ID del superadmin (role_id=1 con menor id) ───
+def _get_superadmin_id():
+    """Retorna el id del superadmin: el primer usuario con role_id=1 (menor id)."""
+    first = AppUser.objects.filter(role_id=1).order_by("id").first()
+    return first.id if first else None
+
+
 @csrf_exempt
 def user_detail(request, user_id):
     try:
@@ -336,6 +354,38 @@ def user_detail(request, user_id):
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+
+        requester_id = data.get("_requester_id")  # ID del admin que realiza la acción
+        superadmin_id = _get_superadmin_id()
+
+        # ── Regla 1: un admin no puede modificar su propia cuenta ────────
+        if requester_id and int(requester_id) == user_id:
+            return JsonResponse(
+                {"error": "No puedes modificar tu propia cuenta desde este panel."},
+                status=403,
+            )
+
+        # ── Regla 2: el superadmin no puede ser desactivado por nadie ────
+        if user_id == superadmin_id:
+            if "is_active" in data and not data["is_active"]:
+                return JsonResponse(
+                    {"error": "El superadministrador no puede ser desactivado. Siempre debe permanecer activo."},
+                    status=403,
+                )
+            if "role_id" in data and int(data["role_id"]) != 1:
+                return JsonResponse(
+                    {"error": "No se puede cambiar el rol del superadministrador."},
+                    status=403,
+                )
+
+        # ── Regla 3: máximo 2 usuarios con role_id=1 ────────────────────
+        if "role_id" in data and int(data["role_id"]) == 1 and user.role_id != 1:
+            admin_count = AppUser.objects.filter(role_id=1).count()
+            if admin_count >= 2:
+                return JsonResponse(
+                    {"error": "Solo puede haber 2 administradores del sistema. Elimine uno antes de asignar este rol."},
+                    status=400,
+                )
 
         if "full_name" in data:
             user.full_name = data["full_name"]
@@ -355,6 +405,15 @@ def user_detail(request, user_id):
         return JsonResponse({"message": "Usuario actualizado"})
 
     if request.method == "DELETE":
+        superadmin_id = _get_superadmin_id()
+
+        # ── Regla: no se puede eliminar al superadmin ────────────────────
+        if user_id == superadmin_id:
+            return JsonResponse(
+                {"error": "El superadministrador no puede ser eliminado."},
+                status=403,
+            )
+
         user.delete()
         return JsonResponse({"message": "Usuario eliminado"})
 
