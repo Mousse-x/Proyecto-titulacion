@@ -49,6 +49,14 @@ export default function Login() {
       setRegError('Todos los campos son obligatorios.');
       return;
     }
+
+    // Validación de formato de correo electrónico
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(regForm.email.trim())) {
+      setRegError('Ingresa un correo electrónico válido (ej. usuario@dominio.com).');
+      return;
+    }
+
     if (regForm.password !== regForm.confirm) {
       setRegError('Las contraseñas no coinciden.');
       return;
