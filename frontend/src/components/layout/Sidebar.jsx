@@ -10,12 +10,15 @@ const ADMIN_NAV = [
   { section: "Evaluación" },
   { label: "Indicadores",     icon: "📋", to: "/admin/indicators" },
   { label: "Ponderaciones",   icon: "⚖️", to: "/admin/weightings" },
+  { section: "Documentos" },
+  { label: "Gestión Documental", icon: "📂", to: "/admin/documents" },
   { section: "Resultados" },
   { label: "Rankings",        icon: "🏆", to: "/admin/rankings" },
   { label: "Reportes",        icon: "📈", to: "/admin/reports" },
   { section: "Sistema" },
   { label: "Auditoría",       icon: "🔐", to: "/admin/audit" },
 ];
+
 
 const UNIV_NAV = [
   { section: "General" },
@@ -32,7 +35,10 @@ const AUDITOR_NAV = [
   { label: "Índice de Transparencia", icon: "🔢", to: "/auditor/index" },
   { label: "Comparativas",    icon: "📉", to: "/auditor/comparatives" },
   { label: "Rankings",        icon: "🏆", to: "/auditor/rankings" },
+  { section: "Documentos" },
+  { label: "Lista de Cumplimiento", icon: "📂", to: "/auditor/documents" },
 ];
+
 
 const navsByRole = { 1: ADMIN_NAV, 2: UNIV_NAV, 3: UNIV_NAV, 4: AUDITOR_NAV };
 const titleByRole = {

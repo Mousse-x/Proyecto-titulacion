@@ -8,14 +8,15 @@ import Login         from './pages/auth/Login';
 import ResetPassword from './pages/auth/ResetPassword';
 
 // Admin pages
-import AdminDashboard   from './pages/admin/AdminDashboard';
-import UsersPage        from './pages/admin/UsersPage';
-import UniversitiesPage from './pages/admin/UniversitiesPage';
-import IndicatorsPage   from './pages/admin/IndicatorsPage';
-import WeightingsPage   from './pages/admin/WeightingsPage';
-import RankingsPage     from './pages/admin/RankingsPage';
-import ReportsPage      from './pages/admin/ReportsPage';
-import AuditPage        from './pages/admin/AuditPage';
+import AdminDashboard     from './pages/admin/AdminDashboard';
+import UsersPage          from './pages/admin/UsersPage';
+import UniversitiesPage   from './pages/admin/UniversitiesPage';
+import IndicatorsPage     from './pages/admin/IndicatorsPage';
+import WeightingsPage     from './pages/admin/WeightingsPage';
+import RankingsPage       from './pages/admin/RankingsPage';
+import ReportsPage        from './pages/admin/ReportsPage';
+import AuditPage          from './pages/admin/AuditPage';
+import DocumentsAdminPage from './pages/admin/DocumentsAdminPage';
 
 // University pages
 import UnivDashboard    from './pages/university/UnivDashboard';
@@ -26,8 +27,8 @@ import ObservationsPage from './pages/university/ObservationsPage';
 import AuditorDashboard      from './pages/auditor/AuditorDashboard';
 import ComparativesPage      from './pages/auditor/ComparativesPage';
 import TransparencyIndexPage from './pages/auditor/TransparencyIndexPage';
+import DocumentsAuditorPage  from './pages/auditor/DocumentsAuditorPage';
 
-// Auditor also uses rankings page (read-only)
 const AuditorRankingsPage = () => <RankingsPage />;
 
 function WithLayout({ children }) {
@@ -40,9 +41,9 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           {/* Public */}
-          <Route path="/login"                      element={<Login />} />
-          <Route path="/reset-password/:token"       element={<ResetPassword />} />
-          <Route path="/"                            element={<Navigate to="/login" replace />} />
+          <Route path="/login"                 element={<Login />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/"                      element={<Navigate to="/login" replace />} />
 
           {/* System Admin — role 1 */}
           <Route path="/admin/dashboard"    element={<ProtectedRoute allowedRoles={[1]}><WithLayout><AdminDashboard /></WithLayout></ProtectedRoute>} />
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/admin/rankings"     element={<ProtectedRoute allowedRoles={[1]}><WithLayout><RankingsPage /></WithLayout></ProtectedRoute>} />
           <Route path="/admin/reports"      element={<ProtectedRoute allowedRoles={[1]}><WithLayout><ReportsPage /></WithLayout></ProtectedRoute>} />
           <Route path="/admin/audit"        element={<ProtectedRoute allowedRoles={[1]}><WithLayout><AuditPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/admin/documents"    element={<ProtectedRoute allowedRoles={[1]}><WithLayout><DocumentsAdminPage /></WithLayout></ProtectedRoute>} />
 
           {/* University Admin — roles 2, 3 */}
           <Route path="/university/dashboard"    element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><UnivDashboard /></WithLayout></ProtectedRoute>} />
@@ -64,6 +66,7 @@ export default function App() {
           <Route path="/auditor/index"        element={<ProtectedRoute allowedRoles={[4]}><WithLayout><TransparencyIndexPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/comparatives" element={<ProtectedRoute allowedRoles={[4]}><WithLayout><ComparativesPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/rankings"     element={<ProtectedRoute allowedRoles={[4]}><WithLayout><AuditorRankingsPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/auditor/documents"    element={<ProtectedRoute allowedRoles={[4]}><WithLayout><DocumentsAuditorPage /></WithLayout></ProtectedRoute>} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/login" replace />} />

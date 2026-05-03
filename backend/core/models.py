@@ -178,13 +178,21 @@ class IndicatorStandardLink(models.Model):
 # =========================
 
 class Evidence(models.Model):
-    university = models.ForeignKey(University, models.DO_NOTHING)
-    period = models.ForeignKey("EvaluationPeriod", models.DO_NOTHING)
-    indicator = models.ForeignKey(Indicator, models.DO_NOTHING)
-    uploaded_by_user = models.ForeignKey(AppUser, models.DO_NOTHING, blank=True, null=True)
-    title = models.CharField(max_length=200)
-    uploaded_at = models.DateTimeField()
-    validation_status = models.CharField(max_length=20)
+    university        = models.ForeignKey(University, models.DO_NOTHING)
+    period            = models.ForeignKey("EvaluationPeriod", models.DO_NOTHING)
+    indicator         = models.ForeignKey(Indicator, models.DO_NOTHING)
+    uploaded_by_user  = models.ForeignKey(AppUser, models.DO_NOTHING, blank=True, null=True)
+    title             = models.CharField(max_length=200)
+    uploaded_at       = models.DateTimeField()
+    validation_status = models.CharField(max_length=20)  # pendiente | aprobado | rechazado
+    # ── Campos extendidos (agregados vía migración SQL) ──
+    file_path    = models.TextField(blank=True, null=True)       # ruta relativa en MEDIA_ROOT
+    source_url   = models.TextField(blank=True, null=True)       # URL externa (portal ESPOCH, etc.)
+    file_size    = models.BigIntegerField(blank=True, null=True) # bytes
+    file_type    = models.CharField(max_length=20, default='PDF')# PDF | XLSX | DOCX | CSV | URL
+    observations = models.TextField(blank=True, null=True)       # observaciones del auditor
+    month        = models.SmallIntegerField(blank=True, null=True)# mes LOTAIP (1-12)
+    updated_at   = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         managed = False

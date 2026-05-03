@@ -1,13 +1,17 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse, Http404
 import json
 import traceback
+import os
+import re
+import mimetypes
+from pathlib import Path
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken
+from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 
 

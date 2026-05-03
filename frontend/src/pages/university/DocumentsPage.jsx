@@ -1,76 +1,191 @@
-import { useState, useRef } from 'react';
-import Badge from '../../components/common/Badge';
-import Modal from '../../components/common/Modal';
-import { mockDocuments, mockIndicators, getStatusClass } from '../../data/mockData';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { api } from '../../api/client';
 
-const STATUS_COLORS = { 'Aprobado':'var(--success)', 'En revisión':'var(--warning)', 'Rechazado':'var(--danger)' };
+const MEDIA_BASE = 'http://127.0.0.1:8000';
+
+const STATUS_CONFIG = {
+  pendiente:  { label: 'Pendiente',  color: 'var(--warning)',  bg: 'var(--warning-subtle)',  icon: '⏳' },
+  aprobado:   { label: 'Aprobado',   color: 'var(--success)',  bg: 'var(--success-subtle)',  icon: '✅' },
+  rechazado:  { label: 'Rechazado',  color: 'var(--danger)',   bg: 'var(--danger-subtle)',   icon: '❌' },
+};
+
+const FILE_ICONS = { PDF: '📄', XLSX: '📊', DOCX: '📝', CSV: '📋', URL: '🔗' };
+
+function StatusBadge({ status }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pendiente;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 600,
+      color: cfg.color, background: cfg.bg,
+    }}>
+      {cfg.icon} {cfg.label}
+    </span>
+  );
+}
 
 export default function DocumentsPage() {
-  const [docs, setDocs]       = useState(mockDocuments);
-  const [uploadModal, setUpload] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const [tab, setTab]          = useState('all');
-  const [form, setForm]        = useState({ indicator_id:'', title:'', type:'PDF' });
+  const user = JSON.parse(sessionStorage.getItem('auth_user') || '{}');
+
+  const [docs, setDocs]           = useState([]);
+  const [indicators, setIndicators] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [tab, setTab]             = useState('all');
+  const [uploadModal, setUploadModal] = useState(false);
+  const [previewDoc, setPreviewDoc]   = useState(null);   // doc seleccionado para preview
+  const [scraperModal, setScraperModal] = useState(false);
+  const [scrapeLoading, setScrapeLoading] = useState(false);
+  const [scrapeResult, setScrapeResult]   = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress]   = useState(0);
+  const [dragging, setDragging]   = useState(false);
+  const [form, setForm]           = useState({ indicator_id: '', title: '', month: '' });
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [error, setError]         = useState('');
   const fileRef = useRef();
 
-  const filtered = tab==='all' ? docs : docs.filter(d=>d.status===({'pending':'En revisión','approved':'Aprobado','rejected':'Rechazado'}[tab]));
+  const loadDocs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (user.university_id) params.university_id = user.university_id;
+      const res = await api.evidences.list(params);
+      setDocs(res.data);
+    } catch {
+      setError('No se pudieron cargar los documentos');
+    } finally {
+      setLoading(false);
+    }
+  }, [user.university_id]);
 
+  useEffect(() => {
+    loadDocs();
+    api.indicators.list().then(r => setIndicators(r.data)).catch(() => {});
+  }, [loadDocs]);
+
+  const filtered = tab === 'all'
+    ? docs
+    : docs.filter(d => d.validation_status === tab);
+
+  const counts = {
+    all:       docs.length,
+    pendiente: docs.filter(d => d.validation_status === 'pendiente').length,
+    aprobado:  docs.filter(d => d.validation_status === 'aprobado').length,
+    rechazado: docs.filter(d => d.validation_status === 'rechazado').length,
+  };
+
+  // ── Upload ──────────────────────────────────────────────────
   const handleUpload = async () => {
+    if (!form.indicator_id || !form.title || !selectedFile) return;
     setUploading(true);
     setProgress(0);
-    for (let p=0; p<=100; p+=10) {
-      await new Promise(r=>setTimeout(r,80));
-      setProgress(p);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('title', form.title);
+      fd.append('indicator_id', form.indicator_id);
+      fd.append('university_id', user.university_id);
+      fd.append('uploaded_by_user_id', user.id);
+      fd.append('period_id', 1);
+      if (form.month) fd.append('month', form.month);
+      fd.append('file', selectedFile);
+
+      await api.evidences.upload(fd, pct => setProgress(pct));
+      await loadDocs();
+      setUploadModal(false);
+      resetForm();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al subir el documento');
+    } finally {
+      setUploading(false);
     }
-    const ind = mockIndicators.find(i=>i.id===Number(form.indicator_id));
-    const newDoc = {
-      id: Date.now(), indicator_id: Number(form.indicator_id),
-      indicator_code: ind?.code||'—', title:form.title,
-      type:form.type, size:'1.2 MB', status:'En revisión',
-      uploaded_at: new Date().toISOString().split('T')[0],
-      uploaded_by:'María Ortiz', validated_by:null, observations:null,
-    };
-    setDocs(p=>[newDoc,...p]);
-    setUploading(false);
-    setUpload(false);
-    setForm({ indicator_id:'', title:'', type:'PDF' });
+  };
+
+  const resetForm = () => {
+    setForm({ indicator_id: '', title: '', month: '' });
+    setSelectedFile(null);
     setProgress(0);
   };
 
-  const handleDragOver = e => { e.preventDefault(); setDragging(true); };
-  const handleDragLeave= () => setDragging(false);
-  const handleDrop     = e  => { e.preventDefault(); setDragging(false); };
-
-  const tabCounts = {
-    all:      docs.length,
-    approved: docs.filter(d=>d.status==='Aprobado').length,
-    pending:  docs.filter(d=>d.status==='En revisión').length,
-    rejected: docs.filter(d=>d.status==='Rechazado').length,
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    setSelectedFile(file);
+    if (!form.title) setForm(p => ({ ...p, title: file.name.replace(/\.[^.]+$/, '') }));
   };
 
+  // ── Descarga ────────────────────────────────────────────────
+  const handleDownload = async (doc) => {
+    try {
+      if (doc.file_type === 'URL') {
+        // Obtener redirect_url del backend
+        const res = await api.evidences.download(doc.id);
+        window.open(res.data.redirect_url, '_blank');
+        return;
+      }
+      // Archivo en disco — link directo a media
+      const url = `${MEDIA_BASE}${doc.file_url}`;
+      const a = document.createElement('a');
+      a.href = url; a.download = doc.title; a.target = '_blank';
+      a.click();
+    } catch { setError('Error al descargar el documento'); }
+  };
+
+  // ── Scraper ─────────────────────────────────────────────────
+  const handleScrape = async () => {
+    setScrapeLoading(true);
+    setScrapeResult(null);
+    try {
+      const res = await api.scraper.espoch({
+        portal_url: 'https://www.espoch.edu.ec/2026-2/',
+        period_id: 1,
+        user_id: user.id,
+      });
+      setScrapeResult(res.data);
+      await loadDocs();
+    } catch (e) {
+      setScrapeResult({ error: e.response?.data?.error || 'Error en el scraping' });
+    } finally {
+      setScrapeLoading(false);
+    }
+  };
+
+  const months = [
+    { v: 1, l: 'Enero' }, { v: 2, l: 'Febrero' }, { v: 3, l: 'Marzo' },
+    { v: 4, l: 'Abril' }, { v: 5, l: 'Mayo' },    { v: 6, l: 'Junio' },
+    { v: 7, l: 'Julio' }, { v: 8, l: 'Agosto' },  { v: 9, l: 'Septiembre' },
+    { v: 10, l: 'Octubre' }, { v: 11, l: 'Noviembre' }, { v: 12, l: 'Diciembre' },
+  ];
+
   return (
-    <div style={{ animation:'slideIn 0.3s ease' }}>
+    <div style={{ animation: 'slideIn 0.3s ease' }}>
+
+      {/* ─── Header ──────────────────────────────────────────── */}
       <div className="page-header">
         <div className="page-header-info">
-          <h1>Carga Documental</h1>
-          <p>Gestiona los documentos de evidencia por indicador LOTAIP</p>
+          <h1>Carga Documental LOTAIP</h1>
+          <p>Gestión de evidencias de transparencia institucional</p>
         </div>
-        <div className="page-header-actions">
-          <button className="btn btn-primary" onClick={()=>setUpload(true)}>📤 Subir Documento</button>
+        <div className="page-header-actions" style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-secondary" onClick={() => setScraperModal(true)}>
+            🤖 Cargar ESPOCH
+          </button>
+          <button className="btn btn-primary" onClick={() => { setUploadModal(true); setError(''); }}>
+            📤 Subir Documento
+          </button>
         </div>
       </div>
 
-      {/* Status summary */}
-      <div className="stat-grid" style={{ marginBottom:20 }}>
+      {/* ─── Stats ───────────────────────────────────────────── */}
+      <div className="stat-grid" style={{ marginBottom: 20 }}>
         {[
-          { label:'Total',       count:tabCounts.all,      icon:'📁', color:'var(--primary)'  },
-          { label:'Aprobados',   count:tabCounts.approved,  icon:'✅', color:'var(--success)'  },
-          { label:'En revisión', count:tabCounts.pending,   icon:'⏳', color:'var(--warning)'  },
-          { label:'Rechazados',  count:tabCounts.rejected,  icon:'❌', color:'var(--danger)'   },
-        ].map(s=>(
-          <div key={s.label} className="stat-card" style={{ '--color':s.color, cursor:'pointer' }} onClick={()=>setTab({Total:'all',Aprobados:'approved','En revisión':'pending',Rechazados:'rejected'}[s.label])}>
+          { label: 'Total',      count: counts.all,       icon: '📁', color: 'var(--primary)', key: 'all' },
+          { label: 'Aprobados',  count: counts.aprobado,  icon: '✅', color: 'var(--success)', key: 'aprobado' },
+          { label: 'Pendientes', count: counts.pendiente, icon: '⏳', color: 'var(--warning)', key: 'pendiente' },
+          { label: 'Rechazados', count: counts.rechazado, icon: '❌', color: 'var(--danger)',  key: 'rechazado' },
+        ].map(s => (
+          <div key={s.key} className="stat-card"
+            style={{ '--color': s.color, cursor: 'pointer' }}
+            onClick={() => setTab(s.key)}>
             <div className="stat-icon-wrap">{s.icon}</div>
             <div className="stat-value">{s.count}</div>
             <div className="stat-label">{s.label}</div>
@@ -78,109 +193,288 @@ export default function DocumentsPage() {
         ))}
       </div>
 
-      {/* Tabs */}
+      {/* ─── Tabs ────────────────────────────────────────────── */}
       <div className="tabs">
-        {[['all','Todos'],['approved','Aprobados'],['pending','En revisión'],['rejected','Rechazados']].map(([k,l])=>(
-          <button key={k} className={`tab ${tab===k?'active':''}`} onClick={()=>setTab(k)}>{l} ({tabCounts[k]})</button>
+        {[['all', 'Todos'], ['aprobado', 'Aprobados'], ['pendiente', 'Pendientes'], ['rechazado', 'Rechazados']].map(([k, l]) => (
+          <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
+            {l} ({counts[k]})
+          </button>
         ))}
       </div>
 
-      {/* Doc list */}
-      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-        {filtered.map(doc => (
-          <div key={doc.id} className="doc-status-row">
-            <div className="doc-icon">
-              {doc.type==='PDF'?'📄':doc.type==='XLSX'?'📊':doc.type==='URL'?'🔗':'📁'}
-            </div>
-            <div className="doc-info">
-              <div className="doc-name">{doc.title}</div>
-              <div className="doc-meta">
-                <span className="tag" style={{ fontSize:'0.6875rem', marginRight:6 }}>{doc.indicator_code}</span>
-                {doc.uploaded_at} · {doc.size} · {doc.uploaded_by}
+      {/* ─── Lista ───────────────────────────────────────────── */}
+      {loading
+        ? <div className="empty-state"><div className="empty-icon">⏳</div><p>Cargando documentos...</p></div>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map(doc => (
+              <div key={doc.id} className="doc-status-row">
+                <div className="doc-icon">{FILE_ICONS[doc.file_type] || '📁'}</div>
+                <div className="doc-info">
+                  <div className="doc-name">{doc.title}</div>
+                  <div className="doc-meta">
+                    <span className="tag" style={{ fontSize: '0.675rem', marginRight: 6 }}>
+                      {doc.indicator_code}
+                    </span>
+                    {doc.month && <span style={{ marginRight: 6, fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                      {months.find(m => m.v === doc.month)?.l}
+                    </span>}
+                    {doc.uploaded_at?.split('T')[0]}
+                    {doc.file_size && ` · ${(doc.file_size / 1024).toFixed(1)} KB`}
+                    {doc.uploaded_by && ` · ${doc.uploaded_by}`}
+                  </div>
+                  {doc.observations && (
+                    <div style={{
+                      marginTop: 4, fontSize: '0.75rem', color: 'var(--warning)',
+                      background: 'var(--warning-subtle)', padding: '3px 8px',
+                      borderRadius: 4, display: 'inline-block',
+                    }}>
+                      💬 {doc.observations}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <StatusBadge status={doc.validation_status} />
+                  <button className="btn btn-secondary btn-sm" title="Vista previa"
+                    onClick={() => setPreviewDoc(doc)}>👁️</button>
+                  <button className="btn btn-secondary btn-sm" title="Descargar"
+                    onClick={() => handleDownload(doc)}>⬇️</button>
+                  {doc.validation_status === 'rechazado' && (
+                    <button className="btn btn-primary btn-sm"
+                      onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title })); }}>
+                      🔄 Resubir
+                    </button>
+                  )}
+                </div>
               </div>
-              {doc.observations && (
-                <div style={{ marginTop:4, fontSize:'0.75rem', color:'var(--warning)', background:'var(--warning-subtle)', padding:'3px 8px', borderRadius:4, display:'inline-block' }}>
-                  💬 {doc.observations}
+            ))}
+            {filtered.length === 0 && (
+              <div className="empty-state">
+                <div className="empty-icon">📭</div>
+                <h4>Sin documentos</h4>
+                <p>No hay documentos en esta categoría</p>
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* ═══ MODAL — Vista Previa ══════════════════════════════ */}
+      {previewDoc && (
+        <div className="modal-overlay" onClick={() => setPreviewDoc(null)}>
+          <div className="modal" style={{ maxWidth: 900, width: '95%', maxHeight: '90vh' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{FILE_ICONS[previewDoc.file_type]} {previewDoc.title}</h3>
+              <button className="modal-close" onClick={() => setPreviewDoc(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ padding: 0, overflow: 'hidden' }}>
+              {previewDoc.file_type === 'URL' ? (
+                <div style={{ padding: '32px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: 16 }}>🔗</div>
+                  <p style={{ marginBottom: 20, color: 'var(--text-subtle)' }}>
+                    Este documento es un enlace externo
+                  </p>
+                  <a href={previewDoc.source_url} target="_blank" rel="noopener noreferrer"
+                    className="btn btn-primary">
+                    Abrir en portal original
+                  </a>
+                </div>
+              ) : previewDoc.file_type === 'PDF' && previewDoc.file_url ? (
+                <iframe
+                  src={`${MEDIA_BASE}${previewDoc.file_url}`}
+                  title={previewDoc.title}
+                  style={{ width: '100%', height: '70vh', border: 'none' }}
+                />
+              ) : (
+                <div style={{ padding: '32px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: 16 }}>{FILE_ICONS[previewDoc.file_type]}</div>
+                  <p>Vista previa no disponible para este tipo de archivo.</p>
+                  <button className="btn btn-primary" style={{ marginTop: 16 }}
+                    onClick={() => { handleDownload(previewDoc); setPreviewDoc(null); }}>
+                    ⬇️ Descargar archivo
+                  </button>
                 </div>
               )}
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-              <Badge status={doc.status} />
-              {doc.validated_by && <span style={{ fontSize:'0.75rem', color:'var(--text-subtle)' }}>✓ {doc.validated_by}</span>}
-              <button className="btn btn-secondary btn-sm">👁️</button>
-              {doc.status==='Rechazado' && <button className="btn btn-primary btn-sm">🔄 Resubir</button>}
+            <div className="modal-footer">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <StatusBadge status={previewDoc.validation_status} />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+                  {previewDoc.indicator_code} · {previewDoc.uploaded_at?.split('T')[0]}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}>
+                  ⬇️ Descargar
+                </button>
+                <button className="btn btn-secondary" onClick={() => setPreviewDoc(null)}>Cerrar</button>
+              </div>
             </div>
           </div>
-        ))}
-        {filtered.length===0 && (
-          <div className="empty-state">
-            <div className="empty-icon">📭</div>
-            <h4>Sin documentos</h4>
-            <p>No hay documentos en esta categoría</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Upload Modal */}
-      <Modal
-        isOpen={uploadModal}
-        onClose={()=>!uploading&&setUpload(false)}
-        title="📤 Subir Documento"
-        footer={
-          !uploading ? (
-            <><button className="btn btn-secondary" onClick={()=>setUpload(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleUpload} disabled={!form.indicator_id||!form.title}>Subir archivo</button></>
-          ) : null
-        }
-      >
-        {uploading ? (
-          <div style={{ textAlign:'center', padding:'20px 0' }}>
-            <div style={{ fontSize:'2.5rem', marginBottom:16 }}>📤</div>
-            <p style={{ marginBottom:16 }}>Subiendo documento...</p>
-            <div className="progress-bar" style={{ height:8, marginBottom:8 }}>
-              <div className="progress-fill" style={{ width:`${progress}%` }} />
+      {/* ═══ MODAL — Upload ════════════════════════════════════ */}
+      {uploadModal && (
+        <div className="modal-overlay" onClick={() => !uploading && setUploadModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📤 Subir Documento</h3>
+              <button className="modal-close" onClick={() => !uploading && setUploadModal(false)}>✕</button>
             </div>
-            <div style={{ fontSize:'0.875rem', color:'var(--text-subtle)' }}>{progress}%</div>
+            <div className="modal-body">
+              {uploading ? (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📤</div>
+                  <p style={{ marginBottom: 16 }}>Subiendo documento...</p>
+                  <div className="progress-bar" style={{ height: 8, marginBottom: 8 }}>
+                    <div className="progress-fill" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-subtle)' }}>{progress}%</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {error && <div className="alert alert-danger">⚠️ {error}</div>}
+
+                  <div className="form-group">
+                    <label className="form-label">Indicador LOTAIP *</label>
+                    <select className="form-input" value={form.indicator_id}
+                      onChange={e => setForm(p => ({ ...p, indicator_id: e.target.value }))}>
+                      <option value="">— Seleccione un indicador —</option>
+                      {indicators.map(i => (
+                        <option key={i.id} value={i.id}>[{i.code}] {i.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Mes (opcional)</label>
+                    <select className="form-input" value={form.month}
+                      onChange={e => setForm(p => ({ ...p, month: e.target.value }))}>
+                      <option value="">— Sin especificar —</option>
+                      {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Título del documento *</label>
+                    <input className="form-input" value={form.title}
+                      onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+                      placeholder="Ej: Presupuesto 2026 — ESPOCH" />
+                  </div>
+
+                  {/* Drop Zone */}
+                  <div
+                    className={`upload-zone ${dragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
+                    onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={e => { e.preventDefault(); setDragging(false); handleFileSelect(e.dataTransfer.files[0]); }}
+                    onClick={() => fileRef.current?.click()}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {selectedFile ? (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: 8 }}>✅</div>
+                        <strong>{selectedFile.name}</strong>
+                        <p style={{ fontSize: '0.8rem', marginTop: 4, color: 'var(--text-subtle)' }}>
+                          {(selectedFile.size / 1024).toFixed(1)} KB · Haz clic para cambiar
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="upload-icon">📂</div>
+                        <h4>Arrastra tu archivo aquí</h4>
+                        <p>o haz clic para seleccionar</p>
+                        <p style={{ fontSize: '0.75rem', marginTop: 6 }}>PDF, XLSX, DOCX · Máximo 50 MB</p>
+                      </>
+                    )}
+                    <input ref={fileRef} type="file" style={{ display: 'none' }}
+                      accept=".pdf,.xlsx,.xls,.docx,.doc,.csv"
+                      onChange={e => handleFileSelect(e.target.files[0])} />
+                  </div>
+
+                  <div className="alert alert-info">
+                    ℹ️ El documento quedará en estado <strong>Pendiente</strong> hasta ser revisado.
+                  </div>
+                </div>
+              )}
+            </div>
+            {!uploading && (
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => { setUploadModal(false); resetForm(); }}>
+                  Cancelar
+                </button>
+                <button className="btn btn-primary"
+                  disabled={!form.indicator_id || !form.title || !selectedFile}
+                  onClick={handleUpload}>
+                  📤 Subir archivo
+                </button>
+              </div>
+            )}
           </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div className="form-group">
-              <label className="form-label">Indicador asociado *</label>
-              <select className="form-input" value={form.indicator_id} onChange={e=>setForm(p=>({...p,indicator_id:e.target.value}))}>
-                <option value="">— Seleccione un indicador —</option>
-                {mockIndicators.map(i=><option key={i.id} value={i.id}>[{i.code}] {i.name}</option>)}
-              </select>
+        </div>
+      )}
+
+      {/* ═══ MODAL — Scraper ESPOCH ════════════════════════════ */}
+      {scraperModal && (
+        <div className="modal-overlay" onClick={() => !scrapeLoading && setScraperModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🤖 Carga Automatizada ESPOCH</h3>
+              <button className="modal-close" onClick={() => !scrapeLoading && setScraperModal(false)}>✕</button>
             </div>
-            <div className="form-group">
-              <label className="form-label">Título del documento *</label>
-              <input className="form-input" value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Ej: Presupuesto 2026 — ESPOCH" />
+            <div className="modal-body">
+              <p style={{ marginBottom: 16, color: 'var(--text-subtle)' }}>
+                Este proceso extrae automáticamente los literales LOTAIP del portal de transparencia
+                de la ESPOCH y los registra como evidencias pendientes de revisión.
+              </p>
+              <div className="alert alert-info" style={{ marginBottom: 16 }}>
+                🔗 <strong>Portal:</strong> https://www.espoch.edu.ec/2026-2/<br/>
+                📅 <strong>Período:</strong> Evaluación Marzo 2026
+              </div>
+
+              {scrapeLoading && (
+                <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: 8 }}>⏳</div>
+                  <p>Extrayendo documentos del portal ESPOCH...</p>
+                </div>
+              )}
+
+              {scrapeResult && !scrapeResult.error && (
+                <div className="alert alert-success" style={{ marginBottom: 0 }}>
+                  ✅ <strong>{scrapeResult.message}</strong><br/>
+                  Creados: <strong>{scrapeResult.stats?.created}</strong> ·
+                  Omitidos: {scrapeResult.stats?.skipped} ·
+                  Errores: {scrapeResult.stats?.errors}
+                  {scrapeResult.items?.length > 0 && (
+                    <div style={{ marginTop: 10, maxHeight: 200, overflowY: 'auto' }}>
+                      {scrapeResult.items.slice(0, 10).map((item, i) => (
+                        <div key={i} style={{ fontSize: '0.75rem', padding: '2px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                          [{item.letter?.toUpperCase()}] {item.title?.slice(0, 60)}...
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {scrapeResult?.error && (
+                <div className="alert alert-danger">⚠️ {scrapeResult.error}</div>
+              )}
             </div>
-            <div className="form-group">
-              <label className="form-label">Tipo</label>
-              <select className="form-input" value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}>
-                {['PDF','XLSX','CSV','DOCX','URL'].map(t=><option key={t}>{t}</option>)}
-              </select>
-            </div>
-            {/* Drop zone */}
-            <div
-              className={`upload-zone ${dragging?'dragging':''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={()=>fileRef.current?.click()}
-            >
-              <div className="upload-icon">📂</div>
-              <h4>Arrastra tu archivo aquí</h4>
-              <p>o haz clic para seleccionar</p>
-              <p style={{ fontSize:'0.75rem', marginTop:6 }}>PDF, XLSX, DOCX · Máximo 20 MB</p>
-              <input ref={fileRef} type="file" style={{ display:'none' }} accept=".pdf,.xlsx,.docx,.csv" />
-            </div>
-            <div className="alert alert-info">
-              ℹ️ El documento será enviado al auditor para validación. Recibirás notificación del resultado.
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setScraperModal(false)}>
+                Cerrar
+              </button>
+              {!scrapeResult && (
+                <button className="btn btn-primary" onClick={handleScrape} disabled={scrapeLoading}>
+                  {scrapeLoading ? '⏳ Procesando...' : '🚀 Iniciar Extracción'}
+                </button>
+              )}
             </div>
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
     </div>
   );
 }
