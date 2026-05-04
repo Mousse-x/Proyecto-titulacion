@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../api/client';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 const MEDIA_BASE = 'http://127.0.0.1:8000';
 const FILE_ICONS = { PDF: '📄', XLSX: '📊', DOCX: '📝', CSV: '📋', URL: '🔗' };
@@ -40,6 +42,8 @@ export default function DocumentsAuditorPage() {
   const [universities, setUniversities] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewHtml, setPreviewHtml] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [filterUniv, setFilterUniv] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
   const [tab, setTab]             = useState('all');
@@ -84,6 +88,37 @@ export default function DocumentsAuditorPage() {
   const compliancePct = totalReviewed > 0
     ? Math.round((counts.cumple / totalReviewed) * 100)
     : 0;
+
+  // ── Vista Previa Avanzada ──────────────────────────────────
+  const openPreview = async (doc) => {
+    setPreviewDoc(doc);
+    setPreviewHtml(null);
+    if (!doc.file_url) return;
+
+    if (doc.file_type === 'XLSX' || doc.file_type === 'CSV') {
+      setPreviewLoading(true);
+      try {
+        const res = await fetch(`${MEDIA_BASE}${doc.file_url}`);
+        const buf = await res.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const html = XLSX.utils.sheet_to_html(ws);
+        setPreviewHtml(html);
+      } catch (e) {
+        console.error('Error Excel preview', e);
+      } finally { setPreviewLoading(false); }
+    } else if (doc.file_type === 'DOCX') {
+      setPreviewLoading(true);
+      try {
+        const res = await fetch(`${MEDIA_BASE}${doc.file_url}`);
+        const buf = await res.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+        setPreviewHtml(result.value);
+      } catch (e) {
+        console.error('Error Word preview', e);
+      } finally { setPreviewLoading(false); }
+    }
+  };
 
   const handleDownload = async (doc) => {
     if (doc.file_type === 'URL') {
@@ -224,7 +259,7 @@ export default function DocumentsAuditorPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   <ComplianceBadge status={doc.validation_status} />
                   <button className="btn btn-secondary btn-sm" title="Vista previa"
-                    onClick={() => setPreviewDoc(doc)}>👁️</button>
+                    onClick={() => openPreview(doc)}>👁️</button>
                   <button className="btn btn-secondary btn-sm" title="Descargar"
                     onClick={() => handleDownload(doc)}>⬇️</button>
                 </div>
@@ -267,6 +302,20 @@ export default function DocumentsAuditorPage() {
                   title={previewDoc.title}
                   style={{ width: '100%', height: '70vh', border: 'none' }}
                 />
+              ) : (previewDoc.file_type === 'XLSX' || previewDoc.file_type === 'CSV' || previewDoc.file_type === 'DOCX') && previewDoc.file_url ? (
+                previewLoading ? (
+                   <div style={{ padding: 48, textAlign: 'center' }}>
+                     <div className="spinner" style={{ margin: '0 auto 12px' }}></div>
+                     Cargando previsualización...
+                   </div>
+                ) : previewHtml ? (
+                   <div className="file-preview-html" style={{ padding: 24, overflow: 'auto', maxHeight: '70vh', background: '#fff', color: '#000', fontSize: '0.85rem' }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                ) : (
+                   <div style={{ padding: 32, textAlign: 'center' }}>
+                     <p>Error al generar previsualización.</p>
+                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar archivo</button>
+                   </div>
+                )
               ) : (
                 <div style={{ padding: 32, textAlign: 'center' }}>
                   <div style={{ fontSize: '3rem', marginBottom: 8 }}>{FILE_ICONS[previewDoc.file_type]}</div>

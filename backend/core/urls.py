@@ -13,6 +13,7 @@ from .views import (
 )
 from .evidence_views import (
     list_evidences, evidence_detail, download_evidence, scrape_espoch,
+    bulk_update_evidences, bulk_delete_evidences,
 )
 
 urlpatterns = [
@@ -45,6 +46,8 @@ urlpatterns = [
 
     # Evidencias / Documentos
     path("evidences/",                      list_evidences,    name="list_evidences"),
+    path("evidences/bulk/",                 bulk_update_evidences, name="bulk_update_evidences"),
+    path("evidences/bulk_delete/",          bulk_delete_evidences, name="bulk_delete_evidences"),
     path("evidences/<int:ev_id>/",          evidence_detail,   name="evidence_detail"),
     path("evidences/<int:ev_id>/download/", download_evidence, name="download_evidence"),
 

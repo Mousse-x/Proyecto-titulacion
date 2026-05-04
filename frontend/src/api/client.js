@@ -58,6 +58,8 @@ export const api = {
     list:     (params)              => client.get('/evidences/', { params }),
     get:      (id)                  => client.get(`/evidences/${id}/`),
     update:   (id, data)            => client.put(`/evidences/${id}/`, data),
+    bulkUpdate: (data)              => client.put('/evidences/bulk/', data),
+    bulkDelete: (data)              => client.delete('/evidences/bulk_delete/', { data }),
     remove:   (id)                  => client.delete(`/evidences/${id}/`),
     download: (id)                  => client.get(`/evidences/${id}/download/`),
     /** Upload con archivo — multipart/form-data con callback de progreso (0-100) */

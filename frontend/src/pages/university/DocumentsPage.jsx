@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../../api/client';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 const MEDIA_BASE = 'http://127.0.0.1:8000';
 
@@ -33,6 +35,8 @@ export default function DocumentsPage() {
   const [tab, setTab]             = useState('all');
   const [uploadModal, setUploadModal] = useState(false);
   const [previewDoc, setPreviewDoc]   = useState(null);   // doc seleccionado para preview
+  const [previewHtml, setPreviewHtml] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [scraperModal, setScraperModal] = useState(false);
   const [scrapeLoading, setScrapeLoading] = useState(false);
   const [scrapeResult, setScrapeResult]   = useState(null);
@@ -42,7 +46,19 @@ export default function DocumentsPage() {
   const [form, setForm]           = useState({ indicator_id: '', title: '', month: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError]         = useState('');
+  const [selectedDocs, setSelectedDocs] = useState([]);
+  const [saving, setSaving]       = useState(false);
   const fileRef = useRef();
+
+  const [folderPath, setFolderPath] = useState([]);
+  const [universities, setUniversities] = useState([]);
+
+  const months = [
+    { v: 1, l: 'Enero' }, { v: 2, l: 'Febrero' }, { v: 3, l: 'Marzo' },
+    { v: 4, l: 'Abril' }, { v: 5, l: 'Mayo' },    { v: 6, l: 'Junio' },
+    { v: 7, l: 'Julio' }, { v: 8, l: 'Agosto' },  { v: 9, l: 'Septiembre' },
+    { v: 10, l: 'Octubre' }, { v: 11, l: 'Noviembre' }, { v: 12, l: 'Diciembre' },
+  ];
 
   const loadDocs = useCallback(async () => {
     try {
@@ -55,12 +71,14 @@ export default function DocumentsPage() {
       setError('No se pudieron cargar los documentos');
     } finally {
       setLoading(false);
+      setSelectedDocs([]);
     }
   }, [user.university_id]);
 
   useEffect(() => {
     loadDocs();
     api.indicators.list().then(r => setIndicators(r.data)).catch(() => {});
+    api.universities.list().then(r => setUniversities(r.data)).catch(() => {});
   }, [loadDocs]);
 
   const filtered = tab === 'all'
@@ -74,9 +92,149 @@ export default function DocumentsPage() {
     rechazado: docs.filter(d => d.validation_status === 'rechazado').length,
   };
 
+  const getYear = (doc) => doc.uploaded_at ? doc.uploaded_at.split('-')[0] : 'Sin Año';
+  const getMonthName = (doc) => {
+    const m = doc.month || (doc.uploaded_at ? parseInt(doc.uploaded_at.split('-')[1], 10) : null);
+    const found = months.find(x => x.v === m);
+    return found ? found.l : 'Sin Mes';
+  };
+
+  let currentDocs = filtered;
+  if (folderPath.length > 0) {
+    currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
+  }
+  if (folderPath.length > 1) {
+    currentDocs = currentDocs.filter(d => getYear(d) === folderPath[1]);
+  }
+  if (folderPath.length > 2) {
+    currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[2]);
+  }
+
+  let viewType = 'docs';
+  if (folderPath.length === 0) viewType = 'universities';
+  else if (folderPath.length === 1) viewType = 'years';
+  else if (folderPath.length === 2) viewType = 'months';
+
+  let itemsToRender = [];
+  if (viewType === 'universities') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = d.university_name || 'Universidad';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
+  } else if (viewType === 'years') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = getYear(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
+  } else if (viewType === 'months') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = getMonthName(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
+  } else {
+    itemsToRender = currentDocs.map(d => ({ type: 'doc', ...d }));
+  }
+
+  // ── Selección Masiva ────────────────────────────────────────
+  const toggleSelect = (id) => {
+    setSelectedDocs(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const toggleSelectAll = (docList) => {
+    if (selectedDocs.length === docList.length) setSelectedDocs([]);
+    else setSelectedDocs(docList.map(d => d.id));
+  };
+  const handleBulkApprove = async () => {
+    if (!selectedDocs.length) return;
+    setSaving(true);
+    try {
+      await api.evidences.bulkUpdate({
+        evidence_ids: selectedDocs,
+        validation_status: 'aprobado',
+        _reviewer_id: user.id
+      });
+      await loadDocs();
+      setSelectedDocs([]);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error en validación masiva');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedDocs.length) return;
+    if (!window.confirm(`¿Estás seguro que deseas eliminar ${selectedDocs.length} documento(s)?\nEsta acción no se puede deshacer.`)) return;
+    setSaving(true);
+    try {
+      await api.evidences.bulkDelete({
+        evidence_ids: selectedDocs,
+        _reviewer_id: user.id
+      });
+      await loadDocs();
+      setSelectedDocs([]);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al eliminar documentos');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (docId) => {
+    if (!window.confirm('¿Estás seguro que deseas eliminar este documento?')) return;
+    try {
+      await api.evidences.remove(docId);
+      await loadDocs();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al eliminar documento');
+    }
+  };
+
+  // ── Vista Previa Avanzada ──────────────────────────────────
+  const openPreview = async (doc) => {
+    setPreviewDoc(doc);
+    setPreviewHtml(null);
+    if (!doc.file_url) return;
+
+    if (doc.file_type === 'XLSX' || doc.file_type === 'CSV') {
+      setPreviewLoading(true);
+      try {
+        const res = await fetch(`${MEDIA_BASE}${doc.file_url}`);
+        const buf = await res.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const html = XLSX.utils.sheet_to_html(ws);
+        setPreviewHtml(html);
+      } catch (e) {
+        console.error('Error Excel preview', e);
+      } finally { setPreviewLoading(false); }
+    } else if (doc.file_type === 'DOCX') {
+      setPreviewLoading(true);
+      try {
+        const res = await fetch(`${MEDIA_BASE}${doc.file_url}`);
+        const buf = await res.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+        setPreviewHtml(result.value);
+      } catch (e) {
+        console.error('Error Word preview', e);
+      } finally { setPreviewLoading(false); }
+    }
+  };
+
   // ── Upload ──────────────────────────────────────────────────
   const handleUpload = async () => {
-    if (!form.indicator_id || !form.title || !selectedFile) return;
+    if (!form.indicator_id || !form.title || !selectedFile || !form.month || !form.year || !form.university_id) {
+      setError('Por favor, complete todos los campos obligatorios');
+      return;
+    }
     setUploading(true);
     setProgress(0);
     setError('');
@@ -84,10 +242,11 @@ export default function DocumentsPage() {
       const fd = new FormData();
       fd.append('title', form.title);
       fd.append('indicator_id', form.indicator_id);
-      fd.append('university_id', user.university_id);
+      fd.append('university_id', form.university_id);
       fd.append('uploaded_by_user_id', user.id);
-      fd.append('period_id', 1);
-      if (form.month) fd.append('month', form.month);
+      fd.append('period_id', 1); // Por defecto
+      fd.append('year', form.year);
+      fd.append('month', form.month);
       fd.append('file', selectedFile);
 
       await api.evidences.upload(fd, pct => setProgress(pct));
@@ -102,7 +261,7 @@ export default function DocumentsPage() {
   };
 
   const resetForm = () => {
-    setForm({ indicator_id: '', title: '', month: '' });
+    setForm({ indicator_id: '', title: '', month: '', year: new Date().getFullYear().toString(), university_id: user.university_id || '' });
     setSelectedFile(null);
     setProgress(0);
   };
@@ -148,13 +307,6 @@ export default function DocumentsPage() {
       setScrapeLoading(false);
     }
   };
-
-  const months = [
-    { v: 1, l: 'Enero' }, { v: 2, l: 'Febrero' }, { v: 3, l: 'Marzo' },
-    { v: 4, l: 'Abril' }, { v: 5, l: 'Mayo' },    { v: 6, l: 'Junio' },
-    { v: 7, l: 'Julio' }, { v: 8, l: 'Agosto' },  { v: 9, l: 'Septiembre' },
-    { v: 10, l: 'Octubre' }, { v: 11, l: 'Noviembre' }, { v: 12, l: 'Diciembre' },
-  ];
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -202,53 +354,120 @@ export default function DocumentsPage() {
         ))}
       </div>
 
+      {/* ─── Navegación Carpetas ─────────────────────────────── */}
+      {folderPath.length > 0 && (
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface-elevated)', padding: '10px 16px', borderRadius: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setFolderPath(p => p.slice(0, -1))}>
+            ⬅ Volver
+          </button>
+          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => setFolderPath([])}>Inicio</span>
+            {folderPath.map((path, idx) => (
+              <span key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: 'var(--text-subtle)' }}>/</span>
+                <span 
+                  style={{ cursor: idx === folderPath.length - 1 ? 'default' : 'pointer', color: idx === folderPath.length - 1 ? 'inherit' : 'var(--primary)' }}
+                  onClick={() => setFolderPath(p => p.slice(0, idx + 1))}
+                >
+                  {path}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ─── Lista ───────────────────────────────────────────── */}
       {loading
         ? <div className="empty-state"><div className="empty-icon">⏳</div><p>Cargando documentos...</p></div>
         : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filtered.map(doc => (
-              <div key={doc.id} className="doc-status-row">
-                <div className="doc-icon">{FILE_ICONS[doc.file_type] || '📁'}</div>
-                <div className="doc-info">
-                  <div className="doc-name">{doc.title}</div>
-                  <div className="doc-meta">
-                    <span className="tag" style={{ fontSize: '0.675rem', marginRight: 6 }}>
-                      {doc.indicator_code}
-                    </span>
-                    {doc.month && <span style={{ marginRight: 6, fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-                      {months.find(m => m.v === doc.month)?.l}
-                    </span>}
-                    {doc.uploaded_at?.split('T')[0]}
-                    {doc.file_size && ` · ${(doc.file_size / 1024).toFixed(1)} KB`}
-                    {doc.uploaded_by && ` · ${doc.uploaded_by}`}
-                  </div>
-                  {doc.observations && (
-                    <div style={{
-                      marginTop: 4, fontSize: '0.75rem', color: 'var(--warning)',
-                      background: 'var(--warning-subtle)', padding: '3px 8px',
-                      borderRadius: 4, display: 'inline-block',
-                    }}>
-                      💬 {doc.observations}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <StatusBadge status={doc.validation_status} />
-                  <button className="btn btn-secondary btn-sm" title="Vista previa"
-                    onClick={() => setPreviewDoc(doc)}>👁️</button>
-                  <button className="btn btn-secondary btn-sm" title="Descargar"
-                    onClick={() => handleDownload(doc)}>⬇️</button>
-                  {doc.validation_status === 'rechazado' && (
-                    <button className="btn btn-primary btn-sm"
-                      onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title })); }}>
-                      🔄 Resubir
+            {viewType === 'docs' && itemsToRender.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-tertiary)', borderRadius: 8, marginBottom: 8 }}>
+                <input type="checkbox"
+                  checked={selectedDocs.length > 0 && selectedDocs.length === itemsToRender.length}
+                  onChange={() => toggleSelectAll(itemsToRender)}
+                />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Seleccionar Todos</span>
+                {selectedDocs.length > 0 && (
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={handleBulkDelete} disabled={saving} style={{ color: 'var(--danger)', borderColor: 'var(--danger-subtle)' }}>
+                      🗑️ Eliminar ({selectedDocs.length})
                     </button>
-                  )}
-                </div>
+                    <button className="btn btn-primary btn-sm" onClick={handleBulkApprove} disabled={saving} style={{ background: 'var(--success)' }}>
+                      ✅ Aprobar ({selectedDocs.length})
+                    </button>
+                  </div>
+                )}
               </div>
-            ))}
-            {filtered.length === 0 && (
+            )}
+            {itemsToRender.map((item, idx) => {
+              if (item.type === 'folder') {
+                return (
+                  <div key={`folder-${idx}`} className="doc-status-row" style={{ cursor: 'pointer' }} onClick={() => setFolderPath(p => [...p, item.name])}>
+                    <div className="doc-icon">📁</div>
+                    <div className="doc-info">
+                      <div className="doc-name">{item.name}</div>
+                      <div className="doc-meta">
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{item.count} documento(s)</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <button className="btn btn-secondary btn-sm">Abrir</button>
+                    </div>
+                  </div>
+                );
+              }
+
+              const doc = item;
+              return (
+                <div key={doc.id} className="doc-status-row">
+                  <div style={{ display: 'flex', alignItems: 'center', marginRight: 12 }}>
+                    <input type="checkbox" checked={selectedDocs.includes(doc.id)} onChange={() => toggleSelect(doc.id)} />
+                  </div>
+                  <div className="doc-icon">{FILE_ICONS[doc.file_type] || '📁'}</div>
+                  <div className="doc-info">
+                    <div className="doc-name">{doc.title}</div>
+                    <div className="doc-meta">
+                      <span className="tag" style={{ fontSize: '0.675rem', marginRight: 6 }}>
+                        {doc.indicator_code}
+                      </span>
+                      {doc.month && <span style={{ marginRight: 6, fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                        {months.find(m => m.v === doc.month)?.l}
+                      </span>}
+                      {doc.uploaded_at?.split('T')[0]}
+                      {doc.file_size && ` · ${(doc.file_size / 1024).toFixed(1)} KB`}
+                      {doc.uploaded_by && ` · ${doc.uploaded_by}`}
+                    </div>
+                    {doc.observations && (
+                      <div style={{
+                        marginTop: 4, fontSize: '0.75rem', color: 'var(--warning)',
+                        background: 'var(--warning-subtle)', padding: '3px 8px',
+                        borderRadius: 4, display: 'inline-block',
+                      }}>
+                        💬 {doc.observations}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <StatusBadge status={doc.validation_status} />
+                    <button className="btn btn-secondary btn-sm" title="Vista previa"
+                      onClick={() => openPreview(doc)}>👁️</button>
+                    <button className="btn btn-secondary btn-sm" title="Descargar"
+                      onClick={() => handleDownload(doc)}>⬇️</button>
+                    {doc.validation_status === 'rechazado' && (
+                      <button className="btn btn-primary btn-sm"
+                        onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title, university_id: doc.university_id || user.university_id })); }}>
+                        🔄 Resubir
+                      </button>
+                    )}
+                    <button className="btn btn-secondary btn-sm" title="Eliminar"
+                      onClick={() => handleDelete(doc.id)} style={{ color: 'var(--danger)' }}>🗑️</button>
+                  </div>
+                </div>
+              );
+            })}
+            {itemsToRender.length === 0 && (
               <div className="empty-state">
                 <div className="empty-icon">📭</div>
                 <h4>Sin documentos</h4>
@@ -285,6 +504,20 @@ export default function DocumentsPage() {
                   title={previewDoc.title}
                   style={{ width: '100%', height: '70vh', border: 'none' }}
                 />
+              ) : (previewDoc.file_type === 'XLSX' || previewDoc.file_type === 'CSV' || previewDoc.file_type === 'DOCX') && previewDoc.file_url ? (
+                previewLoading ? (
+                   <div style={{ padding: 48, textAlign: 'center' }}>
+                     <div className="spinner" style={{ margin: '0 auto 12px' }}></div>
+                     Cargando previsualización...
+                   </div>
+                ) : previewHtml ? (
+                   <div className="file-preview-html" style={{ padding: 24, overflow: 'auto', maxHeight: '70vh', background: '#fff', color: '#000', fontSize: '0.85rem' }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                ) : (
+                   <div style={{ padding: 32, textAlign: 'center' }}>
+                     <p>Error al generar previsualización.</p>
+                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar archivo</button>
+                   </div>
+                )
               ) : (
                 <div style={{ padding: '32px', textAlign: 'center' }}>
                   <div style={{ fontSize: '3rem', marginBottom: 16 }}>{FILE_ICONS[previewDoc.file_type]}</div>
@@ -317,7 +550,7 @@ export default function DocumentsPage() {
       {/* ═══ MODAL — Upload ════════════════════════════════════ */}
       {uploadModal && (
         <div className="modal-overlay" onClick={() => !uploading && setUploadModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h3>📤 Subir Documento</h3>
               <button className="modal-close" onClick={() => !uploading && setUploadModal(false)}>✕</button>
@@ -337,7 +570,19 @@ export default function DocumentsPage() {
                   {error && <div className="alert alert-danger">⚠️ {error}</div>}
 
                   <div className="form-group">
-                    <label className="form-label">Indicador LOTAIP *</label>
+                    <label className="form-label">Universidad *</label>
+                    <select className="form-input" value={form.university_id}
+                      onChange={e => setForm(p => ({ ...p, university_id: e.target.value }))}
+                      disabled={!!user.university_id}>
+                      <option value="">— Seleccione una universidad —</option>
+                      {universities.map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Indicador LOTAIP (Literal) *</label>
                     <select className="form-input" value={form.indicator_id}
                       onChange={e => setForm(p => ({ ...p, indicator_id: e.target.value }))}>
                       <option value="">— Seleccione un indicador —</option>
@@ -347,13 +592,21 @@ export default function DocumentsPage() {
                     </select>
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Mes (opcional)</label>
-                    <select className="form-input" value={form.month}
-                      onChange={e => setForm(p => ({ ...p, month: e.target.value }))}>
-                      <option value="">— Sin especificar —</option>
-                      {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-                    </select>
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Año *</label>
+                      <input type="number" className="form-input" value={form.year}
+                        onChange={e => setForm(p => ({ ...p, year: e.target.value }))}
+                        min="2000" max="2100" />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Mes *</label>
+                      <select className="form-input" value={form.month}
+                        onChange={e => setForm(p => ({ ...p, month: e.target.value }))}>
+                        <option value="">— Seleccione —</option>
+                        {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="form-group">
@@ -405,7 +658,7 @@ export default function DocumentsPage() {
                   Cancelar
                 </button>
                 <button className="btn btn-primary"
-                  disabled={!form.indicator_id || !form.title || !selectedFile}
+                  disabled={!form.indicator_id || !form.title || !selectedFile || !form.year || !form.month || !form.university_id}
                   onClick={handleUpload}>
                   📤 Subir archivo
                 </button>

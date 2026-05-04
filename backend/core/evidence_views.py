@@ -265,6 +265,104 @@ def evidence_detail(request, ev_id):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  ACTUALIZACIÓN MASIVA DE EVIDENCIAS
+# ══════════════════════════════════════════════════════════════════════
+
+@csrf_exempt
+def bulk_update_evidences(request):
+    """
+    PUT /api/evidences/bulk/
+    Body: { "evidence_ids": [1, 2, 3], "validation_status": "aprobado", "_reviewer_id": 5 }
+    Actualiza el estado de validación de varias evidencias a la vez.
+    """
+    if request.method != "PUT":
+        return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    ev_ids = data.get("evidence_ids", [])
+    new_status = data.get("validation_status")
+    reviewer_id = data.get("_reviewer_id")
+
+    if not ev_ids or not new_status:
+        return JsonResponse({"error": "Faltan datos (evidence_ids o validation_status)"}, status=400)
+
+    allowed = {"pendiente", "aprobado", "rechazado"}
+    if new_status not in allowed:
+        return JsonResponse({"error": f"Estado inválido. Use: {allowed}"}, status=400)
+
+    try:
+        # Actualizar masivamente
+        updated_count = Evidence.objects.filter(id__in=ev_ids).update(
+            validation_status=new_status,
+            updated_at=timezone.now()
+        )
+
+        _log(
+            user_id     = reviewer_id,
+            action      = "EVIDENCE_BULK_UPDATE",
+            table_name  = "evidence.evidences",
+            description = f"Evidencias actualizadas ({updated_count}): {ev_ids} -> '{new_status}'",
+        )
+
+        return JsonResponse({"message": f"{updated_count} evidencias actualizadas correctamente"})
+    except Exception as exc:
+        return JsonResponse({"error": f"Error en actualización masiva: {str(exc)}"}, status=500)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  ELIMINACIÓN MASIVA DE EVIDENCIAS
+# ══════════════════════════════════════════════════════════════════════
+
+@csrf_exempt
+def bulk_delete_evidences(request):
+    """
+    DELETE /api/evidences/bulk_delete/
+    Body: { "evidence_ids": [1, 2, 3], "_reviewer_id": 5 }
+    Elimina varias evidencias a la vez y sus archivos.
+    """
+    if request.method not in ["DELETE", "POST"]:
+        return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    ev_ids = data.get("evidence_ids", [])
+    reviewer_id = data.get("_reviewer_id")
+
+    if not ev_ids:
+        return JsonResponse({"error": "Faltan datos (evidence_ids)"}, status=400)
+
+    try:
+        evidences = Evidence.objects.filter(id__in=ev_ids)
+        deleted_count = 0
+        for ev in evidences:
+            if ev.file_path:
+                abs_path = Path(settings.MEDIA_ROOT) / ev.file_path
+                if abs_path.exists():
+                    abs_path.unlink()
+            ev.delete()
+            deleted_count += 1
+
+        _log(
+            user_id     = reviewer_id,
+            action      = "EVIDENCE_BULK_DELETE",
+            table_name  = "evidence.evidences",
+            description = f"Evidencias eliminadas masivamente ({deleted_count}): {ev_ids}",
+        )
+
+        return JsonResponse({"message": f"{deleted_count} evidencias eliminadas correctamente"})
+    except Exception as exc:
+        return JsonResponse({"error": f"Error en eliminación masiva: {str(exc)}"}, status=500)
+
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  DESCARGA SEGURA DE ARCHIVO
 # ══════════════════════════════════════════════════════════════════════
 
