@@ -99,21 +99,31 @@ export default function DocumentsPage() {
     return found ? found.l : 'Sin Mes';
   };
 
+  const isSysadmin = !user.university_id;
+
   let currentDocs = filtered;
-  if (folderPath.length > 0) {
-    currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
-  }
-  if (folderPath.length > 1) {
-    currentDocs = currentDocs.filter(d => getYear(d) === folderPath[1]);
-  }
-  if (folderPath.length > 2) {
-    currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[2]);
+  if (isSysadmin) {
+    if (folderPath.length > 0) currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
+    if (folderPath.length > 1) currentDocs = currentDocs.filter(d => getYear(d) === folderPath[1]);
+    if (folderPath.length > 2) currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[2]);
+    if (folderPath.length > 3) currentDocs = currentDocs.filter(d => (d.indicator_code ? `Literal ${d.indicator_code.split('-').pop()} - ${d.indicator_name}` : 'Sin Literal') === folderPath[3]);
+  } else {
+    if (folderPath.length > 0) currentDocs = currentDocs.filter(d => getYear(d) === folderPath[0]);
+    if (folderPath.length > 1) currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[1]);
+    if (folderPath.length > 2) currentDocs = currentDocs.filter(d => (d.indicator_code ? `Literal ${d.indicator_code.split('-').pop()} - ${d.indicator_name}` : 'Sin Literal') === folderPath[2]);
   }
 
   let viewType = 'docs';
-  if (folderPath.length === 0) viewType = 'universities';
-  else if (folderPath.length === 1) viewType = 'years';
-  else if (folderPath.length === 2) viewType = 'months';
+  if (isSysadmin) {
+    if (folderPath.length === 0) viewType = 'universities';
+    else if (folderPath.length === 1) viewType = 'years';
+    else if (folderPath.length === 2) viewType = 'months';
+    else if (folderPath.length === 3) viewType = 'literals';
+  } else {
+    if (folderPath.length === 0) viewType = 'years';
+    else if (folderPath.length === 1) viewType = 'months';
+    else if (folderPath.length === 2) viewType = 'literals';
+  }
 
   let itemsToRender = [];
   if (viewType === 'universities') {
@@ -136,6 +146,14 @@ export default function DocumentsPage() {
     const groups = {};
     currentDocs.forEach(d => {
       const key = getMonthName(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
+  } else if (viewType === 'literals') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = d.indicator_code ? `Literal ${d.indicator_code.split('-').pop()} - ${d.indicator_name}` : 'Sin Literal';
       if (!groups[key]) groups[key] = [];
       groups[key].push(d);
     });
@@ -235,6 +253,22 @@ export default function DocumentsPage() {
       setError('Por favor, complete todos los campos obligatorios');
       return;
     }
+    
+    const yearNum = parseInt(form.year, 10);
+    const monthNum = parseInt(form.month, 10);
+    const currentD = new Date();
+    const currentYear = currentD.getFullYear();
+    const currentMonth = currentD.getMonth() + 1;
+
+    if (yearNum > currentYear) {
+      setError('No se puede subir un documento de un año posterior al actual');
+      return;
+    }
+    if (yearNum === currentYear && monthNum > currentMonth) {
+      setError('No se puede subir un documento de un mes posterior al actual');
+      return;
+    }
+
     setUploading(true);
     setProgress(0);
     setError('');

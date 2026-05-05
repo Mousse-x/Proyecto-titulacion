@@ -125,6 +125,20 @@ def list_evidences(request):
                     {"error": "title, indicator_id y university_id son obligatorios"}, status=400
                 )
 
+            # Validar fecha lógica (Año/Mes no futuros)
+            year_val = request.POST.get("year") if "multipart" in ct else body.get("year")
+            if year_val and month_val:
+                try:
+                    y_int = int(year_val)
+                    m_int = int(month_val)
+                    now_d = timezone.now()
+                    if y_int > now_d.year:
+                        return JsonResponse({"error": "No se puede subir un documento de un año posterior al actual"}, status=400)
+                    if y_int == now_d.year and m_int > now_d.month:
+                        return JsonResponse({"error": "No se puede subir un documento de un mes posterior al actual"}, status=400)
+                except ValueError:
+                    pass # Si no son enteros, se asume que fallará en la validación del modelo si aplica.
+
             # Validar FK
             try:
                 indicator  = Indicator.objects.get(id=indicator_id)
