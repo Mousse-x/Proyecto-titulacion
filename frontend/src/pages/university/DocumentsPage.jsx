@@ -683,8 +683,21 @@ export default function DocumentsPage() {
                     <select className="form-input" value={form.indicator_id}
                       onChange={e => setForm(p => ({ ...p, indicator_id: e.target.value }))}>
                       <option value="">— Seleccione un indicador —</option>
-                      {indicators.map(i => (
-                        <option key={i.id} value={i.id}>[{i.code}] {i.name}</option>
+                      {indicators
+                        .map(i => ({
+                          ...i,
+                          mappedName: getLiteralFolderName({ indicator_code: i.code, indicator_name: i.name })
+                        }))
+                        .sort((a, b) => {
+                          const idxA = LITERAL_FOLDERS.indexOf(a.mappedName);
+                          const idxB = LITERAL_FOLDERS.indexOf(b.mappedName);
+                          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                          if (idxA !== -1) return -1;
+                          if (idxB !== -1) return 1;
+                          return a.mappedName.localeCompare(b.mappedName);
+                        })
+                        .map(i => (
+                          <option key={i.id} value={i.id}>{i.mappedName}</option>
                       ))}
                     </select>
                   </div>
