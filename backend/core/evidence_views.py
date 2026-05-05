@@ -59,6 +59,7 @@ def _evidence_to_dict(ev):
         "file_type":         ev.file_type or "PDF",  # PDF | XLSX | DOCX | CSV | URL
         "observations":      ev.observations,
         "month":             ev.month,
+        "year":              ev.period.year if ev.period else None,
     }
 
 
@@ -143,7 +144,26 @@ def list_evidences(request):
             try:
                 indicator  = Indicator.objects.get(id=indicator_id)
                 university = University.objects.get(id=university_id)
-                period     = EvaluationPeriod.objects.get(id=period_id)
+                
+                # Obtener o crear el Período según el año seleccionado
+                if year_val:
+                    try:
+                        y_int = int(year_val)
+                        period = EvaluationPeriod.objects.filter(year=y_int).first()
+                        if not period:
+                            period = EvaluationPeriod.objects.create(
+                                period_name=f"Evaluación {y_int}",
+                                year=y_int,
+                                start_date=f"{y_int}-01-01",
+                                end_date=f"{y_int}-12-31",
+                                status="OPEN",
+                                created_at=timezone.now()
+                            )
+                    except ValueError:
+                        period = EvaluationPeriod.objects.get(id=period_id)
+                else:
+                    period = EvaluationPeriod.objects.get(id=period_id)
+
             except (Indicator.DoesNotExist, University.DoesNotExist, EvaluationPeriod.DoesNotExist) as exc:
                 return JsonResponse({"error": f"Referencia inválida: {str(exc)}"}, status=400)
 

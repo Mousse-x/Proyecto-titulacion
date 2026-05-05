@@ -92,7 +92,7 @@ export default function DocumentsPage() {
     rechazado: docs.filter(d => d.validation_status === 'rechazado').length,
   };
 
-  const getYear = (doc) => doc.uploaded_at ? doc.uploaded_at.split('-')[0] : 'Sin Año';
+  const getYear = (doc) => doc.year ? String(doc.year) : (doc.uploaded_at ? doc.uploaded_at.split('-')[0] : 'Sin Año');
   const getMonthName = (doc) => {
     const m = doc.month || (doc.uploaded_at ? parseInt(doc.uploaded_at.split('-')[1], 10) : null);
     const found = months.find(x => x.v === m);
