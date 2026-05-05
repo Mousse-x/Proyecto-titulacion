@@ -365,6 +365,22 @@ export default function DocumentsPage() {
 
   const handleFileSelect = (file) => {
     if (!file) return;
+
+    const allowedExtensions = ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'csv'];
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      setError(`Formato no válido. Solo se permiten archivos con extensiones: ${allowedExtensions.join(', ')}.`);
+      return;
+    }
+
+    const maxSizeInBytes = 50 * 1024 * 1024; // 50 MB
+    if (file.size > maxSizeInBytes) {
+      setError('El archivo excede el tamaño máximo permitido de 50 MB.');
+      return;
+    }
+
+    setError(''); // Limpiar errores previos si el archivo es válido
     setSelectedFile(file);
     if (!form.title) setForm(p => ({ ...p, title: file.name.replace(/\.[^.]+$/, '') }));
   };
