@@ -99,6 +99,58 @@ export default function DocumentsPage() {
     return found ? found.l : 'Sin Mes';
   };
 
+  const LITERAL_FOLDERS = [
+    "1.1 Estructura orgánica",
+    "1.2 - 1.3 Base legal, regulaciones y procedimientos internos",
+    "1.4 Metas y objetivos de unidades administrativas",
+    "2.1 - 2.2 Directorio y distributivo del personal",
+    "3 Remuneraciones e ingresos adicionales",
+    "4 Licencias y comisiones",
+    "5 Servicios",
+    "6 Presupuesto",
+    "7 Auditorías",
+    "8 Contratación pública",
+    "9 Contratistas incumplidos",
+    "10 Planes y programas",
+    "11 Contratos de crédito",
+    "12 Rendición de cuentas",
+    "13 Viáticos",
+    "14 Responsables de acceso a información pública",
+    "15 Contratos colectivos",
+    "16 Índice de información reservada",
+    "17 Audiencias y reuniones",
+    "18 Convenios",
+    "19 Donativos oficiales y protocolares",
+    "20 Registro de activos de información",
+    "21 Políticas públicas o información para grupos específicos",
+    "22 Formularios y formatos de trámites",
+    "23 Acciones afirmativas",
+    "24 Información relevante / ODS"
+  ];
+
+  const getLiteralFolderName = (doc) => {
+    if (!doc.indicator_name && !doc.indicator_code) return 'Sin Literal';
+    
+    if (doc.indicator_name) {
+      const matched = LITERAL_FOLDERS.find(f => 
+        doc.indicator_name.includes(f) || 
+        f.toLowerCase().includes(doc.indicator_name.toLowerCase()) ||
+        f.startsWith(doc.indicator_name.split(' ')[0])
+      );
+      if (matched) return matched;
+    }
+    
+    if (doc.indicator_code) {
+      const codePart = doc.indicator_code.split('-').pop().toLowerCase();
+      if (codePart.length === 1) {
+        const index = codePart.charCodeAt(0) - 97;
+        if (index >= 0 && index < LITERAL_FOLDERS.length) return LITERAL_FOLDERS[index];
+      }
+    }
+
+    return doc.indicator_name || 'Sin Literal';
+  };
+
   const isSysadmin = !user.university_id;
 
   let currentDocs = filtered;
@@ -106,11 +158,11 @@ export default function DocumentsPage() {
     if (folderPath.length > 0) currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
     if (folderPath.length > 1) currentDocs = currentDocs.filter(d => getYear(d) === folderPath[1]);
     if (folderPath.length > 2) currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[2]);
-    if (folderPath.length > 3) currentDocs = currentDocs.filter(d => (d.indicator_code ? `Literal ${d.indicator_code.split('-').pop()} - ${d.indicator_name}` : 'Sin Literal') === folderPath[3]);
+    if (folderPath.length > 3) currentDocs = currentDocs.filter(d => getLiteralFolderName(d) === folderPath[3]);
   } else {
     if (folderPath.length > 0) currentDocs = currentDocs.filter(d => getYear(d) === folderPath[0]);
     if (folderPath.length > 1) currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[1]);
-    if (folderPath.length > 2) currentDocs = currentDocs.filter(d => (d.indicator_code ? `Literal ${d.indicator_code.split('-').pop()} - ${d.indicator_name}` : 'Sin Literal') === folderPath[2]);
+    if (folderPath.length > 2) currentDocs = currentDocs.filter(d => getLiteralFolderName(d) === folderPath[2]);
   }
 
   let viewType = 'docs';
@@ -153,11 +205,22 @@ export default function DocumentsPage() {
   } else if (viewType === 'literals') {
     const groups = {};
     currentDocs.forEach(d => {
-      const key = d.indicator_code ? `Literal ${d.indicator_code.split('-').pop()} - ${d.indicator_name}` : 'Sin Literal';
+      const key = getLiteralFolderName(d);
       if (!groups[key]) groups[key] = [];
       groups[key].push(d);
     });
-    itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
+    
+    // Ordenar las carpetas según el orden de LITERAL_FOLDERS
+    itemsToRender = Object.keys(groups)
+      .sort((a, b) => {
+        const idxA = LITERAL_FOLDERS.indexOf(a);
+        const idxB = LITERAL_FOLDERS.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return a.localeCompare(b);
+      })
+      .map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
   } else {
     itemsToRender = currentDocs.map(d => ({ type: 'doc', ...d }));
   }
