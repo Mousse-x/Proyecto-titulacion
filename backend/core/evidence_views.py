@@ -13,10 +13,14 @@ from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone
+from django.core.mail import send_mail
 
 from .models import (
     AppUser, University, Indicator, EvaluationPeriod, Evidence, AuditLog
 )
+from .middleware import require_auth, require_role
+from .sanitizers import sanitize_text, sanitize_url
+from .encryption import decrypt_email
 
 
 # ─── Helper de auditoría local ───────────────────────────────────────
@@ -73,6 +77,16 @@ def list_evidences(request):
     GET  /api/evidences/   — lista con filtros opcionales
     POST /api/evidences/   — crea evidencia (multipart con archivo o JSON con URL)
     """
+    # ── Control de acceso (HT-08) ────────────────────────────────
+    if request.method == "POST":
+        _, err = require_role(request, [1, 2, 3])
+        if err:
+            return err
+    else:
+        _, err = require_auth(request)
+        if err:
+            return err
+
     if request.method == "GET":
         try:
             qs = (
@@ -244,6 +258,16 @@ def evidence_detail(request, ev_id):
     PUT    /api/evidences/<id>/   — actualiza estado / observaciones
     DELETE /api/evidences/<id>/   — elimina y borra archivo del disco
     """
+    # ── Control de acceso (HT-08) ────────────────────────────────
+    if request.method in ("PUT", "DELETE"):
+        _, err = require_role(request, [1, 2, 3])
+        if err:
+            return err
+    else:
+        _, err = require_auth(request)
+        if err:
+            return err
+
     try:
         ev = Evidence.objects.select_related(
             "university", "indicator", "uploaded_by_user"
@@ -261,12 +285,31 @@ def evidence_detail(request, ev_id):
             return JsonResponse({"error": "JSON inválido"}, status=400)
 
         if "validation_status" in data:
-            allowed = {"pendiente", "aprobado", "rechazado"}
+            allowed = {"pendiente", "aprobado", "rechazado", "inconsistente"}
             if data["validation_status"] not in allowed:
                 return JsonResponse(
                     {"error": f"Estado inválido. Use: {allowed}"}, status=400
                 )
+            
+            old_status = ev.validation_status
             ev.validation_status = data["validation_status"]
+
+            # Notificar al usuario si cambia a rechazado o inconsistente
+            if ev.validation_status in ("rechazado", "inconsistente") and old_status != ev.validation_status:
+                if ev.uploaded_by_user and ev.uploaded_by_user.email:
+                    try:
+                        user_email = decrypt_email(ev.uploaded_by_user.email)
+                        obs = data.get("observations", "Sin observaciones adicionales.")
+                        subject = f"Documento marcado como {ev.validation_status.upper()}"
+                        msg = (
+                            f"Hola {ev.uploaded_by_user.full_name},\n\n"
+                            f"Su documento '{ev.title}' ha sido marcado como {ev.validation_status.upper()}.\n\n"
+                            f"Observaciones del auditor/administrador:\n{obs}\n\n"
+                            "Por favor, revise la plataforma para más detalles.\n"
+                        )
+                        send_mail(subject, msg, settings.DEFAULT_FROM_EMAIL, [user_email], fail_silently=True)
+                    except Exception as e:
+                        print("Error enviando notificación:", e)
 
         if "observations" in data:
             ev.observations = data["observations"]
@@ -309,6 +352,11 @@ def bulk_update_evidences(request):
     Body: { "evidence_ids": [1, 2, 3], "validation_status": "aprobado", "_reviewer_id": 5 }
     Actualiza el estado de validación de varias evidencias a la vez.
     """
+    # ── Control de acceso: Admin y Auditor (HT-08) ───────────────
+    _, err = require_role(request, [1, 4])
+    if err:
+        return err
+
     if request.method != "PUT":
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
@@ -324,16 +372,44 @@ def bulk_update_evidences(request):
     if not ev_ids or not new_status:
         return JsonResponse({"error": "Faltan datos (evidence_ids o validation_status)"}, status=400)
 
-    allowed = {"pendiente", "aprobado", "rechazado"}
+    allowed = {"pendiente", "aprobado", "rechazado", "inconsistente"}
     if new_status not in allowed:
         return JsonResponse({"error": f"Estado inválido. Use: {allowed}"}, status=400)
 
     try:
+        # Obtener evidencias a actualizar para agrupar correos si es necesario
+        evidences_to_update = list(Evidence.objects.select_related("uploaded_by_user").filter(id__in=ev_ids))
+
         # Actualizar masivamente
         updated_count = Evidence.objects.filter(id__in=ev_ids).update(
             validation_status=new_status,
             updated_at=timezone.now()
         )
+
+        # Enviar correos consolidados si es rechazado o inconsistente
+        if new_status in ("rechazado", "inconsistente") and updated_count > 0:
+            user_docs = {}
+            for e in evidences_to_update:
+                if e.uploaded_by_user and e.uploaded_by_user.email:
+                    if e.uploaded_by_user not in user_docs:
+                        user_docs[e.uploaded_by_user] = []
+                    user_docs[e.uploaded_by_user].append(e)
+
+            for u, docs in user_docs.items():
+                try:
+                    user_email = decrypt_email(u.email)
+                    subject = f"Atención: {len(docs)} documento(s) marcados como {new_status.upper()}"
+                    
+                    doc_list = "\n".join([f"- {d.title}" for d in docs])
+                    msg = (
+                        f"Hola {u.full_name},\n\n"
+                        f"{len(docs)} de sus documentos han sido marcados como {new_status.upper()}:\n\n"
+                        f"{doc_list}\n\n"
+                        "Por favor, ingrese a la plataforma para revisar las observaciones y tomar acciones correctivas.\n"
+                    )
+                    send_mail(subject, msg, settings.DEFAULT_FROM_EMAIL, [user_email], fail_silently=True)
+                except Exception as e:
+                    print("Error enviando correos consolidados:", e)
 
         _log(
             user_id     = reviewer_id,
@@ -358,6 +434,11 @@ def bulk_delete_evidences(request):
     Body: { "evidence_ids": [1, 2, 3], "_reviewer_id": 5 }
     Elimina varias evidencias a la vez y sus archivos.
     """
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method not in ["DELETE", "POST"]:
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
@@ -406,6 +487,11 @@ def download_evidence(request, ev_id):
     GET /api/evidences/<id>/download/
     Descarga el archivo. Si es tipo URL devuelve la URL de redirección.
     """
+    # ── Control de acceso: todos los autenticados (HT-08) ────────
+    _, err = require_auth(request)
+    if err:
+        return err
+
     if request.method != "GET":
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
@@ -469,11 +555,12 @@ def scrape_espoch(request):
     """
     POST /api/scraper/espoch/
     Body: { "portal_url": "...", "period_id": 1, "user_id": <int> }
-
-    Extrae literales LOTAIP del portal ESPOCH y crea registros en evidence.evidences.
-    Crea la universidad ESPOCH automáticamente si no existe.
-    Devuelve estadísticas del proceso.
     """
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method != "POST":
         return JsonResponse({"error": "Método no permitido"}, status=405)
 

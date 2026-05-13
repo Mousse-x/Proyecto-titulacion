@@ -47,6 +47,10 @@ export function AuthProvider({ children }) {
 
       setUser(sessionUser);
       sessionStorage.setItem('auth_user', JSON.stringify(sessionUser));
+      // ── Guardar token JWT (HT-08) ──────────────────────────────
+      if (data.token) {
+        sessionStorage.setItem('auth_token', data.token);
+      }
       setLoading(false);
       return true;
 

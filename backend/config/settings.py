@@ -52,6 +52,9 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # ─── Seguridad personalizada (HT-08) ──────────────────────
+    "core.middleware.RateLimitMiddleware",
+    "core.middleware.JWTAuthMiddleware",
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -162,4 +165,23 @@ PASSWORD_RESET_EXPIRY_MINUTES = 30
 
 # False = envío real por SMTP
 DEBUG_RESET_LINK = False
+
+
+# ─── Security Headers (HT-08) ────────────────────────────────────────
+# Protección contra XSS, clickjacking, MIME-sniffing
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False       # → True en producción con HTTPS
+CSRF_COOKIE_SECURE = False          # → True en producción con HTTPS
+SECURE_HSTS_SECONDS = 0             # → 31536000 en producción
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False  # → True en producción
+SECURE_HSTS_PRELOAD = False         # → True en producción
+SECURE_SSL_REDIRECT = False         # → True en producción
+
+# ─── Límites de carga de datos (HT-08) ───────────────────────────────
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
 

@@ -15,14 +15,18 @@ client.interceptors.request.use(config => {
   return config;
 });
 
-// Response interceptor — handle 401
+// Response interceptor — handle 401 (unauthorized) / token expirado
 client.interceptors.response.use(
   res => res,
   err => {
     if (err.response?.status === 401) {
       sessionStorage.removeItem('auth_user');
       sessionStorage.removeItem('auth_token');
-      window.location.href = '/login';
+      // Solo redirigir si no estamos ya en login/register/reset
+      const path = window.location.pathname;
+      if (!path.startsWith('/login') && !path.startsWith('/reset-password')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }

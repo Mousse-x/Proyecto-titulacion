@@ -50,6 +50,25 @@ export default function Login() {
       return;
     }
 
+    // ── Validaciones de seguridad (HT-08) ────────────────────────
+    const nameClean = regForm.fullName.trim();
+    if (nameClean.length > 150) {
+      setRegError('El nombre no debe exceder 150 caracteres.');
+      return;
+    }
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-'.]+$/.test(nameClean)) {
+      setRegError('El nombre solo puede contener letras, espacios, guiones y apóstrofos.');
+      return;
+    }
+    if (regForm.email.trim().length > 254) {
+      setRegError('El correo electrónico es demasiado largo (máx. 254 caracteres).');
+      return;
+    }
+    if (regForm.password.length > 128) {
+      setRegError('La contraseña no debe exceder 128 caracteres.');
+      return;
+    }
+
     // Validación de formato de correo electrónico
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!emailRegex.test(regForm.email.trim())) {

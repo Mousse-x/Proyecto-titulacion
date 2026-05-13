@@ -9,6 +9,7 @@ const STATUS_CONFIG = {
   pendiente:  { label: 'Pendiente',  color: 'var(--warning)',  bg: 'var(--warning-subtle)',  icon: '⏳' },
   aprobado:   { label: 'Aprobado',   color: 'var(--success)',  bg: 'var(--success-subtle)',  icon: '✅' },
   rechazado:  { label: 'Rechazado',  color: 'var(--danger)',   bg: 'var(--danger-subtle)',   icon: '❌' },
+  inconsistente: { label: 'Inconsistente', color: 'var(--warning)', bg: 'var(--warning-subtle)', icon: '⚠️' },
 };
 
 const FILE_ICONS = { PDF: '📄', XLSX: '📊', DOCX: '📝', CSV: '📋', URL: '🔗' };
@@ -90,6 +91,7 @@ export default function DocumentsPage() {
     pendiente: docs.filter(d => d.validation_status === 'pendiente').length,
     aprobado:  docs.filter(d => d.validation_status === 'aprobado').length,
     rechazado: docs.filter(d => d.validation_status === 'rechazado').length,
+    inconsistente: docs.filter(d => d.validation_status === 'inconsistente').length,
   };
 
   const getYear = (doc) => doc.year ? String(doc.year) : (doc.uploaded_at ? doc.uploaded_at.split('-')[0] : 'Sin Año');
@@ -447,6 +449,7 @@ export default function DocumentsPage() {
           { label: 'Aprobados',  count: counts.aprobado,  icon: '✅', color: 'var(--success)', key: 'aprobado' },
           { label: 'Pendientes', count: counts.pendiente, icon: '⏳', color: 'var(--warning)', key: 'pendiente' },
           { label: 'Rechazados', count: counts.rechazado, icon: '❌', color: 'var(--danger)',  key: 'rechazado' },
+          { label: 'Inconsistentes', count: counts.inconsistente, icon: '⚠️', color: 'var(--warning)', key: 'inconsistente' },
         ].map(s => (
           <div key={s.key} className="stat-card"
             style={{ '--color': s.color, cursor: 'pointer' }}
@@ -460,7 +463,7 @@ export default function DocumentsPage() {
 
       {/* ─── Tabs ────────────────────────────────────────────── */}
       <div className="tabs">
-        {[['all', 'Todos'], ['aprobado', 'Aprobados'], ['pendiente', 'Pendientes'], ['rechazado', 'Rechazados']].map(([k, l]) => (
+        {[['all', 'Todos'], ['aprobado', 'Aprobados'], ['pendiente', 'Pendientes'], ['rechazado', 'Rechazados'], ['inconsistente', 'Inconsistentes']].map(([k, l]) => (
           <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
             {l} ({counts[k]})
           </button>
@@ -568,7 +571,7 @@ export default function DocumentsPage() {
                       onClick={() => openPreview(doc)}>👁️</button>
                     <button className="btn btn-secondary btn-sm" title="Descargar"
                       onClick={() => handleDownload(doc)}>⬇️</button>
-                    {doc.validation_status === 'rechazado' && (
+                    {(doc.validation_status === 'rechazado' || doc.validation_status === 'inconsistente') && (
                       <button className="btn btn-primary btn-sm"
                         onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title, university_id: doc.university_id || user.university_id })); }}>
                         🔄 Resubir

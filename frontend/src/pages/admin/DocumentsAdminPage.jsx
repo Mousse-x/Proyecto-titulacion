@@ -9,6 +9,7 @@ const STATUS_CONFIG = {
   pendiente: { label: 'Pendiente', color: 'var(--warning)', bg: 'var(--warning-subtle)', icon: '⏳' },
   aprobado:  { label: 'Aprobado',  color: 'var(--success)', bg: 'var(--success-subtle)', icon: '✅' },
   rechazado: { label: 'Rechazado', color: 'var(--danger)',  bg: 'var(--danger-subtle)',  icon: '❌' },
+  inconsistente: { label: 'Inconsistente', color: 'var(--warning)', bg: 'var(--warning-subtle)', icon: '⚠️' },
 };
 const FILE_ICONS = { PDF: '📄', XLSX: '📊', DOCX: '📝', CSV: '📋', URL: '🔗' };
 
@@ -79,6 +80,7 @@ export default function DocumentsAdminPage() {
     pendiente: docs.filter(d => d.validation_status === 'pendiente').length,
     aprobado:  docs.filter(d => d.validation_status === 'aprobado').length,
     rechazado: docs.filter(d => d.validation_status === 'rechazado').length,
+    inconsistente: docs.filter(d => d.validation_status === 'inconsistente').length,
   };
 
   const getYear = (doc) => doc.uploaded_at ? doc.uploaded_at.split('-')[0] : 'Sin Año';
@@ -271,6 +273,7 @@ export default function DocumentsAdminPage() {
           { key: 'aprobado',  label: 'Aprobados',  icon: '✅', color: 'var(--success)' },
           { key: 'pendiente', label: 'Pendientes', icon: '⏳', color: 'var(--warning)' },
           { key: 'rechazado', label: 'Rechazados', icon: '❌', color: 'var(--danger)'  },
+          { key: 'inconsistente', label: 'Inconsistentes', icon: '⚠️', color: 'var(--warning)' },
         ].map(s => (
           <div key={s.key} className="stat-card" style={{ '--color': s.color, cursor: 'pointer' }}
             onClick={() => setTab(s.key)}>
@@ -301,7 +304,7 @@ export default function DocumentsAdminPage() {
 
       {/* Tabs */}
       <div className="tabs">
-        {[['all', 'Todos'], ['aprobado', 'Aprobados'], ['pendiente', 'Pendientes'], ['rechazado', 'Rechazados']].map(([k, l]) => (
+        {[['all', 'Todos'], ['aprobado', 'Aprobados'], ['pendiente', 'Pendientes'], ['rechazado', 'Rechazados'], ['inconsistente', 'Inconsistentes']].map(([k, l]) => (
           <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
             {l} ({counts[k]})
           </button>
@@ -535,6 +538,10 @@ export default function DocumentsAdminPage() {
                 <button className="btn btn-sm" style={{ flex: 1, background: 'var(--danger)', color: '#fff', border: 'none' }}
                   disabled={saving} onClick={() => submitReview('rechazado')}>
                   ❌ Rechazar
+                </button>
+                <button className="btn btn-sm" style={{ flex: 1, background: 'var(--warning)', color: '#000', border: 'none' }}
+                  disabled={saving} onClick={() => submitReview('inconsistente')}>
+                  ⚠️ Inconsistente
                 </button>
                 <button className="btn btn-secondary btn-sm" style={{ flex: 1 }}
                   disabled={saving} onClick={() => submitReview('pendiente')}>

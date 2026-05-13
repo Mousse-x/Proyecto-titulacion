@@ -28,11 +28,18 @@ function ComplianceBadge({ status }) {
       color: 'var(--danger)', background: 'var(--danger-subtle)',
     }}>✗ No cumple</span>
   );
-  return (
+  if (status === 'inconsistente') return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
       color: 'var(--warning)', background: 'var(--warning-subtle)',
+    }}>⚠️ Inconsistente</span>
+  );
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
+      color: 'var(--text-main)', background: 'var(--bg-tertiary)',
     }}>⏳ Pendiente</span>
   );
 }
@@ -74,12 +81,15 @@ export default function DocumentsAuditorPage() {
       ? docs.filter(d => d.validation_status === 'aprobado')
       : tab === 'no_cumple'
         ? docs.filter(d => d.validation_status === 'rechazado')
-        : docs.filter(d => d.validation_status === 'pendiente');
+        : tab === 'inconsistente'
+          ? docs.filter(d => d.validation_status === 'inconsistente')
+          : docs.filter(d => d.validation_status === 'pendiente');
 
   const counts = {
     all:       docs.length,
     cumple:    docs.filter(d => d.validation_status === 'aprobado').length,
     no_cumple: docs.filter(d => d.validation_status === 'rechazado').length,
+    inconsistente: docs.filter(d => d.validation_status === 'inconsistente').length,
     pendiente: docs.filter(d => d.validation_status === 'pendiente').length,
   };
 
@@ -159,6 +169,11 @@ export default function DocumentsAuditorPage() {
           <div className="stat-value">{counts.no_cumple}</div>
           <div className="stat-label">No Cumplen</div>
         </div>
+        <div className="stat-card" style={{ '--color': 'var(--warning)' }}>
+          <div className="stat-icon-wrap">⚠️</div>
+          <div className="stat-value">{counts.inconsistente}</div>
+          <div className="stat-label">Inconsistentes</div>
+        </div>
         <div className="stat-card" style={{ '--color': compliancePct >= 70 ? 'var(--success)' : 'var(--warning)' }}>
           <div className="stat-icon-wrap">📊</div>
           <div className="stat-value">{compliancePct}%</div>
@@ -218,6 +233,7 @@ export default function DocumentsAuditorPage() {
           ['all',       `Todos (${counts.all})`],
           ['cumple',    `✅ Cumplen (${counts.cumple})`],
           ['no_cumple', `✗ No Cumplen (${counts.no_cumple})`],
+          ['inconsistente', `⚠️ Inconsistentes (${counts.inconsistente})`],
           ['pendiente', `⏳ Pendientes (${counts.pendiente})`],
         ].map(([k, l]) => (
           <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>

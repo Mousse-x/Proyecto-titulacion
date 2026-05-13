@@ -13,6 +13,8 @@ from django.core.mail import send_mail
 from django.conf import settings
 from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
+from .middleware import generate_jwt, require_auth, require_role
+from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
 
 
 # ─── Helpers de auditoría ────────────────────────────────────────────
@@ -61,17 +63,28 @@ def register_user(request):
             _log_error("Cuerpo JSON inválido en registro", function_name="register_user", error_code="INVALID_JSON")
             return JsonResponse({"error": "Cuerpo de la solicitud inválido"}, status=400)
 
-        full_name = data.get("fullName", "").strip()
+        full_name_raw = data.get("fullName", "").strip()
         email_raw = data.get("email", "").strip().lower()
         password  = data.get("password", "")
 
-        if not full_name or not email_raw or not password:
+        if not full_name_raw or not email_raw or not password:
             _log_error(
                 "Registro fallido: campos obligatorios vacíos",
                 function_name="register_user",
                 error_code="MISSING_FIELDS",
             )
             return JsonResponse({"error": "Todos los campos son obligatorios"}, status=400)
+
+        # ── Sanitización y validación de entradas (HT-08) ────────────
+        try:
+            full_name = validate_name(full_name_raw)
+            email_raw = validate_email_format(email_raw)
+            password  = validate_password(password)
+        except ValueError as ve:
+            _log_error(str(ve), function_name="register_user", error_code="VALIDATION_ERROR")
+            return JsonResponse({"error": str(ve)}, status=400)
+
+        full_name = sanitize_text(full_name, max_length=150)
 
         # Verificar que el nombre completo contenga al menos nombre y apellido
         name_parts = full_name.split()
@@ -247,6 +260,7 @@ def login_user(request):
 
         return JsonResponse({
             "message": "Login exitoso",
+            "token": generate_jwt(user),   # ← JWT (HT-08)
             "user": {
                 "id":            user.id,
                 "name":          user.full_name,
@@ -267,6 +281,11 @@ def login_user(request):
 
 @csrf_exempt
 def list_users(request):
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method == "GET":
         try:
             users = AppUser.objects.select_related("role", "university").order_by("id")
@@ -348,6 +367,11 @@ def _get_superadmin_id():
 
 @csrf_exempt
 def user_detail(request, user_id):
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     try:
         user = AppUser.objects.select_related("role").get(id=user_id)
     except AppUser.DoesNotExist:
@@ -428,6 +452,16 @@ def user_detail(request, user_id):
 
 @csrf_exempt
 def list_universities(request):
+    # ── Control de acceso: GET=todos autenticados, POST=solo Admin (HT-08) ──
+    if request.method == "POST":
+        _, err = require_role(request, [1])
+        if err:
+            return err
+    else:
+        _, err = require_auth(request)
+        if err:
+            return err
+
     if request.method == "GET":
         try:
             univs = University.objects.filter(is_active=True).order_by("name")
@@ -481,6 +515,11 @@ def list_universities(request):
 
 @csrf_exempt
 def university_detail(request, univ_id):
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     try:
         univ = University.objects.get(id=univ_id)
     except University.DoesNotExist:
@@ -513,6 +552,11 @@ def university_detail(request, univ_id):
 
 @csrf_exempt
 def list_indicators(request):
+    # ── Control de acceso: todos los autenticados (HT-08) ────────
+    _, err = require_auth(request)
+    if err:
+        return err
+
     if request.method == "GET":
         try:
             indicators = Indicator.objects.select_related("category").order_by("display_order", "code")
@@ -547,6 +591,11 @@ def list_indicators(request):
 
 @csrf_exempt
 def system_stats(request):
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method == "GET":
         try:
             data = {
@@ -570,6 +619,11 @@ def system_stats(request):
 
 @csrf_exempt
 def list_roles(request):
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method == "GET":
         try:
             roles = Role.objects.all().order_by("id")
@@ -589,6 +643,11 @@ def list_audit_errors(request):
     Devuelve los errores del sistema con error_message y stack_trace descifrados.
     Solo accesible para administradores (role_id=1).
     """
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method == "GET":
         try:
             errors = AuditError.objects.all().order_by("-created_at")[:200]
@@ -620,6 +679,11 @@ def list_audit_logs(request):
     GET /api/audit/logs/
     Devuelve el historial de acciones exitosas del sistema.
     """
+    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    _, err = require_role(request, [1])
+    if err:
+        return err
+
     if request.method == "GET":
         try:
             logs = AuditLog.objects.all().order_by("-created_at")[:300]
