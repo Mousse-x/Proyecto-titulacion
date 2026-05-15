@@ -1,0 +1,13 @@
+Institución;ESCUELA SUPERIOR POLITÉCNICA DE CHIMBORAZO
+Descripción;Procesos de Contratacion Publica
+Nombre del campo;Descripcion del campo
+Fecha de publicación;Fecha en la que se publico el proceso de contratacion
+Código del proceso;Codigo de identificacion asignado al proceso de contratacion
+Tipo de proceso;"Tipo de proceso de contratacion; como licitacion; concurso; subasta; entre otros"
+Objeto del proceso;Descripcion del objeto o bien que se esta buscando contratar
+Presupuesto referencial - USD;Monto del presupuesto referencial
+Partida presupuestaria;Numero de la partida presupuestaria
+Monto de la adjudicación - USD;Monto total adjudicado para el proceso de contratacion en dolares estadounidenses
+Etapa de la contratación;Etapa actual en la que se encuentra el proceso de contratacion
+Identificación del contratista;RUC  de la empresa o persona contratista 
+Link para descargar el proceso de contratación desde el portal de comprass públicas;Enlace que permite descargar los detalles completos del proceso de contratacion desde el portal de compras publica

@@ -556,8 +556,8 @@ def scrape_espoch(request):
     POST /api/scraper/espoch/
     Body: { "portal_url": "...", "period_id": 1, "user_id": <int> }
     """
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
-    _, err = require_role(request, [1])
+    # ── Control de acceso: Administradores y Univ (HT-08) ────────────
+    _, err = require_role(request, [1, 2, 3, 4])
     if err:
         return err
 
@@ -573,152 +573,14 @@ def scrape_espoch(request):
     period_id  = body.get("period_id", 1)
     user_id    = body.get("user_id")
 
-    # ── Verificar dependencias ────────────────────────────────
     try:
-        import requests as _req
-        from bs4 import BeautifulSoup
+        from .scraper_engine import run_espoch_scraper
     except ImportError:
-        return JsonResponse(
-            {"error": "Dependencias no instaladas. Ejecuta: pip install requests beautifulsoup4"},
-            status=500,
-        )
+        return JsonResponse({"error": "No se pudo cargar el motor del scraper"}, status=500)
 
-    # ── 1. Obtener o crear ESPOCH ─────────────────────────────
-    now = timezone.now()
-    try:
-        espoch = University.objects.get(acronym="ESPOCH")
-    except University.DoesNotExist:
-        espoch = University.objects.create(
-            name             = "Escuela Superior Politécnica de Chimborazo",
-            acronym          = "ESPOCH",
-            province         = "Chimborazo",
-            city             = "Riobamba",
-            website_url      = "https://www.espoch.edu.ec",
-            transparency_url = portal_url,
-            institution_type = "Pública",
-            is_active        = True,
-            created_at       = now,
-            updated_at       = now,
-        )
-
-    # ── 2. Validar período ────────────────────────────────────
-    try:
-        period = EvaluationPeriod.objects.get(id=period_id)
-    except EvaluationPeriod.DoesNotExist:
-        return JsonResponse({"error": f"Período ID={period_id} no encontrado"}, status=404)
-
-    # ── 3. Obtener indicadores disponibles ───────────────────
-    all_indicators = list(Indicator.objects.filter(is_active=True).order_by("display_order", "code"))
-    ind_by_code    = {i.code: i for i in all_indicators}
-    fallback_ind   = all_indicators[0] if all_indicators else None
-
-    if not fallback_ind:
-        return JsonResponse({"error": "No hay indicadores activos en la BD"}, status=500)
-
-    # ── 4. Scraping ───────────────────────────────────────────
-    try:
-        response = _req.get(
-            portal_url, timeout=25,
-            headers={"User-Agent": "Mozilla/5.0 SisTransp-Scraper/1.0"}
-        )
-        response.raise_for_status()
-        # Forzar UTF-8 para caracteres especiales del portal ESPOCH
-        response.encoding = response.apparent_encoding or "utf-8"
-    except Exception as exc:
-        return JsonResponse({"error": f"Error al acceder al portal ESPOCH: {str(exc)}"}, status=502)
-
-    soup = BeautifulSoup(response.content, "html.parser")
-
-    stats           = {"created": 0, "skipped": 0, "errors": 0}
-    items_created   = []
-    current_month   = None
-    seen_urls       = set(
-        Evidence.objects.filter(university=espoch, source_url__isnull=False)
-        .values_list("source_url", flat=True)
-    )
-
-    month_number_to_name = {v: k.capitalize() for k, v in MONTH_NAME_TO_NUMBER.items()}
-
-    for link in soup.find_all("a"):
-        text = link.get_text(strip=True)
-        href = (link.get("href") or "").strip()
-
-        # Detectar encabezado de mes
-        m = MONTH_RE.match(text.strip())
-        if m:
-            current_month = MONTH_NAME_TO_NUMBER.get(text.strip().upper())
-            continue
-
-        # Detectar literal LOTAIP
-        lit = LITERAL_RE.match(text)
-        if not lit:
-            continue
-
-        letter      = lit.group(1).lower()
-        description = lit.group(2).strip()
-
-        # Filtrar links sin destino real
-        if not href or href in (portal_url, "#") or href.endswith("/2026-2/"):
-            stats["skipped"] += 1
-            continue
-
-        # Evitar duplicados
-        if href in seen_urls:
-            stats["skipped"] += 1
-            continue
-
-        # Buscar indicador correspondiente
-        ind_code  = LOTAIP_LETTER_MAP.get(letter)
-        indicator = ind_by_code.get(ind_code, fallback_ind)
-
-        # Construir título descriptivo
-        month_label = month_number_to_name.get(current_month, "")
-        if month_label:
-            title = f"[{month_label}] Literal {letter.upper()} — {description}"
-        else:
-            title = f"Literal {letter.upper()} — {description}"
-        title = title[:200]
-
-        try:
-            ev = Evidence.objects.create(
-                university        = espoch,
-                period            = period,
-                indicator         = indicator,
-                uploaded_by_user  = None,
-                title             = title,
-                uploaded_at       = now,
-                updated_at        = now,
-                validation_status = "pendiente",
-                file_type         = "URL",
-                source_url        = href,
-                month             = current_month,
-            )
-            seen_urls.add(href)
-            stats["created"] += 1
-            items_created.append({
-                "id":     ev.id,
-                "title":  title[:80],
-                "month":  current_month,
-                "letter": letter,
-                "url":    href,
-            })
-        except Exception as exc:
-            stats["errors"] += 1
-
-    _log(
-        user_id     = user_id,
-        action      = "SCRAPE_ESPOCH",
-        table_name  = "evidence.evidences",
-        description = (
-            f"ESPOCH portal scraping: {stats['created']} creados, "
-            f"{stats['skipped']} omitidos, {stats['errors']} errores"
-        ),
-    )
-
-    return JsonResponse({
-        "message":       f"Scraping completado. {stats['created']} evidencias registradas.",
-        "university_id": espoch.id,
-        "period":        period.period_name,
-        "stats":         stats,
-        "items":         items_created[:30],
-    })
+    from django.http import StreamingHttpResponse
+    
+    # run_espoch_scraper returns a generator yielding JSON lines
+    gen = run_espoch_scraper(portal_url, period_id, user_id)
+    
+    return StreamingHttpResponse(gen, content_type='application/x-ndjson')

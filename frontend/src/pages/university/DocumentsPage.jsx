@@ -409,15 +409,53 @@ export default function DocumentsPage() {
     setScrapeLoading(true);
     setScrapeResult(null);
     try {
-      const res = await api.scraper.espoch({
-        portal_url: 'https://www.espoch.edu.ec/2026-2/',
-        period_id: 1,
-        user_id: user.id,
+      const token = sessionStorage.getItem('auth_token'); // o cookie
+      // Usamos fetch nativo para leer el stream en tiempo real
+      const response = await fetch('http://127.0.0.1:8000/api/scraper/espoch/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          portal_url: 'https://www.espoch.edu.ec/2026-2/',
+          period_id: 1,
+          user_id: user.id,
+        })
       });
-      setScrapeResult(res.data);
-      await loadDocs();
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(Boolean);
+        
+        for (let line of lines) {
+          try {
+            const data = JSON.parse(line);
+            if (data.status === 'progress') {
+              setScrapeResult({ isProgress: true, message: data.msg, pct: data.pct || 0 });
+            } else if (data.status === 'done') {
+              setScrapeResult({ ...data, isProgress: false });
+              await loadDocs();
+            } else if (data.status === 'error') {
+              setScrapeResult({ error: data.error || data.message });
+            }
+          } catch (e) {
+             console.error("Error parsing JSON line", e);
+          }
+        }
+      }
     } catch (e) {
-      setScrapeResult({ error: e.response?.data?.error || 'Error en el scraping' });
+      setScrapeResult({ error: e.message || 'Error en el scraping' });
     } finally {
       setScrapeLoading(false);
     }
@@ -815,14 +853,32 @@ export default function DocumentsPage() {
                 📅 <strong>Período:</strong> Evaluación Marzo 2026
               </div>
 
-              {scrapeLoading && (
+              {scrapeLoading && (!scrapeResult || !scrapeResult.isProgress) && (
                 <div style={{ textAlign: 'center', padding: '16px 0' }}>
                   <div style={{ fontSize: '2rem', marginBottom: 8 }}>⏳</div>
-                  <p>Extrayendo documentos del portal ESPOCH...</p>
+                  <p>Iniciando extracción...</p>
                 </div>
               )}
 
-              {scrapeResult && !scrapeResult.error && (
+              {scrapeResult?.isProgress && (
+                <div style={{ padding: '20px 0' }}>
+                  <div style={{
+                    width: '100%', background: 'var(--border-subtle)',
+                    borderRadius: 10, height: 12, overflow: 'hidden', marginBottom: 12
+                  }}>
+                    <div style={{
+                      width: `${scrapeResult.pct}%`, background: 'var(--primary)',
+                      height: '100%', transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-subtle)' }}>
+                    <span>{scrapeResult.message}</span>
+                    <span style={{ fontWeight: 600 }}>{scrapeResult.pct}%</span>
+                  </div>
+                </div>
+              )}
+
+              {scrapeResult && !scrapeResult.error && !scrapeResult.isProgress && (
                 <div className="alert alert-success" style={{ marginBottom: 0 }}>
                   ✅ <strong>{scrapeResult.message}</strong><br/>
                   Creados: <strong>{scrapeResult.stats?.created}</strong> ·
