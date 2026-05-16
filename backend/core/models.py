@@ -193,6 +193,11 @@ class Evidence(models.Model):
     observations = models.TextField(blank=True, null=True)       # observaciones del auditor
     month        = models.SmallIntegerField(blank=True, null=True)# mes LOTAIP (1-12)
     updated_at   = models.DateTimeField(blank=True, null=True)
+    # ── Campos de procesamiento para validación automática ──
+    file_hash          = models.CharField(max_length=64, blank=True, null=True)   # SHA256
+    metadata_json      = models.JSONField(blank=True, null=True)                  # metadatos extraídos
+    extracted_text     = models.TextField(blank=True, null=True)                   # texto completo del doc
+    processing_status  = models.CharField(max_length=20, default='pending', blank=True, null=True)  # pending|processed|error
 
     class Meta:
         managed = False
@@ -337,3 +342,96 @@ class PasswordResetToken(models.Model):
 
     def __str__(self):
         return f"Reset token for user_id={self.user_id} (used={self.used})"
+
+
+# =========================
+# INDICATOR TEMPLATES (BASE DOCUMENTS)
+# =========================
+
+class IndicatorTemplate(models.Model):
+    """Documentos Base o Plantillas Institucionales para los Indicadores."""
+    indicator          = models.OneToOneField(Indicator, on_delete=models.CASCADE, related_name="template")
+    file_path          = models.FileField(upload_to="templates/")
+    file_name          = models.CharField(max_length=255)
+    uploaded_at        = models.DateTimeField(auto_now_add=True)
+    # ── Campos para validación automática ──
+    expected_columns   = models.JSONField(default=list, blank=True)    # ["columna1", "columna2", ...]
+    keywords           = models.JSONField(default=list, blank=True)    # ["palabra_clave1", ...]
+    expected_structure = models.JSONField(default=dict, blank=True)    # {"sheets": [...], "min_rows": 5}
+    weight             = models.DecimalField(max_digits=5, decimal_places=2, default=1.0)
+    is_active          = models.BooleanField(default=True)
+
+    class Meta:
+        managed  = True
+        db_table = '"core"."indicator_templates"'
+        verbose_name = "Plantilla de indicador"
+        verbose_name_plural = "Plantillas de indicadores"
+
+    def __str__(self):
+        return f"Template for {self.indicator.code}: {self.file_name}"
+
+
+# =========================
+# EVIDENCE VALIDATION (LOTAIP)
+# =========================
+
+class EvidenceValidationResult(models.Model):
+    """Resultado detallado de la validación automática de un documento de evidencia."""
+
+    class ComplianceStatus(models.TextChoices):
+        CUMPLE              = 'CUMPLE',              'Cumple'
+        CUMPLE_PARCIALMENTE = 'CUMPLE_PARCIALMENTE', 'Cumple parcialmente'
+        INCOMPLETO          = 'INCOMPLETO',          'Incompleto'
+        NO_CUMPLE           = 'NO_CUMPLE',           'No cumple'
+        NO_PRESENTADO       = 'NO_PRESENTADO',       'No presentado'
+        ERROR_PROCESAMIENTO = 'ERROR_PROCESAMIENTO', 'Error de procesamiento'
+
+    evidence            = models.OneToOneField(Evidence, on_delete=models.CASCADE, related_name='validation_result')
+    score_existence     = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    score_format        = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    score_update        = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    score_structure     = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    score_content       = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    score_accessibility = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_score         = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    compliance_status   = models.CharField(
+        max_length=25,
+        choices=ComplianceStatus.choices,
+        default=ComplianceStatus.NO_PRESENTADO,
+    )
+    observations        = models.JSONField(default=list, blank=True)
+    validated_at        = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed  = True
+        db_table = '"evaluation"."evidence_validation_results"'
+        verbose_name = "Resultado de validación"
+        verbose_name_plural = "Resultados de validación"
+
+    def __str__(self):
+        return f"Validación {self.evidence_id}: {self.total_score}/100 ({self.compliance_status})"
+
+
+class UniversityEvaluationSummary(models.Model):
+    """Resumen de evaluación de transparencia por universidad y período."""
+    university               = models.ForeignKey(University, on_delete=models.CASCADE, related_name='evaluation_summaries')
+    period                   = models.ForeignKey(EvaluationPeriod, on_delete=models.CASCADE, related_name='evaluation_summaries')
+    total_index              = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    total_indicators         = models.SmallIntegerField(default=0)
+    indicators_compliant     = models.SmallIntegerField(default=0)
+    indicators_partial       = models.SmallIntegerField(default=0)
+    indicators_incomplete    = models.SmallIntegerField(default=0)
+    indicators_non_compliant = models.SmallIntegerField(default=0)
+    indicators_not_presented = models.SmallIntegerField(default=0)
+    general_observations     = models.JSONField(default=list, blank=True)
+    calculated_at            = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed  = True
+        db_table = '"evaluation"."university_evaluation_summaries"'
+        unique_together = [['university', 'period']]
+        verbose_name = "Resumen de evaluación"
+        verbose_name_plural = "Resúmenes de evaluación"
+
+    def __str__(self):
+        return f"{self.university.acronym} - {self.period.period_name}: {self.total_index}%"

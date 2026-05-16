@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { label: "Ponderaciones",   icon: "⚖️", to: "/admin/weightings" },
   { section: "Documentos" },
   { label: "Gestión Documental", icon: "📂", to: "/admin/documents" },
+  { label: "Evaluación LOTAIP",  icon: "🔍", to: "/admin/validation" },
   { section: "Resultados" },
   { label: "Rankings",        icon: "🏆", to: "/admin/rankings" },
   { label: "Reportes",        icon: "📈", to: "/admin/reports" },

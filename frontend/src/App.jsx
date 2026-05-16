@@ -17,6 +17,7 @@ import RankingsPage       from './pages/admin/RankingsPage';
 import ReportsPage        from './pages/admin/ReportsPage';
 import AuditPage          from './pages/admin/AuditPage';
 import DocumentsAdminPage from './pages/admin/DocumentsAdminPage';
+import ValidationPage     from './pages/admin/ValidationPage';
 
 // University pages
 import UnivDashboard    from './pages/university/UnivDashboard';
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/admin/reports"      element={<ProtectedRoute allowedRoles={[1]}><WithLayout><ReportsPage /></WithLayout></ProtectedRoute>} />
           <Route path="/admin/audit"        element={<ProtectedRoute allowedRoles={[1]}><WithLayout><AuditPage /></WithLayout></ProtectedRoute>} />
           <Route path="/admin/documents"    element={<ProtectedRoute allowedRoles={[1]}><WithLayout><DocumentsAdminPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/admin/validation"   element={<ProtectedRoute allowedRoles={[1]}><WithLayout><ValidationPage /></WithLayout></ProtectedRoute>} />
 
           {/* University Admin — roles 2, 3 */}
           <Route path="/university/dashboard"    element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><UnivDashboard /></WithLayout></ProtectedRoute>} />

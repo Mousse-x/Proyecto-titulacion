@@ -15,13 +15,13 @@ MONTH_NAME_TO_NUMBER = {
 }
 
 LOTAIP_LETTER_MAP = {
-    "a": "LOTAIP-A", "b": "LOTAIP-B", "c": "LOTAIP-C", "d": "LOTAIP-D",
-    "e": "LOTAIP-E", "f": "LOTAIP-F", "g": "LOTAIP-G", "h": "LOTAIP-H",
-    "i": "LOTAIP-I", "j": "LOTAIP-J", "k": "LOTAIP-K", "l": "LOTAIP-L",
-    "m": "LOTAIP-M", "n": "LOTAIP-N", "o": "LOTAIP-O", "p": "LOTAIP-P",
-    "q": "LOTAIP-Q", "r": "LOTAIP-R", "s": "LOTAIP-S", "t": "LOTAIP-T",
-    "u": "LOTAIP-U", "v": "LOTAIP-V", "w": "LOTAIP-W", "x": "LOTAIP-X",
-    "y": "LOTAIP-Y",
+    "a": "LOTAIP-1.1", "b": "LOTAIP-1.2", "c": "LOTAIP-1.3", "d": "LOTAIP-2",
+    "e": "LOTAIP-3", "f": "LOTAIP-4", "g": "LOTAIP-5.22", "h": "LOTAIP-6",
+    "i": "LOTAIP-7", "j": "LOTAIP-8", "k": "LOTAIP-9", "l": "LOTAIP-10",
+    "m": "LOTAIP-11", "n": "LOTAIP-12", "o": "LOTAIP-13", "p": "LOTAIP-14",
+    "q": "LOTAIP-15", "r": "LOTAIP-16", "s": "LOTAIP-17", "t": "LOTAIP-18",
+    "u": "LOTAIP-19", "v": "LOTAIP-20", "w": "LOTAIP-21", "x": "LOTAIP-23",
+    "y": "LOTAIP-24",
 }
 
 LITERAL_RE = re.compile(r"^Literal\s+([a-wA-W])\s*[\d\.]*\)?\s*(.+)$", re.IGNORECASE)

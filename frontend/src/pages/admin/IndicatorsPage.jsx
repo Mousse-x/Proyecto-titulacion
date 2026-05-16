@@ -3,7 +3,9 @@ import DataTable from '../../components/common/DataTable';
 import Modal, { ConfirmModal } from '../../components/common/Modal';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
+import { useRef } from 'react';
 
+const MEDIA_BASE = 'http://127.0.0.1:8000';
 const FRAMEWORKS = ['LOTAIP', 'OGP', 'OCDE', 'ODS'];
 const EMPTY = { code: '', name: '', article: '', category: '', weight: 3.0, description: '', is_active: true };
 
@@ -17,6 +19,7 @@ export default function IndicatorsPage() {
   const [form, setForm]           = useState(EMPTY);
   const [filterCat, setFilter]    = useState('');
   const [saving, setSaving]       = useState(false);
+  const fileRef = useRef();
 
   const fetchIndicators = useCallback(async () => {
     setLoading(true);
@@ -55,6 +58,38 @@ export default function IndicatorsPage() {
       await fetchIndicators();
     } catch (err) {
       alert(err.response?.data?.error || 'Error al guardar. Intente de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTemplateUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !editing) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      setSaving(true);
+      const res = await api.indicators.uploadTemplate(editing.id, formData);
+      setForm(p => ({ ...p, template_url: res.data.url, template_name: res.data.name }));
+      await fetchIndicators();
+    } catch (err) {
+      alert('Error al subir la plantilla');
+    } finally {
+      setSaving(false);
+      if (fileRef.current) fileRef.current.value = null;
+    }
+  };
+
+  const handleTemplateDelete = async () => {
+    if (!editing || !confirm('¿Eliminar la plantilla base de este indicador?')) return;
+    try {
+      setSaving(true);
+      await api.indicators.deleteTemplate(editing.id);
+      setForm(p => ({ ...p, template_url: null, template_name: null }));
+      await fetchIndicators();
+    } catch (err) {
+      alert('Error al eliminar la plantilla');
     } finally {
       setSaving(false);
     }
@@ -187,6 +222,30 @@ export default function IndicatorsPage() {
             <input type="checkbox" id="ind-active" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} />
             <label htmlFor="ind-active" style={{ fontSize: '0.875rem', color: 'var(--text-muted)', cursor: 'pointer' }}>Indicador activo</label>
           </div>
+          
+          {editing && (
+            <div className="card" style={{ gridColumn: '1/-1', marginTop: 16, padding: 16, background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: 12 }}>Plantilla / Documento Base</h4>
+              {form.template_url ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: '1.2rem' }}>📊</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{form.template_name || 'Plantilla subida'}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <a href={`${MEDIA_BASE}${form.template_url}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">⬇️ Descargar</a>
+                    <button className="btn btn-danger btn-sm" onClick={handleTemplateDelete} disabled={saving}>🗑️</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <input type="file" ref={fileRef} accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleTemplateUpload} />
+                  <button className="btn btn-secondary" onClick={() => fileRef.current?.click()} disabled={saving}>📤 Subir Plantilla (.xlsx)</button>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>No hay documento base asignado</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
 

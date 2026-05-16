@@ -57,6 +57,8 @@ export const api = {
     create: (data)     => client.post('/indicators/', data),
     update: (id, data) => client.put(`/indicators/${id}/`, data),
     remove: (id)       => client.delete(`/indicators/${id}/`),
+    uploadTemplate: (id, formData) => client.post(`/indicators/${id}/template/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    deleteTemplate: (id) => client.delete(`/indicators/${id}/template/`),
   },
   evidences: {
     list:     (params)              => client.get('/evidences/', { params }),

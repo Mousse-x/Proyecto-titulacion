@@ -3,7 +3,7 @@ from .views import (
     register_user, login_user,
     list_users, user_detail,
     list_universities, university_detail,
-    list_indicators,
+    list_indicators, indicator_detail, indicator_template_view,
     system_stats,
     list_roles,
     list_audit_errors,
@@ -14,6 +14,10 @@ from .views import (
 from .evidence_views import (
     list_evidences, evidence_detail, download_evidence, scrape_espoch,
     bulk_update_evidences, bulk_delete_evidences,
+)
+from .validation_views import (
+    validate_document, validate_all_university,
+    get_validation_result, get_compliance_summary, get_observations,
 )
 
 urlpatterns = [
@@ -33,6 +37,8 @@ urlpatterns = [
 
     # Indicators
     path("indicators/", list_indicators, name="list_indicators"),
+    path("indicators/<int:ind_id>/", indicator_detail, name="indicator_detail"),
+    path("indicators/<int:ind_id>/template/", indicator_template_view, name="indicator_template"),
 
     # Stats
     path("stats/", system_stats, name="system_stats"),
@@ -53,4 +59,11 @@ urlpatterns = [
 
     # Scraper automatizado ESPOCH
     path("scraper/espoch/", scrape_espoch, name="scrape_espoch"),
+
+    # ── Validación automática LOTAIP ──
+    path("evaluacion/documentos/<int:ev_id>/validar/",                      validate_document,       name="validate_document"),
+    path("evaluacion/documentos/<int:ev_id>/resultado/",                    get_validation_result,   name="get_validation_result"),
+    path("evaluacion/universidades/<int:univ_id>/validar-todo/",            validate_all_university,  name="validate_all_university"),
+    path("evaluacion/universidades/<int:univ_id>/resumen/",                 get_compliance_summary,   name="get_compliance_summary"),
+    path("evaluacion/universidades/<int:univ_id>/observaciones/",           get_observations,         name="get_observations"),
 ]

@@ -42,6 +42,10 @@ def _evidence_to_dict(ev):
     """Serializa una evidencia a dict JSON-safe."""
     media_base = getattr(settings, "MEDIA_URL", "/media/")
     file_url   = f"{media_base}{ev.file_path}" if ev.file_path else None
+    
+    template_url = None
+    if ev.indicator_id and hasattr(ev.indicator, 'template') and ev.indicator.template:
+        template_url = ev.indicator.template.file_path.url
 
     return {
         "id":                ev.id,
@@ -52,6 +56,7 @@ def _evidence_to_dict(ev):
         "indicator_id":      ev.indicator_id,
         "indicator_code":    ev.indicator.code if ev.indicator_id else None,
         "indicator_name":    ev.indicator.name if ev.indicator_id else None,
+        "indicator_template_url": template_url,
         "uploaded_by":       ev.uploaded_by_user.full_name if ev.uploaded_by_user_id else "Sistema",
         "uploaded_at":       ev.uploaded_at.isoformat() if ev.uploaded_at else None,
         "updated_at":        ev.updated_at.isoformat() if ev.updated_at else None,

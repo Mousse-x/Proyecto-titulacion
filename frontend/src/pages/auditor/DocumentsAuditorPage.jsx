@@ -349,6 +349,11 @@ export default function DocumentsAuditorPage() {
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
+                {previewDoc.indicator_template_url && (
+                  <a href={`${MEDIA_BASE}${previewDoc.indicator_template_url}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ background: 'var(--info)', border: 'none' }}>
+                    📥 Descargar Documento Base
+                  </a>
+                )}
                 <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar</button>
                 <button className="btn btn-secondary" onClick={() => setPreviewDoc(null)}>Cerrar</button>
               </div>
