@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -32,6 +32,11 @@ export function AuthProvider({ children }) {
       const res = await api.auth.login({ email, password });
       const data = res.data;
 
+      if (data.requires_2fa) {
+        setLoading(false);
+        return { requires_2fa: true, email: data.email };
+      }
+
       // Normalizar role_id: el backend lo devuelve directamente desde la BD
       const roleId = data.user.role_id ?? ROLE_ID_MAP[data.user.role] ?? 4;
 
@@ -51,6 +56,9 @@ export function AuthProvider({ children }) {
       if (data.token) {
         sessionStorage.setItem('auth_token', data.token);
       }
+      if (data.refresh_token) {
+        sessionStorage.setItem('refresh_token', data.refresh_token);
+      }
       setLoading(false);
       return true;
 
@@ -64,18 +72,69 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const verify2fa = useCallback(async (email, otp) => {
+    setLoading(true);
+    setError(null);
+    setErrorData(null);
+    try {
+      const res = await api.auth.verify2fa({ email, otp });
+      const data = res.data;
+      const roleId = data.user.role_id ?? ROLE_ID_MAP[data.user.role] ?? 4;
+      
+      const sessionUser = {
+        id:            data.user.id,
+        full_name:     data.user.name,
+        email:         data.user.email,
+        role:          data.user.role,
+        role_id:       roleId,
+        university_id: data.user.university_id ?? null,
+        is_active:     data.user.is_active ?? true,
+      };
+
+      setUser(sessionUser);
+      sessionStorage.setItem('auth_user', JSON.stringify(sessionUser));
+      if (data.token) {
+        sessionStorage.setItem('auth_token', data.token);
+      }
+      if (data.refresh_token) {
+        sessionStorage.setItem('refresh_token', data.refresh_token);
+      }
+      setLoading(false);
+      return true;
+    } catch (err) {
+      setLoading(false);
+      const payload = err.response?.data || {};
+      const msg = payload.error || 'Código inválido o error de conexión.';
+      setError(msg);
+      return false;
+    }
+  }, []);
+
   const logout = useCallback(() => {
     setUser(null);
     sessionStorage.removeItem('auth_user');
     sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('refresh_token');
   }, []);
+
+  // Polling para detectar sesión cerrada por otro dispositivo (Concurrencia)
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      api.auth.status().catch(() => {
+        // El interceptor de Axios ya manejará el 401, el logout y la redirección
+        // si la sesión (incluyendo el refresh token) es inválida.
+      });
+    }, 10000); // Poll cada 10 segundos
+    return () => clearInterval(interval);
+  }, [user]);
 
   const isAdmin      = user?.role_id === 1;
   const isUnivAdmin  = user?.role_id === 2 || user?.role_id === 3;
   const isAuditor    = user?.role_id === 4;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, error, errorData, isAdmin, isUnivAdmin, isAuditor }}>
+    <AuthContext.Provider value={{ user, login, verify2fa, logout, loading, error, errorData, isAdmin, isUnivAdmin, isAuditor }}>
       {children}
     </AuthContext.Provider>
   );

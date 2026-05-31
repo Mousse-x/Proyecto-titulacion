@@ -14,6 +14,9 @@ export default function AuthPage() {
   const [loginError, setLoginError] = useState("");
   const [registerError, setRegisterError] = useState("");
   const [registerSuccess, setRegisterSuccess] = useState("");
+  const [showOtp, setShowOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [tempEmail, setTempEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [showLoginPass, setShowLoginPass] = useState(false);
   const [showRegPass, setShowRegPass] = useState(false);
@@ -24,6 +27,8 @@ export default function AuthPage() {
     setLoginError("");
     setRegisterError("");
     setRegisterSuccess("");
+    setShowOtp(false);
+    setOtpCode("");
   };
 
   const handleLoginChange = (e) => {
@@ -39,12 +44,35 @@ export default function AuthPage() {
     setLoginError("");
     setLoading(true);
     try {
-      const response = await api.post("/api/login/", loginForm);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      // TODO: redirect to dashboard
-      alert(`👋 ¡Bienvenido, ${response.data.user.name}!`);
+      const response = await api.auth.login(loginForm);
+      if (response.data.requires_2fa) {
+        setShowOtp(true);
+        setTempEmail(response.data.email);
+        alert(response.data.message || "Código enviado al correo");
+      } else {
+        localStorage.setItem("user", JSON.stringify(response.data.user));
+        // TODO: redirect to dashboard
+        alert(`👋 ¡Bienvenido, ${response.data.user.name}!`);
+      }
     } catch (err) {
       setLoginError(err.response?.data?.error || "Error al iniciar sesión");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError("");
+    setLoading(true);
+    try {
+      const response = await api.auth.verify2fa({ email: tempEmail, otp: otpCode });
+      sessionStorage.setItem("auth_token", response.data.token);
+      sessionStorage.setItem("refresh_token", response.data.refresh_token);
+      localStorage.setItem("user", JSON.stringify(response.data.user));
+      alert(`👋 ¡Bienvenido, ${response.data.user.name}!`);
+    } catch (err) {
+      setLoginError(err.response?.data?.error || "Código inválido");
     } finally {
       setLoading(false);
     }
@@ -59,14 +87,15 @@ export default function AuthPage() {
       setRegisterError("Las contraseñas no coinciden.");
       return;
     }
-    if (registerForm.password.length < 8) {
-      setRegisterError("La contraseña debe tener al menos 8 caracteres.");
+    const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]).{8,}$/;
+    if (!pwdRegex.test(registerForm.password)) {
+      setRegisterError("La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales.");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await api.post("/api/register/", registerForm);
+      const response = await api.auth.register(registerForm);
       setRegisterSuccess(response.data.message || "¡Cuenta creada exitosamente!");
       setRegisterForm({ fullName: "", email: "", password: "", confirmPassword: "" });
     } catch (err) {
@@ -141,11 +170,46 @@ export default function AuthPage() {
             aria-labelledby="tab-login"
           >
             <div className="auth-panel-header">
-              <h2 className="auth-panel-title">¡Bienvenido de vuelta!</h2>
-              <p className="auth-panel-sub">Ingresa tus credenciales para continuar</p>
+              <h2 className="auth-panel-title">{showOtp ? "Verificación 2FA" : "¡Bienvenido de vuelta!"}</h2>
+              <p className="auth-panel-sub">{showOtp ? "Ingresa el código OTP enviado a tu correo" : "Ingresa tus credenciales para continuar"}</p>
             </div>
 
-            <form onSubmit={handleLoginSubmit} className="auth-form" noValidate>
+            {showOtp ? (
+              <form onSubmit={handleOtpSubmit} className="auth-form" noValidate>
+                <div className="field-group">
+                  <label htmlFor="otp-code" className="field-label">Código OTP (6 dígitos)</label>
+                  <div className="field-input-wrap">
+                    <span className="field-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <input
+                      id="otp-code"
+                      type="text"
+                      name="otp"
+                      placeholder="123456"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      className="field-input"
+                      maxLength={6}
+                      required
+                    />
+                  </div>
+                </div>
+                
+                {loginError && (
+                  <div className="auth-alert auth-alert--error" role="alert">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    {loginError}
+                  </div>
+                )}
+                
+                <button type="submit" className="auth-btn primary" disabled={loading}>
+                  {loading ? <span className="btn-spinner" /> : "Verificar"}
+                </button>
+                <button type="button" className="auth-link" style={{marginTop: "1rem"}} onClick={() => setShowOtp(false)}>Volver al login</button>
+              </form>
+            ) : (
+              <form onSubmit={handleLoginSubmit} className="auth-form" noValidate>
               <div className="field-group">
                 <label htmlFor="login-email" className="field-label">Correo electrónico</label>
                 <div className="field-input-wrap">
@@ -234,6 +298,7 @@ export default function AuthPage() {
                 Regístrate aquí
               </button>
             </p>
+            )}
           </div>
 
           {/* ─── REGISTER PANEL ─── */}

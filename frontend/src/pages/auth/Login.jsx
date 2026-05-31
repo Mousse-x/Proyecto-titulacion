@@ -6,15 +6,17 @@ import { api } from '../../api/client';
 const ROLE_REDIRECTS = { 1: '/admin/dashboard', 2: '/university/dashboard', 3: '/university/dashboard', 4: '/auditor/dashboard' };
 
 export default function Login() {
-  const { login, loading, error, errorData } = useAuth();
+  const { login, verify2fa, loading, error, errorData } = useAuth();
   const navigate = useNavigate();
 
   // Tab: 'login' | 'register' | 'forgot'
   const [tab, setTab] = useState('login');
 
-  // Login form
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [tempEmail, setTempEmail] = useState('');
 
   // Register form
   const [regForm, setRegForm] = useState({ fullName: '', email: '', password: '', confirm: '' });
@@ -33,7 +35,19 @@ export default function Login() {
   // ── Login ──────────────────────────────────────────────────────
   const handleLogin = async (e) => {
     e.preventDefault();
-    const ok = await login(form.email, form.password);
+    const res = await login(form.email, form.password);
+    if (res?.requires_2fa) {
+      setShowOtp(true);
+      setTempEmail(res.email);
+    } else if (res === true) {
+      const saved = JSON.parse(sessionStorage.getItem('auth_user') || 'null');
+      navigate(ROLE_REDIRECTS[saved?.role_id] || '/login');
+    }
+  };
+
+  const handleOtp = async (e) => {
+    e.preventDefault();
+    const ok = await verify2fa(tempEmail, otpCode);
     if (ok) {
       const saved = JSON.parse(sessionStorage.getItem('auth_user') || 'null');
       navigate(ROLE_REDIRECTS[saved?.role_id] || '/login');
@@ -80,8 +94,9 @@ export default function Login() {
       setRegError('Las contraseñas no coinciden.');
       return;
     }
-    if (regForm.password.length < 6) {
-      setRegError('La contraseña debe tener al menos 6 caracteres.');
+    const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]).{8,}$/;
+    if (!pwdRegex.test(regForm.password)) {
+      setRegError('La contraseña no cumple con los requisitos mínimos de seguridad.');
       return;
     }
 
@@ -135,8 +150,15 @@ export default function Login() {
     setForgotDevLink(null);
     setRegError(null);
     setRegSuccess(false);
+    setShowOtp(false);
+    setOtpCode('');
   };
 
+  const isLen = /.{8,}/.test(regForm.password);
+  const isUpper = /[A-Z]/.test(regForm.password);
+  const isLower = /[a-z]/.test(regForm.password);
+  const isNum = /\d/.test(regForm.password);
+  const isSpecial = /[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]/.test(regForm.password);
 
   return (
     <div className="login-page">
@@ -253,6 +275,40 @@ export default function Login() {
                     </a>
                   </div>
                 </div>
+              ) : showOtp ? (
+                /* ── Formulario de OTP ── */
+                <>
+                  <h2 className="login-title">Verificación de 2 Pasos</h2>
+                  <p className="login-subtitle">Ingresa el código OTP que enviamos a tu correo</p>
+                  <form className="login-form" onSubmit={handleOtp} autoComplete="off">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="otp-code">Código OTP (6 dígitos)</label>
+                      <input
+                        id="otp-code"
+                        type="text"
+                        className="form-input"
+                        placeholder="123456"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={e => setOtpCode(e.target.value)}
+                        required
+                      />
+                    </div>
+                    {error && (
+                      <div className="alert alert-danger" style={{ borderRadius: 'var(--radius)' }}>
+                        ⚠️ {error}
+                      </div>
+                    )}
+                    <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ width: '100%', marginTop: 4 }}>
+                      {loading ? <><span className="spinner" style={{ width: 18, height: 18 }} /> Verificando...</> : 'Verificar OTP'}
+                    </button>
+                    <p style={{ textAlign: 'center', marginTop: 16 }}>
+                      <button type="button" onClick={() => setShowOtp(false)} style={{ background: 'none', border: 'none', color: 'var(--text-subtle)', cursor: 'pointer', fontSize: '0.8125rem' }}>
+                        ← Volver al login
+                      </button>
+                    </p>
+                  </form>
+                </>
               ) : (
                 /* ── Formulario de login ── */
                 <>
@@ -401,7 +457,27 @@ export default function Login() {
                       </button>
                     </div>
                   </div>
-                  <div className="form-group">
+                  <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: 12, borderRadius: 'var(--radius)' }}>
+                    <div style={{ marginBottom: 6, fontWeight: 600 }}>Tu contraseña debe contener:</div>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <li style={{ color: isLen ? 'var(--success)' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isLen ? '✅' : '○'} Mínimo 8 caracteres
+                      </li>
+                      <li style={{ color: isUpper ? 'var(--success)' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isUpper ? '✅' : '○'} Una letra mayúscula
+                      </li>
+                      <li style={{ color: isLower ? 'var(--success)' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isLower ? '✅' : '○'} Una letra minúscula
+                      </li>
+                      <li style={{ color: isNum ? 'var(--success)' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isNum ? '✅' : '○'} Un número
+                      </li>
+                      <li style={{ color: isSpecial ? 'var(--success)' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isSpecial ? '✅' : '○'} Un carácter especial
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="form-group" style={{ marginTop: 16 }}>
                     <label className="form-label" htmlFor="reg-confirm">Confirmar contraseña *</label>
                     <input
                       id="reg-confirm"

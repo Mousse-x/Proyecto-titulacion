@@ -19,13 +19,16 @@ from .models import AppUser
 # ══════════════════════════════════════════════════════════════════════
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_SECONDS = 8 * 3600   # 8 horas
+JWT_EXPIRATION_SECONDS = 15 * 60   # 15 minutos
+JWT_REFRESH_EXPIRATION_SECONDS = 7 * 24 * 3600 # 7 días
 
 # Rutas públicas que NO requieren token
 PUBLIC_PATHS = [
     "/api/auth/login/",
     "/api/auth/register/",
     "/api/auth/password-reset/request/",
+    "/api/auth/2fa/verify/",
+    "/api/auth/refresh/",
     # confirm lleva un token dinámico — se chequea por prefijo abajo
 ]
 
@@ -51,14 +54,17 @@ def _is_public(path):
 #  Helpers JWT (usados también en views.py para generar tokens)
 # ══════════════════════════════════════════════════════════════════════
 
-def generate_jwt(user):
+def generate_jwt(user, is_refresh=False):
     """Genera un JWT firmado con los datos del usuario."""
     now = time.time()
+    exp_seconds = JWT_REFRESH_EXPIRATION_SECONDS if is_refresh else JWT_EXPIRATION_SECONDS
     payload = {
         "user_id":  user.id,
         "role_id":  user.role_id,
+        "session_id": str(user.session_id) if user.session_id else None,
+        "is_refresh": is_refresh,
         "iat":      now,
-        "exp":      now + JWT_EXPIRATION_SECONDS,
+        "exp":      now + exp_seconds,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
 
@@ -116,6 +122,10 @@ class JWTAuthMiddleware:
         except jwt.InvalidTokenError:
             return JsonResponse({"error": "Token inválido"}, status=401)
 
+        # Verificar que no sea un refresh token
+        if payload.get("is_refresh"):
+            return JsonResponse({"error": "No se puede usar un refresh token para acceder a la API"}, status=401)
+
         # Cargar usuario de la BD
         try:
             user = AppUser.objects.select_related("role").get(
@@ -123,6 +133,11 @@ class JWTAuthMiddleware:
             )
         except AppUser.DoesNotExist:
             return JsonResponse({"error": "Usuario no encontrado o inactivo"}, status=401)
+
+        # Verificar concurrencia (session_id)
+        token_session_id = payload.get("session_id")
+        if not token_session_id or str(user.session_id) != token_session_id:
+            return JsonResponse({"error": "Su sesión ha sido cerrada porque se inició sesión en otro dispositivo."}, status=401)
 
         request.auth_user = user
         request.auth_role_id = user.role_id

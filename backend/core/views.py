@@ -252,15 +252,93 @@ def login_user(request):
 
         _log(
             user_id=user.id,
-            action="LOGIN",
+            action="LOGIN_ATTEMPT",
             table_name="core.users",
             record_id=user.id,
-            description=f"Login exitoso (rol: {user.role.name})",
+            description=f"Credenciales validadas, requiere 2FA (rol: {user.role.name})",
         )
 
+        import random
+        import string
+        
+        # Generar OTP
+        otp = ''.join(random.choices(string.digits, k=6))
+        user.otp_code = otp
+        user.otp_expiry = timezone.now() + timedelta(minutes=5)
+        user.save(update_fields=["otp_code", "otp_expiry", "updated_at"])
+        
+        # Enviar correo
+        try:
+            send_mail(
+                subject="Código de Verificación - Sistema Transparencia",
+                message=f"Su código de verificación (OTP) es: {otp}\nEste código expirará en 5 minutos.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email_raw],
+                fail_silently=False,
+            )
+            print(f"OTP para {email_raw}: {otp}") # Para desarrollo
+        except Exception as e:
+            _log_error(f"Error enviando OTP: {str(e)}", user_id=user.id, function_name="login_user")
+            return JsonResponse({"error": "Error al enviar el código de verificación"}, status=500)
+
+        return JsonResponse({
+            "requires_2fa": True,
+            "email": email_raw,
+            "message": "Código de verificación enviado al correo"
+        })
+
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+
+
+@csrf_exempt
+def verify_otp(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            
+        email_raw = data.get("email", "").strip().lower()
+        otp = data.get("otp", "").strip()
+        
+        if not email_raw or not otp:
+            return JsonResponse({"error": "Email y código son obligatorios"}, status=400)
+            
+        email_idx = hash_email(email_raw)
+        try:
+            user = AppUser.objects.select_related("role").get(email_hash=email_idx)
+        except AppUser.DoesNotExist:
+            return JsonResponse({"error": "Usuario no encontrado"}, status=400)
+            
+        if not user.otp_code or user.otp_code != otp:
+            return JsonResponse({"error": "Código de verificación inválido"}, status=400)
+            
+        if not user.otp_expiry or timezone.now() > user.otp_expiry:
+            return JsonResponse({"error": "El código de verificación ha expirado"}, status=400)
+            
+        # OTP Válido - Generar sesión
+        import uuid
+        user.session_id = uuid.uuid4()
+        user.otp_code = None
+        user.otp_expiry = None
+        user.save(update_fields=["session_id", "otp_code", "otp_expiry", "updated_at"])
+        
+        _log(
+            user_id=user.id,
+            action="LOGIN_2FA",
+            table_name="core.users",
+            record_id=user.id,
+            description=f"Login 2FA exitoso (rol: {user.role.name})",
+        )
+        
+        # Generar tokens (Access & Refresh)
+        access_token = generate_jwt(user)
+        refresh_token = generate_jwt(user, is_refresh=True)
+        
         return JsonResponse({
             "message": "Login exitoso",
-            "token": generate_jwt(user),   # ← JWT (HT-08)
+            "token": access_token,
+            "refresh_token": refresh_token,
             "user": {
                 "id":            user.id,
                 "name":          user.full_name,
@@ -271,9 +349,66 @@ def login_user(request):
                 "is_active":     user.is_active,
             }
         })
-
+        
     return JsonResponse({"error": "Método no permitido"}, status=405)
 
+
+@csrf_exempt
+def refresh_token(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            
+        token = data.get("refresh_token")
+        if not token:
+            return JsonResponse({"error": "Refresh token es requerido"}, status=400)
+            
+        from .middleware import decode_jwt, generate_jwt
+        import jwt
+        
+        try:
+            payload = decode_jwt(token)
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Refresh token expirado"}, status=401)
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Refresh token inválido"}, status=401)
+            
+        # Verificar tipo de token
+        if not payload.get("is_refresh"):
+            return JsonResponse({"error": "Tipo de token inválido"}, status=401)
+            
+        try:
+            user = AppUser.objects.get(id=payload["user_id"], is_active=True)
+        except AppUser.DoesNotExist:
+            return JsonResponse({"error": "Usuario no encontrado"}, status=401)
+            
+        # Verificar concurrencia (session_id)
+        token_session_id = payload.get("session_id")
+        if not token_session_id or str(user.session_id) != token_session_id:
+            return JsonResponse({"error": "La sesión ha expirado o ha sido invalidada. Inicie sesión nuevamente."}, status=401)
+            
+        # Emitir nuevo access_token
+        access_token = generate_jwt(user)
+        
+        return JsonResponse({
+            "token": access_token
+        })
+        
+    return JsonResponse({"error": "Método no permitido"}, status=405)
+
+@csrf_exempt
+def auth_status(request):
+    """
+    Endpoint ligero para que el frontend haga polling y verifique 
+    si su sesión (token) sigue siendo válida y no ha sido invalidada por concurrencia.
+    """
+    from .middleware import require_auth
+    user, err = require_auth(request)
+    if err:
+        return err
+    return JsonResponse({"status": "active"})
 
 # ─── Listado de usuarios ─────────────────────────────────────────────
 

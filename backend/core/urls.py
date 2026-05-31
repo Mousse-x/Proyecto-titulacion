@@ -10,6 +10,9 @@ from .views import (
     list_audit_logs,
     request_password_reset,
     confirm_password_reset,
+    verify_otp,
+    refresh_token,
+    auth_status,
 )
 from .evidence_views import (
     list_evidences, evidence_detail, download_evidence, scrape_espoch,
@@ -24,6 +27,9 @@ urlpatterns = [
     # Auth
     path("auth/register/", register_user,   name="register_user"),
     path("auth/login/",    login_user,       name="login_user"),
+    path("auth/2fa/verify/", verify_otp,      name="verify_otp"),
+    path("auth/refresh/",  refresh_token,    name="refresh_token"),
+    path("auth/status/",   auth_status,      name="auth_status"),
     path("auth/password-reset/request/",             request_password_reset, name="password_reset_request"),
     path("auth/password-reset/confirm/<str:token>/", confirm_password_reset, name="password_reset_confirm"),
 

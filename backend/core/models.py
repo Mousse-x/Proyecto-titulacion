@@ -56,9 +56,13 @@ class AppUser(models.Model):
     # ── Seguridad: bloqueo por intentos fallidos ──
     failed_login_attempts = models.SmallIntegerField(default=0)
     is_locked = models.BooleanField(default=False)
+    # ── Seguridad: concurrencia y 2FA ──
+    session_id = models.UUIDField(default=uuid.uuid4, null=True, blank=True)
+    otp_code = models.CharField(max_length=6, blank=True, null=True)
+    otp_expiry = models.DateTimeField(blank=True, null=True)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = '"core"."users"'
         verbose_name = "Usuario del sistema"
         verbose_name_plural = "Usuarios del sistema"

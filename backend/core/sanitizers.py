@@ -85,9 +85,9 @@ def validate_email_format(email):
 
 # ─── Validación de contraseña ────────────────────────────────────────
 
-def validate_password(password, min_length=6, max_length=128):
+def validate_password(password, min_length=8, max_length=128):
     """
-    Valida longitud de contraseña.
+    Valida complejidad de contraseña (mayúscula, minúscula, número, especial).
     Retorna la contraseña o lanza ValueError.
     """
     if not password:
@@ -96,6 +96,16 @@ def validate_password(password, min_length=6, max_length=128):
         raise ValueError(f"La contraseña debe tener al menos {min_length} caracteres")
     if len(password) > max_length:
         raise ValueError(f"La contraseña no debe exceder {max_length} caracteres")
+        
+    if not re.search(r'[A-Z]', password):
+        raise ValueError("La contraseña debe incluir al menos una letra mayúscula")
+    if not re.search(r'[a-z]', password):
+        raise ValueError("La contraseña debe incluir al menos una letra minúscula")
+    if not re.search(r'\d', password):
+        raise ValueError("La contraseña debe incluir al menos un número")
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]', password):
+        raise ValueError("La contraseña debe incluir al menos un carácter especial")
+        
     return password
 
 

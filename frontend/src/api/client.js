@@ -18,14 +18,30 @@ client.interceptors.request.use(config => {
 // Response interceptor — handle 401 (unauthorized) / token expirado
 client.interceptors.response.use(
   res => res,
-  err => {
-    if (err.response?.status === 401) {
-      sessionStorage.removeItem('auth_user');
-      sessionStorage.removeItem('auth_token');
-      // Solo redirigir si no estamos ya en login/register/reset
-      const path = window.location.pathname;
-      if (!path.startsWith('/login') && !path.startsWith('/reset-password')) {
-        window.location.href = '/login';
+  async err => {
+    const originalRequest = err.config;
+    if (err.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/refresh/')) {
+      originalRequest._retry = true;
+      const refreshToken = sessionStorage.getItem('refresh_token');
+      if (refreshToken) {
+        try {
+          const res = await axios.post(`${API_BASE}/auth/refresh/`, { refresh_token: refreshToken });
+          sessionStorage.setItem('auth_token', res.data.token);
+          originalRequest.headers.Authorization = `Bearer ${res.data.token}`;
+          return client(originalRequest);
+        } catch (refreshErr) {
+          sessionStorage.removeItem('auth_user');
+          sessionStorage.removeItem('auth_token');
+          sessionStorage.removeItem('refresh_token');
+          window.location.href = '/login';
+          return Promise.reject(refreshErr);
+        }
+      } else {
+        sessionStorage.removeItem('auth_user');
+        sessionStorage.removeItem('auth_token');
+        if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/reset-password')) {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(err);
@@ -39,6 +55,8 @@ export const api = {
   auth: {
     login:    (data) => client.post('/auth/login/', data),
     register: (data) => client.post('/auth/register/', data),
+    verify2fa: (data) => client.post('/auth/2fa/verify/', data),
+    status:   () => client.get('/auth/status/'),
   },
   users: {
     list:   ()         => client.get('/users/'),
