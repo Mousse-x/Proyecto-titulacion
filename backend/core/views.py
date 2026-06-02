@@ -250,6 +250,41 @@ def login_user(request):
         except Exception:
             pass
 
+        # ── Omitir 2FA para correos de prueba ──
+        if email_raw in ["admin@gmail.com", "adminuni@gmail.com"]:
+            import uuid
+            user.session_id = uuid.uuid4()
+            user.otp_code = None
+            user.otp_expiry = None
+            user.save(update_fields=["session_id", "otp_code", "otp_expiry", "updated_at"])
+            
+            _log(
+                user_id=user.id,
+                action="LOGIN_BYPASS_2FA",
+                table_name="core.users",
+                record_id=user.id,
+                description=f"Login directo exitoso sin 2FA (rol: {user.role.name})",
+            )
+            
+            from .middleware import generate_jwt
+            access_token = generate_jwt(user)
+            refresh_token = generate_jwt(user, is_refresh=True)
+            
+            return JsonResponse({
+                "message": "Login exitoso",
+                "token": access_token,
+                "refresh_token": refresh_token,
+                "user": {
+                    "id":            user.id,
+                    "name":          user.full_name,
+                    "email":         decrypt_email(user.email),
+                    "role":          user.role.name,
+                    "role_id":       user.role.id,
+                    "university_id": user.university_id,
+                    "is_active":     user.is_active,
+                }
+            })
+
         _log(
             user_id=user.id,
             action="LOGIN_ATTEMPT",

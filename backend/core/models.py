@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from django.db import models
 import uuid
 

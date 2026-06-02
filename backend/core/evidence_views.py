@@ -574,18 +574,21 @@ def scrape_espoch(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "JSON inválido"}, status=400)
 
-    portal_url = body.get("portal_url", "https://www.espoch.edu.ec/2026-2/")
-    period_id  = body.get("period_id", 1)
+    university_id = body.get("university_id")
+    year       = body.get("year")
+    month      = body.get("month")
     user_id    = body.get("user_id")
 
+    if not university_id or not year or not month:
+        return JsonResponse({"error": "Faltan parámetros: university_id, year, month"}, status=400)
+
     try:
-        from .scraper_engine import run_espoch_scraper
+        from .scraper_engine import run_dpe_scraper
     except ImportError:
         return JsonResponse({"error": "No se pudo cargar el motor del scraper"}, status=500)
 
     from django.http import StreamingHttpResponse
     
-    # run_espoch_scraper returns a generator yielding JSON lines
-    gen = run_espoch_scraper(portal_url, period_id, user_id)
+    gen = run_dpe_scraper(university_id, year, month, user_id)
     
     return StreamingHttpResponse(gen, content_type='application/x-ndjson')

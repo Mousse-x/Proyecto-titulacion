@@ -1,271 +1,361 @@
+"""
+Motor de scraping real para el Portal Nacional de Transparencia (DPE).
+
+Usa la API pública del portal para obtener la lista de archivos publicados
+por numeral y los descarga directamente vía HTTP.
+
+API descubierta:
+  GET /backend/v1/transparency/transparency/active/public
+      ?month=<mes>&year=<año>&establishment_id=<id_entidad>
+
+Cada item devuelve:
+  - numeral.name  →  "Numeral 1.1", "Numeral 10", etc.
+  - files[]       →  [{name, description, url_download}, ...]
+"""
 import json
 import re
 import os
-import zipfile
 from pathlib import Path
 from urllib.parse import urlparse, unquote
+import urllib.request
+import ssl
+
 from django.utils import timezone
 from django.conf import settings
 from .models import University, EvaluationPeriod, Indicator, Evidence, AuditLog
 
-MONTH_NAME_TO_NUMBER = {
-    "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4, "MAYO": 5,
-    "JUNIO": 6, "JULIO": 7, "AGOSTO": 8, "SEPTIEMBRE": 9,
-    "OCTUBRE": 10, "NOVIEMBRE": 11, "DICIEMBRE": 12,
+
+# ─── Constantes ──────────────────────────────────────────────────────
+
+DPE_BASE_URL = "https://transparencia.dpe.gob.ec"
+DPE_API_BASE = f"{DPE_BASE_URL}/backend/v1"
+
+MONTH_NAMES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
 }
 
-LOTAIP_LETTER_MAP = {
-    "a": "LOTAIP-1.1", "b": "LOTAIP-1.2", "c": "LOTAIP-1.3", "d": "LOTAIP-2",
-    "e": "LOTAIP-3", "f": "LOTAIP-4", "g": "LOTAIP-5.22", "h": "LOTAIP-6",
-    "i": "LOTAIP-7", "j": "LOTAIP-8", "k": "LOTAIP-9", "l": "LOTAIP-10",
-    "m": "LOTAIP-11", "n": "LOTAIP-12", "o": "LOTAIP-13", "p": "LOTAIP-14",
-    "q": "LOTAIP-15", "r": "LOTAIP-16", "s": "LOTAIP-17", "t": "LOTAIP-18",
-    "u": "LOTAIP-19", "v": "LOTAIP-20", "w": "LOTAIP-21", "x": "LOTAIP-23",
-    "y": "LOTAIP-24",
+# Mapeo de "Numeral X" de la DPE → código de indicador en nuestra BD
+NUMERAL_TO_INDICATOR = {
+    "1.1":  "LOTAIP-1.1",
+    "1.2":  "LOTAIP-1.2",
+    "1.3":  "LOTAIP-1.3",
+    "2":    "LOTAIP-2",
+    "3":    "LOTAIP-3",
+    "4":    "LOTAIP-4",
+    "5":    "LOTAIP-5.22",
+    "6":    "LOTAIP-6",
+    "7":    "LOTAIP-7",
+    "8":    "LOTAIP-8",
+    "9":    "LOTAIP-9",
+    "10":   "LOTAIP-10",
+    "11":   "LOTAIP-11",
+    "12":   "LOTAIP-12",
+    "13":   "LOTAIP-13",
+    "14":   "LOTAIP-14",
+    "15":   "LOTAIP-15",
+    "16":   "LOTAIP-16",
+    "17":   "LOTAIP-17",
+    "18":   "LOTAIP-18",
+    "19":   "LOTAIP-19",
+    "20":   "LOTAIP-20",
+    "21":   "LOTAIP-21",
+    "23":   "LOTAIP-23",
+    "24":   "LOTAIP-24",
 }
 
-LITERAL_RE = re.compile(r"^Literal\s+([a-wA-W])\s*[\d\.]*\)?\s*(.+)$", re.IGNORECASE)
-MONTH_RE = re.compile(r"^(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)$", re.IGNORECASE)
+# Regex para extraer el número del numeral: "Numeral 1.1" → "1.1"
+NUMERAL_RE = re.compile(r"Numeral\s+([\d.]+)", re.IGNORECASE)
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────
 
 def _log(user_id, action, table_name=None, description=None):
     try:
         AuditLog.objects.create(
             user_id=user_id, module="evidences", action=action,
-            table_name=table_name, description=description, created_at=timezone.now(),
+            table_name=table_name, description=description,
+            created_at=timezone.now(),
         )
     except Exception:
         pass
 
-def run_espoch_scraper(portal_url, period_id, user_id):
-    import os
+
+def _extract_establishment_id(transparency_url):
+    """Extrae el ID de entidad de la URL del portal DPE.
+    
+    Ej: https://transparencia.dpe.gob.ec/entidades/1365 → 1365
+    """
+    if not transparency_url:
+        return None
+    match = re.search(r"/entidades/(\d+)", transparency_url)
+    return match.group(1) if match else None
+
+
+def _download_file(url, dest_path):
+    """Descarga un archivo desde la DPE y lo guarda en dest_path.
+    
+    Retorna el tamaño del archivo descargado, o None si falla.
+    """
+    try:
+        # La URL de la API viene como /media/transparencia/...
+        # La URL real de descarga es /backend/v1/transparency/media/transparencia/...
+        if url.startswith("/media/"):
+            full_url = f"{DPE_BASE_URL}/backend/v1/transparency{url}"
+        elif url.startswith("/"):
+            full_url = f"{DPE_BASE_URL}{url}"
+        else:
+            full_url = url
+        
+        # Crear contexto SSL permisivo para evitar errores de certificado
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        req = urllib.request.Request(full_url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        
+        resp = urllib.request.urlopen(req, timeout=60, context=ctx)
+        data = resp.read()
+        
+        with open(dest_path, "wb") as f:
+            f.write(data)
+        
+        return len(data)
+    except Exception as e:
+        return None
+
+
+def _safe_filename(name):
+    """Limpia un nombre de archivo para que sea seguro en disco."""
+    return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+
+# ─── Motor principal ─────────────────────────────────────────────────
+
+def run_dpe_scraper(university_id, year, month, user_id):
+    """
+    Generador que hace scraping real del portal DPE usando su API pública.
+    
+    Yield: líneas JSON (NDJSON) con progreso, errores y resultado final.
+    
+    Parámetros:
+      - university_id: ID de la universidad en nuestra BD
+      - year: año a scrapear (ej: 2024)
+      - month: mes a scrapear (1-12)
+      - user_id: ID del usuario que inició el scraping
+    """
     os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
     
-    yield json.dumps({"status": "progress", "msg": "Iniciando scraping...", "pct": 0}) + "\n"
-    
-    try:
-        import requests as _req
-        from bs4 import BeautifulSoup
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        yield json.dumps({"status": "error", "error": "Dependencias no instaladas. pip install requests beautifulsoup4 playwright"}) + "\n"
-        return
-
-    now = timezone.now()
-    try:
-        espoch = University.objects.get(acronym="ESPOCH")
-    except University.DoesNotExist:
-        espoch = University.objects.create(
-            name="Escuela Superior Politécnica de Chimborazo", acronym="ESPOCH",
-            province="Chimborazo", city="Riobamba", website_url="https://www.espoch.edu.ec",
-            transparency_url=portal_url, institution_type="Pública", is_active=True,
-            created_at=now, updated_at=now,
-        )
-
-    try:
-        period = EvaluationPeriod.objects.get(id=period_id)
-    except EvaluationPeriod.DoesNotExist:
-        yield json.dumps({"status": "error", "error": f"Período ID={period_id} no encontrado"}) + "\n"
-        return
-
-    all_indicators = list(Indicator.objects.filter(is_active=True).order_by("display_order", "code"))
-    ind_by_code = {i.code: i for i in all_indicators}
-    fallback_ind = all_indicators[0] if all_indicators else None
-    if not fallback_ind:
-        yield json.dumps({"status": "error", "error": "No hay indicadores en BD"}) + "\n"
-        return
-
-    try:
-        response = _req.get(portal_url, timeout=25, headers={"User-Agent": "Mozilla/5.0 SisTransp-Scraper/1.0"})
-        response.raise_for_status()
-        response.encoding = response.apparent_encoding or "utf-8"
-        soup = BeautifulSoup(response.content, "html.parser")
-    except Exception as exc:
-        yield json.dumps({"status": "error", "error": f"Error al acceder al portal: {str(exc)}"}) + "\n"
-        return
-
-    seen_urls = set(Evidence.objects.filter(university=espoch, source_url__isnull=False).values_list("source_url", flat=True))
-    month_number_to_name = {v: k.capitalize() for k, v in MONTH_NAME_TO_NUMBER.items()}
-    
-    links_to_process = []
-    current_month = None
-
-    for link in soup.find_all("a"):
-        text = link.get_text(strip=True)
-        href = (link.get("href") or "").strip()
-
-        m = MONTH_RE.match(text.strip())
-        if m:
-            current_month = MONTH_NAME_TO_NUMBER.get(text.strip().upper())
-            continue
-
-        lit = LITERAL_RE.match(text)
-        if not lit: continue
-
-        letter = lit.group(1).lower()
-        description = lit.group(2).strip()
-
-        if not href or href in (portal_url, "#") or href.endswith("/2026-2/"): continue
-        if href in seen_urls: continue
-
-        ind_code = LOTAIP_LETTER_MAP.get(letter)
-        indicator = ind_by_code.get(ind_code, fallback_ind)
-
-        month_label = month_number_to_name.get(current_month, "")
-        title = f"[{month_label}] Literal {letter.upper()} — {description}" if month_label else f"Literal {letter.upper()} — {description}"
-        title = title[:200]
-
-        links_to_process.append({
-            "href": href, "title": title, "letter": letter, 
-            "current_month": current_month, "indicator": indicator
-        })
-
-    stats = {"created": 0, "skipped": 0, "errors": 0}
-    items_created = []
-    total_links = len(links_to_process)
-
-    if total_links == 0:
-        yield json.dumps({"status": "done", "stats": stats, "items": [], "message": "Scraping completado. 0 nuevas evidencias.", "university_id": espoch.id, "period": period.period_name}) + "\n"
-        return
-
-    yield json.dumps({"status": "progress", "msg": f"Se encontraron {total_links} nuevos enlaces. Iniciando descarga...", "pct": 5}) + "\n"
-
-    ext_map = {
-        ".pdf": "PDF", ".xlsx": "XLSX", ".xls": "XLSX",
-        ".docx": "DOCX", ".doc": "DOCX", ".csv": "CSV",
-    }
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
-        
-        for idx, item in enumerate(links_to_process):
-            pct = int(((idx + 1) / total_links) * 90) + 5
-            yield json.dumps({"status": "progress", "msg": f"Descargando {idx+1}/{total_links}: {item['title']}", "pct": pct}) + "\n"
-            
-            href = item["href"]
-            indicator = item["indicator"]
-            current_month = item["current_month"]
-            title = item["title"]
-            letter = item["letter"]
-            month_str = f"{current_month:02d}" if current_month else "00"
-            rel_dir = f"evidences/{espoch.id}/{period.year}/{month_str}/{indicator.code}"
-            abs_dir = Path(settings.MEDIA_ROOT) / rel_dir
-            abs_dir.mkdir(parents=True, exist_ok=True)
-            
-            if "sharepoint.com" in href or "1drv.ms" in href:
-                # Descargar carpeta ZIP desde OneDrive
-                try:
-                    page = context.new_page()
-                    page.goto(href)
-                    page.wait_for_timeout(3000)
-                    with page.expect_download(timeout=30000) as download_info:
-                        page.locator("button:has-text('Descargar'), button[data-automationid='DownloadCommand']").first.click()
-                    
-                    download = download_info.value
-                    zip_path = abs_dir / download.suggested_filename
-                    download.save_as(str(zip_path))
-                    page.close()
-                    
-                    # Extraer ZIP
-                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                        for file_info in zip_ref.infolist():
-                            # Omitir carpetas o archivos ocultos de mac
-                            if file_info.is_dir() or file_info.filename.startswith('__MACOSX'): continue
-                            
-                            zip_ref.extract(file_info, abs_dir)
-                            extracted_path = abs_dir / file_info.filename
-                            
-                            orig_name = Path(file_info.filename).name
-                            ext = Path(orig_name).suffix.lower()
-                            file_type = ext_map.get(ext, "PDF")
-                            
-                            safe_name = re.sub(r"[^a-zA-Z0-9._\-]", "_", orig_name)
-                            final_path = abs_dir / safe_name
-                            
-                            # Renombrar para quitar rutas y caracteres invalidos
-                            if extracted_path != final_path:
-                                if final_path.exists(): final_path.unlink()
-                                extracted_path.rename(final_path)
-                            
-                            file_size = final_path.stat().st_size
-                            file_path_rel = f"{rel_dir}/{safe_name}"
-                            
-                            ev = Evidence.objects.create(
-                                university=espoch, period=period, indicator=indicator,
-                                title=f"{title} - {orig_name}", uploaded_at=now, updated_at=now,
-                                validation_status="pendiente", file_type=file_type,
-                                file_path=file_path_rel, file_size=file_size,
-                                source_url=href, month=current_month,
-                            )
-                            stats["created"] += 1
-                            items_created.append({"id": ev.id, "title": ev.title[:80], "letter": letter})
-                            
-                    # Borrar el ZIP
-                    zip_path.unlink()
-                    seen_urls.add(href)
-                    
-                except Exception as e:
-                    print(f"Error OneDrive: {e}")
-                    # Guardar como URL si falla
-                    Evidence.objects.create(
-                        university=espoch, period=period, indicator=indicator,
-                        title=title, uploaded_at=now, updated_at=now,
-                        validation_status="pendiente", file_type="URL", source_url=href, month=current_month
-                    )
-                    stats["created"] += 1
-                    seen_urls.add(href)
-            else:
-                # Descarga web normal
-                try:
-                    doc_resp = _req.get(href, stream=True, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-                    if doc_resp.status_code == 200:
-                        cd = doc_resp.headers.get('content-disposition')
-                        orig_name = None
-                        if cd:
-                            fname = re.findall("filename=(.+)", cd)
-                            if len(fname) > 0: orig_name = fname[0].strip('"\'')
-                        if not orig_name:
-                            orig_name = unquote(os.path.basename(urlparse(href).path))
-                            if not orig_name: orig_name = f"documento_literal_{letter.lower()}.pdf"
-                        
-                        ext = Path(orig_name).suffix.lower()
-                        file_type = ext_map.get(ext, "PDF")
-                        safe_name = re.sub(r"[^a-zA-Z0-9._\-]", "_", orig_name)
-                        abs_path = abs_dir / safe_name
-                        
-                        with open(abs_path, "wb") as fout:
-                            for chunk in doc_resp.iter_content(chunk_size=8192):
-                                if chunk: fout.write(chunk)
-                                
-                        file_size = abs_path.stat().st_size
-                        file_path_rel = f"{rel_dir}/{safe_name}"
-                        
-                        ev = Evidence.objects.create(
-                            university=espoch, period=period, indicator=indicator,
-                            title=title, uploaded_at=now, updated_at=now,
-                            validation_status="pendiente", file_type=file_type,
-                            file_path=file_path_rel, file_size=file_size,
-                            source_url=href, month=current_month,
-                        )
-                        stats["created"] += 1
-                        seen_urls.add(href)
-                        items_created.append({"id": ev.id, "title": ev.title[:80], "letter": letter})
-                except Exception as e:
-                    # Fallback URL
-                    Evidence.objects.create(
-                        university=espoch, period=period, indicator=indicator,
-                        title=title, uploaded_at=now, updated_at=now,
-                        validation_status="pendiente", file_type="URL", source_url=href, month=current_month
-                    )
-                    stats["created"] += 1
-                    seen_urls.add(href)
-
-        browser.close()
-
-    _log(user_id, "SCRAPE_ESPOCH", "evidence.evidences", f"ESPOCH portal scraping: {stats['created']} creados")
+    month_int = int(month)
+    year_int = int(year)
+    month_name = MONTH_NAMES.get(month_int, str(month_int))
     
     yield json.dumps({
-        "status": "done", "stats": stats, "items": items_created[:30],
-        "message": f"Scraping completado. {stats['created']} evidencias extraídas.",
-        "university_id": espoch.id, "period": period.period_name
+        "status": "progress",
+        "msg": f"Iniciando scraping de {month_name} {year_int}...",
+        "pct": 5
+    }) + "\n"
+    
+    # ── Validar universidad ──
+    now = timezone.now()
+    try:
+        university = University.objects.get(id=university_id)
+    except University.DoesNotExist:
+        yield json.dumps({
+            "status": "error",
+            "error": f"Universidad ID={university_id} no encontrada"
+        }) + "\n"
+        return
+    
+    # ── Extraer establishment_id de la URL de transparencia ──
+    establishment_id = _extract_establishment_id(university.transparency_url)
+    if not establishment_id:
+        yield json.dumps({
+            "status": "error",
+            "error": f"La universidad '{university.acronym}' no tiene una URL de transparencia "
+                     f"válida configurada. Se esperaba algo como: "
+                     f"https://transparencia.dpe.gob.ec/entidades/XXXX"
+        }) + "\n"
+        return
+    
+    yield json.dumps({
+        "status": "progress",
+        "msg": f"Consultando API de DPE para {university.acronym} "
+               f"(entidad {establishment_id})...",
+        "pct": 10
+    }) + "\n"
+    
+    # ── Consultar la API pública ──
+    api_url = (
+        f"{DPE_API_BASE}/transparency/transparency/active/public"
+        f"?month={month_int}&year={year_int}&establishment_id={establishment_id}"
+    )
+    
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        req = urllib.request.Request(api_url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        resp = urllib.request.urlopen(req, timeout=30, context=ctx)
+        raw = resp.read().decode("utf-8")
+        api_data = json.loads(raw)
+    except Exception as e:
+        yield json.dumps({
+            "status": "error",
+            "error": f"Error al consultar la API de DPE: {e}"
+        }) + "\n"
+        return
+    
+    if not isinstance(api_data, list) or len(api_data) == 0:
+        yield json.dumps({
+            "status": "error",
+            "error": f"No se encontraron datos publicados para {month_name} {year_int} "
+                     f"en la entidad {establishment_id} ({university.acronym}). "
+                     f"Es posible que la institución no haya publicado para ese período."
+        }) + "\n"
+        return
+    
+    yield json.dumps({
+        "status": "progress",
+        "msg": f"Se encontraron {len(api_data)} numerales publicados. "
+               f"Descargando archivos reales...",
+        "pct": 20
+    }) + "\n"
+    
+    # ── Obtener o crear período ──
+    period = EvaluationPeriod.objects.filter(year=year_int).first()
+    if not period:
+        period = EvaluationPeriod.objects.create(
+            period_name=f"Evaluación {year_int}", year=year_int,
+            start_date=f"{year_int}-01-01", end_date=f"{year_int}-12-31",
+            status="OPEN", created_at=now
+        )
+    
+    # ── Mapeo de indicadores ──
+    all_indicators = list(
+        Indicator.objects.filter(is_active=True).order_by("display_order", "code")
+    )
+    ind_by_code = {i.code: i for i in all_indicators}
+    
+    stats = {"created": 0, "skipped": 0, "errors": 0}
+    items_created = []
+    total_items = len(api_data)
+    
+    # ── Procesar cada numeral ──
+    for idx, item in enumerate(api_data):
+        numeral_info = item.get("numeral", {})
+        numeral_name = numeral_info.get("name", "")       # "Numeral 1.1"
+        numeral_desc = numeral_info.get("description", "") # "Estructura orgánica"
+        files = item.get("files", [])
+        
+        # Extraer el número: "Numeral 1.1" → "1.1"
+        num_match = NUMERAL_RE.match(numeral_name)
+        numeral_number = num_match.group(1) if num_match else numeral_name
+        
+        # Buscar el indicador correspondiente en nuestra BD
+        indicator_code = NUMERAL_TO_INDICATOR.get(numeral_number)
+        indicator = ind_by_code.get(indicator_code) if indicator_code else None
+        
+        pct = int(20 + ((idx / total_items) * 75))
+        yield json.dumps({
+            "status": "progress",
+            "msg": f"Descargando Numeral {numeral_number}: {numeral_desc} "
+                   f"({len(files)} archivos)...",
+            "pct": pct
+        }) + "\n"
+        
+        if not indicator:
+            stats["skipped"] += 1
+            continue
+        
+        if not files:
+            stats["skipped"] += 1
+            continue
+        
+        # Crear directorio: evidences/<university_id>/<year>/<month>/<indicator_code>/
+        rel_dir = (
+            f"evidences/{university.id}/{year_int}/{month_int:02d}/{indicator.code}"
+        )
+        abs_dir = Path(settings.MEDIA_ROOT) / rel_dir
+        abs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # ── Descargar cada archivo del numeral ──
+        for file_info in files:
+            file_name = file_info.get("name", "archivo")
+            file_desc = file_info.get("description", file_name)  # "Conjunto de datos", "Metadatos", "Diccionario"
+            url_download = file_info.get("url_download", "")
+            
+            if not url_download:
+                stats["errors"] += 1
+                continue
+            
+            # Determinar extensión y tipo
+            ext = Path(file_name).suffix.lower() or ".csv"
+            ext_map = {
+                ".pdf": "PDF", ".xlsx": "XLSX", ".xls": "XLSX",
+                ".docx": "DOCX", ".doc": "DOCX", ".csv": "CSV",
+            }
+            file_type = ext_map.get(ext, "CSV")
+            
+            # Nombre seguro para disco
+            safe_desc = _safe_filename(file_desc)
+            safe_name = f"{safe_desc}_Numeral_{numeral_number}{ext}"
+            dest_path = abs_dir / safe_name
+            
+            # ── DESCARGAR EL ARCHIVO REAL ──
+            file_size = _download_file(url_download, dest_path)
+            
+            if file_size is None:
+                stats["errors"] += 1
+                continue
+            
+            file_path_rel = f"{rel_dir}/{safe_name}"
+            
+            # Crear registro de evidencia en la BD
+            ev = Evidence.objects.create(
+                university=university,
+                period=period,
+                indicator=indicator,
+                title=f"[{month_name}] {file_desc} - Numeral {numeral_number} ({numeral_desc})",
+                uploaded_at=now,
+                updated_at=now,
+                validation_status="pendiente",
+                file_type=file_type,
+                file_path=file_path_rel,
+                file_size=file_size,
+                source_url=f"{DPE_BASE_URL}{url_download}",
+                month=month_int,
+            )
+            stats["created"] += 1
+            items_created.append({
+                "id": ev.id,
+                "title": ev.title,
+                "numeral": numeral_number,
+                "file": file_desc,
+                "size": file_size,
+            })
+    
+    # ── Log y resultado final ──
+    _log(
+        user_id, "SCRAPE_DPE", "evidence.evidences",
+        f"DPE scraping real: {stats['created']} archivos descargados para "
+        f"{university.acronym} ({month_name} {year_int})"
+    )
+    
+    yield json.dumps({
+        "status": "done",
+        "stats": stats,
+        "items": items_created[:50],
+        "message": (
+            f"Scraping completado. {stats['created']} archivos reales descargados, "
+            f"{stats['skipped']} omitidos, {stats['errors']} errores."
+        ),
+        "university_id": university.id,
+        "period": period.period_name,
     }) + "\n"

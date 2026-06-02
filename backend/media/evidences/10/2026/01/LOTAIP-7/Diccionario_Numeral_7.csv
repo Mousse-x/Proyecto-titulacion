@@ -1,0 +1,11 @@
+Institucion;Universidad de las Fuerzas Armadas ESPE
+Descripcion;Resultados definitivos de auditorias
+Nombre del campo;Descripcion del campo
+No;Numero secuencial que identifica cada linea de datos
+Numero del informe;Numero de identificacion del informe de auditoria
+Tipo de examen;Tipo de examen realizado
+Nombre del examen;Nombre o titulo del examen de auditoria
+Periodo analizado;Periodo de tiempo que fue analizado durante la auditoria
+AÅrea o proceso auditado;area especifica o proceso de la organizacion que fue sometido a auditoria
+Enlace para descargar el informe especi≠fico;Enlace que permite descargar el informe de auditoria completo
+Enlace para descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoria;NO APLICA porque existe el pronunciamiento de auditoria interna en el memorando ESPE-UAIN-2024-0189-M en donde indica que El seguimiento y control del cumplimiento de las recomendaciones, sera competencia exclusiva de la Contraloria General del Estado conforme lo seÔøΩalado en la Ley Organica de la Contraloria General del Estado, su Reglamento y demas normativa vigente

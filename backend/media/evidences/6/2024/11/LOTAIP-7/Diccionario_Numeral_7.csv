@@ -1,0 +1,11 @@
+﻿Institución;Escuela Superior Politécnica de Chimborazo
+Descripción;Resultados definitivos de auditorías
+Nombre del campo;Descripción del campo
+No;Número secuencial que identifica cada línea de datos
+Número del informe;Número de identificación del informe de auditoría
+Tipo de examen;Tipo de examen realizado
+Nombre del examen;Nombre o título del examen de auditoría
+Período analizado;Período de tiempo que fue analizado durante la auditoría
+Área o proceso auditado;Área específica o proceso de la organización que fue sometido a auditoría
+Enlace para descargar el informe específico;Hipervínculo o dirección web que permite descargar el informe de auditoría completo
+Enlace para descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoría;Hipervínculo o dirección web que permite descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoría

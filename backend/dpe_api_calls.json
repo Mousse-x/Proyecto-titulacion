@@ -1,0 +1,68 @@
+[
+  {
+    "url": "https://transparencia.dpe.gob.ec/backend/v1/transparency/api/establishment/tc/calc?year=2026&establishment_id=0&month=6",
+    "data": {
+      "score": 0,
+      "has_file": false,
+      "year": 2026,
+      "month": 6,
+      "establishment_id": "0"
+    }
+  },
+  {
+    "url": "https://transparencia.dpe.gob.ec/backend/v1/transparency/api/establishment/tf/calc?year=2026&establishment_id=0&month=6",
+    "data": {
+      "score": 0,
+      "has_file": false,
+      "year": 2026,
+      "month": 6,
+      "establishment_id": "0"
+    }
+  },
+  {
+    "url": "https://transparencia.dpe.gob.ec/backend/v1/transparency/api/establishment/tp/calc?year=2026&establishment_id=0&month=6",
+    "data": {
+      "total_saip": 0,
+      "responded_saip": 0,
+      "not_responded_saip": 0,
+      "percentage_ingresadas": 0,
+      "percentage_respondidas": 0,
+      "percentage_sin_responder": 0,
+      "year": "2026",
+      "establishment_id": "0"
+    }
+  },
+  {
+    "url": "https://transparencia.dpe.gob.ec/backend/v1/transparency/api/establishment/tf/calc?year=2026&establishment_id=1365&month=6",
+    "data": {
+      "score": 0,
+      "has_file": false,
+      "year": 2026,
+      "month": 6,
+      "establishment_id": "1365"
+    }
+  },
+  {
+    "url": "https://transparencia.dpe.gob.ec/backend/v1/transparency/api/establishment/tp/calc?year=2026&establishment_id=1365&month=6",
+    "data": {
+      "total_saip": 1,
+      "responded_saip": 1,
+      "not_responded_saip": 0,
+      "percentage_ingresadas": 100.0,
+      "percentage_respondidas": 100.0,
+      "percentage_sin_responder": 0.0,
+      "year": "2026",
+      "establishment_id": "1365"
+    }
+  },
+  {
+    "url": "https://transparencia.dpe.gob.ec/backend/v1/transparency/api/establishment/tc/calc?year=2026&establishment_id=1365&month=6",
+    "data": {
+      "score": 0,
+      "has_file": false,
+      "year": 2026,
+      "month": 6,
+      "establishment_id": "1365"
+    }
+  }
+]

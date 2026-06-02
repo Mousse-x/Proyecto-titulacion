@@ -45,6 +45,7 @@ export default function DocumentsPage() {
   const [progress, setProgress]   = useState(0);
   const [dragging, setDragging]   = useState(false);
   const [form, setForm]           = useState({ indicator_id: '', title: '', month: '' });
+  const [scrapeForm, setScrapeForm] = useState({ year: new Date().getFullYear().toString(), month: '', university_id: user.university_id || '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError]         = useState('');
   const [selectedDocs, setSelectedDocs] = useState([]);
@@ -60,6 +61,9 @@ export default function DocumentsPage() {
     { v: 7, l: 'Julio' }, { v: 8, l: 'Agosto' },  { v: 9, l: 'Septiembre' },
     { v: 10, l: 'Octubre' }, { v: 11, l: 'Noviembre' }, { v: 12, l: 'Diciembre' },
   ];
+  
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
 
   const loadDocs = useCallback(async () => {
     try {
@@ -418,9 +422,11 @@ export default function DocumentsPage() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
-          portal_url: 'https://www.espoch.edu.ec/2026-2/',
           period_id: 1,
           user_id: user.id,
+          university_id: scrapeForm.university_id,
+          year: scrapeForm.year,
+          month: scrapeForm.month
         })
       });
 
@@ -472,7 +478,7 @@ export default function DocumentsPage() {
         </div>
         <div className="page-header-actions" style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => setScraperModal(true)}>
-            🤖 Cargar ESPOCH
+            🤖 Scrapear DPE
           </button>
           <button className="btn btn-primary" onClick={() => { setUploadModal(true); setError(''); }}>
             📤 Subir Documento
@@ -835,23 +841,61 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {/* ═══ MODAL — Scraper ESPOCH ════════════════════════════ */}
+      {/* ═══ MODAL — Scraper DPE ════════════════════════════ */}
       {scraperModal && (
         <div className="modal-overlay" onClick={() => !scrapeLoading && setScraperModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🤖 Carga Automatizada ESPOCH</h3>
+              <h3>🤖 Extracción Automatizada DPE</h3>
               <button className="modal-close" onClick={() => !scrapeLoading && setScraperModal(false)}>✕</button>
             </div>
             <div className="modal-body">
               <p style={{ marginBottom: 16, color: 'var(--text-subtle)' }}>
-                Este proceso extrae automáticamente los literales LOTAIP del portal de transparencia
-                de la ESPOCH y los registra como evidencias pendientes de revisión.
+                Este proceso extrae automáticamente los literales de Transparencia Activa desde el Portal de la DPE y descarga Conjunto de Datos, Metadatos y Diccionarios.
               </p>
-              <div className="alert alert-info" style={{ marginBottom: 16 }}>
-                🔗 <strong>Portal:</strong> https://www.espoch.edu.ec/2026-2/<br/>
-                📅 <strong>Período:</strong> Evaluación Marzo 2026
-              </div>
+              
+              {!scrapeLoading && !scrapeResult && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+                  <div className="form-group">
+                    <label className="form-label">Universidad *</label>
+                    <select className="form-input" value={scrapeForm.university_id}
+                      onChange={e => setScrapeForm(p => ({ ...p, university_id: e.target.value }))}
+                      disabled={!!user.university_id}>
+                      <option value="">— Seleccione una universidad —</option>
+                      {universities.map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Año *</label>
+                      <input type="number" className="form-input" value={scrapeForm.year}
+                        onChange={e => {
+                          const y = parseInt(e.target.value);
+                          if (y > currentYear) return; // Prevent future year
+                          setScrapeForm(p => ({ ...p, year: e.target.value, month: '' })); // Reset month if year changes
+                        }}
+                        min="2000" max={currentYear} />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Mes *</label>
+                      <select className="form-input" value={scrapeForm.month}
+                        onChange={e => setScrapeForm(p => ({ ...p, month: e.target.value }))}>
+                        <option value="">— Seleccione —</option>
+                        {months.map(m => {
+                          const isFuture = parseInt(scrapeForm.year) === currentYear && m.v >= currentMonth;
+                          return (
+                            <option key={m.v} value={m.v} disabled={isFuture}>
+                              {m.l} {isFuture ? '(No disponible)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {scrapeLoading && (!scrapeResult || !scrapeResult.isProgress) && (
                 <div style={{ textAlign: 'center', padding: '16px 0' }}>
@@ -905,7 +949,7 @@ export default function DocumentsPage() {
                 Cerrar
               </button>
               {!scrapeResult && (
-                <button className="btn btn-primary" onClick={handleScrape} disabled={scrapeLoading}>
+                <button className="btn btn-primary" onClick={handleScrape} disabled={scrapeLoading || !scrapeForm.university_id || !scrapeForm.year || !scrapeForm.month}>
                   {scrapeLoading ? '⏳ Procesando...' : '🚀 Iniciar Extracción'}
                 </button>
               )}
