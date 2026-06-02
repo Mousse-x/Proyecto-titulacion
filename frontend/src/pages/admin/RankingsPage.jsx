@@ -1,14 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScoreCard } from '../../components/common/StatCard';
 import RankingBar from '../../components/charts/RankingBar';
 import TrendLine from '../../components/charts/TrendLine';
 import TransparencyRadar from '../../components/charts/TransparencyRadar';
 import Badge from '../../components/common/Badge';
+import { api } from '../../api/client';
 import { mockRankings, mockHistoricalScores, getRadarData, getScoreColor, getScoreLabel } from '../../data/mockData';
 
 export default function RankingsPage() {
   const [selected, setSelected] = useState(mockRankings[0]);
   const [year, setYear]         = useState('2026');
+  const [rankings, setRankings] = useState(mockRankings);
+
+  useEffect(() => {
+    api.stats().then(res => {
+      if (res.data.ranking?.length) {
+        const realRankings = res.data.ranking.map(u => ({
+          ...u,
+          logo_initials: u.name,
+          color: 'var(--primary)',
+          categories: {},
+        }));
+        setRankings(realRankings);
+        setSelected(realRankings[0]);
+      }
+    }).catch(() => {});
+  }, []);
 
   const radarData = getRadarData(selected.id);
 
@@ -33,7 +50,7 @@ export default function RankingsPage() {
           <div className="card-header">
             <span className="card-title">🏆 Tabla de Clasificación {year}</span>
           </div>
-          {mockRankings.map((u,i) => (
+          {rankings.map((u,i) => (
             <div
               key={u.id}
               className={`doc-status-row`}
@@ -97,7 +114,7 @@ export default function RankingsPage() {
       <div className="grid-2">
         <div className="chart-card">
           <div className="chart-title">📊 Comparativa de Índices {year}</div>
-          <RankingBar data={mockRankings} height={260} />
+          <RankingBar data={rankings} height={260} />
         </div>
         <div className="chart-card">
           <div className="chart-title">📈 Evolución Histórica 2022–2026</div>

@@ -2,9 +2,26 @@ import StatCard from '../../components/common/StatCard';
 import RankingBar from '../../components/charts/RankingBar';
 import TrendLine from '../../components/charts/TrendLine';
 import Badge from '../../components/common/Badge';
+import { useEffect, useState } from 'react';
+import { api } from '../../api/client';
 import { mockSystemStats, mockRankings, mockHistoricalScores, mockObservations, mockDocuments, getScoreColor, getScoreLabel } from '../../data/mockData';
 
 export default function AuditorDashboard() {
+  const [stats, setStats] = useState(mockSystemStats);
+
+  useEffect(() => {
+    api.stats().then(res => setStats(res.data)).catch(() => {});
+  }, []);
+
+  const rankings = stats.ranking?.length
+    ? stats.ranking.map(u => ({
+        ...u,
+        logo_initials: u.name,
+        color: 'var(--primary)',
+      }))
+    : mockRankings;
+  const recentDocs = stats.recent_documents?.length ? stats.recent_documents : mockDocuments.slice(0, 6);
+
   return (
     <div style={{ animation:'slideIn 0.3s ease' }}>
       <div className="page-header">
@@ -20,12 +37,12 @@ export default function AuditorDashboard() {
 
       {/* System KPIs */}
       <div className="stat-grid" style={{ marginBottom:24 }}>
-        <StatCard icon="🏛️" label="Universidades evaluadas" value={mockSystemStats.total_universities} color="var(--primary)" iconBg="var(--primary-subtle)" />
-        <StatCard icon="📊" label="Promedio ITI nacional" value={mockSystemStats.avg_transparency} suffix="%" color="var(--accent)" iconBg="var(--accent-subtle)" change="+3.2 vs 2025" />
-        <StatCard icon="📄" label="Documentos totales" value={mockSystemStats.total_documents} color="var(--info)" iconBg="var(--info-subtle)" />
-        <StatCard icon="✅" label="Docs. aprobados" value={mockSystemStats.approved_docs} color="var(--success)" iconBg="var(--success-subtle)" />
-        <StatCard icon="⏳" label="Pendientes validación" value={mockSystemStats.pending_reviews} color="var(--warning)" iconBg="var(--warning-subtle)" />
-        <StatCard icon="💬" label="Obs. abiertas" value={mockSystemStats.observations_open} color="var(--danger)" iconBg="var(--danger-subtle)" />
+        <StatCard icon="🏛️" label="Universidades evaluadas" value={stats.total_universities} color="var(--primary)" iconBg="var(--primary-subtle)" />
+        <StatCard icon="📊" label="Promedio ITI nacional" value={stats.avg_transparency} suffix="%" color="var(--accent)" iconBg="var(--accent-subtle)" />
+        <StatCard icon="📄" label="Documentos totales" value={stats.total_documents} color="var(--info)" iconBg="var(--info-subtle)" />
+        <StatCard icon="✅" label="Docs. aprobados" value={stats.approved_docs} color="var(--success)" iconBg="var(--success-subtle)" />
+        <StatCard icon="⏳" label="Pendientes validación" value={stats.pending_reviews} color="var(--warning)" iconBg="var(--warning-subtle)" />
+        <StatCard icon="💬" label="Obs. abiertas" value={stats.observations_open} color="var(--danger)" iconBg="var(--danger-subtle)" />
       </div>
 
       {/* Charts */}
@@ -38,7 +55,7 @@ export default function AuditorDashboard() {
           <div className="card-header">
             <span className="card-title">🏆 Clasificación 2026</span>
           </div>
-          {mockRankings.map((u,i)=>(
+          {rankings.map((u,i)=>(
             <div key={u.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'1px solid var(--border-light)' }}>
               <div className={`rank-number rank-${i<3?i+1:'n'}`}>{i+1}</div>
               <div style={{ width:38, height:38, borderRadius:8, background:`${u.color}22`, border:`1px solid ${u.color}44`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:800, color:u.color, flexShrink:0 }}>
@@ -63,13 +80,13 @@ export default function AuditorDashboard() {
       <div className="grid-2">
         <div className="chart-card">
           <div className="chart-title">📊 Índice por Universidad {new Date().getFullYear()}</div>
-          <RankingBar data={mockRankings} height={250} />
+          <RankingBar data={rankings.map(u => ({ name: u.name, transparency_score: u.transparency_score }))} height={250} />
         </div>
         <div className="card">
           <div className="card-header">
             <span className="card-title">📋 Documentos recientes</span>
           </div>
-          {mockDocuments.slice(0,6).map(doc=>(
+          {recentDocs.map(doc=>(
             <div key={doc.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid var(--border-light)' }}>
               <span style={{ fontSize:'1.125rem' }}>{doc.type==='PDF'?'📄':doc.type==='XLSX'?'📊':'🔗'}</span>
               <div style={{ flex:1, overflow:'hidden' }}>

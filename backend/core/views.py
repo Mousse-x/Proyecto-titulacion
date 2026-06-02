@@ -11,7 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod
+from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, EvidenceValidationResult
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
@@ -863,22 +863,85 @@ def indicator_template_view(request, ind_id):
 
 @csrf_exempt
 def system_stats(request):
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
-    _, err = require_role(request, [1])
+    _, err = require_auth(request)
     if err:
         return err
 
     if request.method == "GET":
         try:
+            period_id = request.GET.get("periodo_id")
+            month = request.GET.get("month") or request.GET.get("mes")
+
+            evidences = Evidence.objects.all()
+            validations = EvidenceValidationResult.objects.select_related(
+                "evidence", "evidence__university"
+            )
+            if period_id:
+                evidences = evidences.filter(period_id=period_id)
+                validations = validations.filter(evidence__period_id=period_id)
+            if month:
+                evidences = evidences.filter(month=month)
+                validations = validations.filter(evidence__month=month)
+
+            validation_count = validations.count()
+            avg_transparency = 0
+            if validation_count:
+                avg_transparency = round(
+                    sum(float(v.total_score) for v in validations) / validation_count,
+                    2,
+                )
+
+            ranking = []
+            by_university = {}
+            for vr in validations:
+                univ = vr.evidence.university
+                if not univ:
+                    continue
+                bucket = by_university.setdefault(univ.id, {
+                    "id": univ.id,
+                    "name": univ.acronym,
+                    "full_name": univ.name,
+                    "score_sum": 0,
+                    "count": 0,
+                })
+                bucket["score_sum"] += float(vr.total_score)
+                bucket["count"] += 1
+
+            for item in by_university.values():
+                ranking.append({
+                    "id": item["id"],
+                    "name": item["name"],
+                    "full_name": item["full_name"],
+                    "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
+                    "evaluated_documents": item["count"],
+                })
+            ranking.sort(key=lambda item: item["transparency_score"], reverse=True)
+
+            recent_documents = [
+                {
+                    "id": ev.id,
+                    "title": ev.title,
+                    "indicator_code": ev.indicator.code if ev.indicator_id else None,
+                    "university": ev.university.acronym if ev.university_id else None,
+                    "status": ev.validation_status,
+                    "file_type": ev.file_type,
+                    "uploaded_at": ev.uploaded_at.isoformat() if ev.uploaded_at else None,
+                }
+                for ev in evidences.select_related("indicator", "university").order_by("-uploaded_at")[:8]
+            ]
+
             data = {
                 "total_universities": University.objects.filter(is_active=True).count(),
-                "total_documents":    0,
-                "pending_reviews":    0,
-                "approved_docs":      0,
-                "avg_transparency":   0,
+                "total_documents":    evidences.count(),
+                "pending_reviews":    evidences.filter(validation_status="pendiente").count(),
+                "approved_docs":      evidences.filter(validation_status="aprobado").count(),
+                "avg_transparency":   avg_transparency,
                 "active_users":       AppUser.objects.filter(is_active=True).count(),
-                "observations_open":  0,
+                "observations_open":  validations.exclude(observations=[]).count(),
                 "indicators_active":  Indicator.objects.filter(is_active=True).count(),
+                "evaluated_documents": validation_count,
+                "ranking": ranking[:10],
+                "recent_documents": recent_documents,
             }
             return JsonResponse(data)
         except Exception as exc:

@@ -50,6 +50,7 @@ export default function ValidationPage() {
   const [periods, setPeriods] = useState([]);
   const [selectedUniv, setSelectedUniv] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [progress, setProgress] = useState({ pct: 0, msg: '' });
@@ -57,6 +58,21 @@ export default function ValidationPage() {
   const [results, setResults] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
   const [error, setError] = useState(null);
+
+  const MONTHS = [
+    { value: 1, label: 'Enero' },
+    { value: 2, label: 'Febrero' },
+    { value: 3, label: 'Marzo' },
+    { value: 4, label: 'Abril' },
+    { value: 5, label: 'Mayo' },
+    { value: 6, label: 'Junio' },
+    { value: 7, label: 'Julio' },
+    { value: 8, label: 'Agosto' },
+    { value: 9, label: 'Septiembre' },
+    { value: 10, label: 'Octubre' },
+    { value: 11, label: 'Noviembre' },
+    { value: 12, label: 'Diciembre' },
+  ];
 
   // Load universities and periods
   useEffect(() => {
@@ -73,7 +89,7 @@ export default function ValidationPage() {
     }).catch(() => {});
   }, []);
 
-  // Load existing results when university/period change
+  // Load existing results when university/period/month change
   useEffect(() => {
     if (!selectedUniv || !selectedPeriod) {
       setSummary(null);
@@ -81,13 +97,13 @@ export default function ValidationPage() {
       return;
     }
     loadResults();
-  }, [selectedUniv, selectedPeriod]);
+  }, [selectedUniv, selectedPeriod, selectedMonth]);
 
   const loadResults = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await validationApi.getSummary(selectedUniv, selectedPeriod);
+      const res = await validationApi.getSummary(selectedUniv, selectedPeriod, selectedMonth);
       setSummary(res.data.summary);
       setResults(res.data.results || []);
     } catch (e) {
@@ -106,7 +122,7 @@ export default function ValidationPage() {
     setError(null);
 
     try {
-      await validationApi.validateAllStream(selectedUniv, selectedPeriod, (data) => {
+      await validationApi.validateAllStream(selectedUniv, selectedPeriod, selectedMonth, (data) => {
         if (data.status === 'progress') {
           setProgress({ pct: data.pct || 0, msg: data.msg || '' });
         }
@@ -143,7 +159,7 @@ export default function ValidationPage() {
         <div className="page-header-actions">
           <button className="btn btn-primary btn-lg" onClick={handleValidateAll}
             disabled={!selectedUniv || !selectedPeriod || validating}>
-            {validating ? '⏳ Validando...' : '🚀 Validar todos los aprobados'}
+            {validating ? '⏳ Validando...' : '🚀 Validar documentos'}
           </button>
         </div>
       </div>
@@ -162,6 +178,13 @@ export default function ValidationPage() {
           <option value="">Seleccionar período...</option>
           {periods.map(p => (
             <option key={p.id} value={p.id}>{p.year}</option>
+          ))}
+        </select>
+        <select className="form-input" style={{ maxWidth: 200 }}
+          value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}>
+          <option value="">Todos los meses</option>
+          {MONTHS.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
           ))}
         </select>
         {results.length > 0 && (
@@ -257,7 +280,7 @@ export default function ValidationPage() {
               <div className="empty-state">
                 <div className="empty-icon">📄</div>
                 <h4>Sin resultados de validación</h4>
-                <p>Haz clic en "Validar todos los aprobados" para ejecutar la validación automática de los documentos.</p>
+                <p>Haz clic en "Validar documentos" para ejecutar la validación automática.</p>
               </div>
             </div>
           ) : results.length > 0 && (

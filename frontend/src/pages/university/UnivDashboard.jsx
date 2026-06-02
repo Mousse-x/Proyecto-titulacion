@@ -1,21 +1,51 @@
 import StatCard, { ScoreCard } from '../../components/common/StatCard';
 import TransparencyRadar from '../../components/charts/TransparencyRadar';
 import Badge from '../../components/common/Badge';
+import { useEffect, useState } from 'react';
+import { api } from '../../api/client';
+import { validationApi } from '../../api/validation';
 import { useAuth } from '../../context/AuthContext';
 import { mockUniversities, mockIndicators, mockDocuments, mockObservations, getRadarData, getScoreColor, getScoreLabel, mockScores } from '../../data/mockData';
 
 export default function UnivDashboard() {
   const { user } = useAuth();
+  const [docs, setDocs] = useState([]);
+  const [summary, setSummary] = useState(null);
   const univ = mockUniversities.find(u => u.id === (user?.university_id || 1)) || mockUniversities[0];
   const radarData = getRadarData(univ.id);
   const scores = mockScores[univ.id] || {};
 
+  useEffect(() => {
+    const universityId = user?.university_id;
+    if (!universityId) return;
+
+    api.evidences.list({ university_id: universityId }).then(async res => {
+      const evidenceRows = res.data || [];
+      setDocs(evidenceRows);
+      const latest = evidenceRows
+        .filter(ev => ev.period_id)
+        .sort((a, b) => (b.year || 0) - (a.year || 0) || (b.month || 0) - (a.month || 0))[0];
+      if (latest?.period_id) {
+        const summaryRes = await validationApi.getSummary(universityId, latest.period_id, latest.month);
+        setSummary(summaryRes.data.summary);
+      }
+    }).catch(() => {});
+  }, [user?.university_id]);
+
+  const docSource = docs.length ? docs : mockDocuments;
   const docStats = {
     total:    mockDocuments.length,
     approved: mockDocuments.filter(d=>d.status==='Aprobado').length,
     pending:  mockDocuments.filter(d=>d.status==='En revisión').length,
     rejected: mockDocuments.filter(d=>d.status==='Rechazado').length,
   };
+  const realDocStats = {
+    total:    docSource.length,
+    approved: docSource.filter(d=>d.validation_status==='aprobado' || d.status==='Aprobado').length,
+    pending:  docSource.filter(d=>d.validation_status==='pendiente' || d.status==='En revisión' || d.status==='En revisiÃ³n').length,
+    rejected: docSource.filter(d=>d.validation_status==='rechazado' || d.status==='Rechazado').length,
+  };
+  const displayDocStats = docs.length ? realDocStats : docStats;
   const pendingObs = mockObservations.filter(o=>o.university===univ.name && o.status!=='Resuelta');
 
   return (
@@ -38,9 +68,9 @@ export default function UnivDashboard() {
             </div>
           </div>
           <div style={{ textAlign:'center' }}>
-            <ScoreCard score={univ.transparency_score} size={90} label="Índice ITI 2026" />
+            <ScoreCard score={summary?.total_index ?? univ.transparency_score} size={90} label="Índice ITI 2026" />
             <div style={{ marginTop:6 }}>
-              <Badge status={getScoreLabel(univ.transparency_score)} />
+              <Badge status={getScoreLabel(summary?.total_index ?? univ.transparency_score)} />
               <div style={{ fontSize:'0.75rem', color:'var(--text-subtle)', marginTop:4 }}>Rank #{univ.rank} Nacional</div>
             </div>
           </div>
@@ -49,10 +79,10 @@ export default function UnivDashboard() {
 
       {/* KPI cards */}
       <div className="stat-grid" style={{ marginBottom:24 }}>
-        <StatCard icon="📄" label="Documentos cargados" value={docStats.total} color={univ.color} iconBg={`${univ.color}22`} />
-        <StatCard icon="✅" label="Documentos aprobados" value={docStats.approved} color="var(--success)" iconBg="var(--success-subtle)" />
-        <StatCard icon="⏳" label="En revisión" value={docStats.pending} color="var(--warning)" iconBg="var(--warning-subtle)" />
-        <StatCard icon="❌" label="Rechazados" value={docStats.rejected} color="var(--danger)" iconBg="var(--danger-subtle)" />
+        <StatCard icon="📄" label="Documentos cargados" value={displayDocStats.total} color={univ.color} iconBg={`${univ.color}22`} />
+        <StatCard icon="✅" label="Documentos aprobados" value={displayDocStats.approved} color="var(--success)" iconBg="var(--success-subtle)" />
+        <StatCard icon="⏳" label="En revisión" value={displayDocStats.pending} color="var(--warning)" iconBg="var(--warning-subtle)" />
+        <StatCard icon="❌" label="Rechazados" value={displayDocStats.rejected} color="var(--danger)" iconBg="var(--danger-subtle)" />
         <StatCard icon="💬" label="Obs. pendientes" value={pendingObs.length} color="var(--danger)" iconBg="var(--danger-subtle)" />
         <StatCard icon="📋" label="Indicadores" value={mockIndicators.length} color="var(--primary)" iconBg="var(--primary-subtle)" />
       </div>

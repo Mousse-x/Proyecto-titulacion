@@ -17,7 +17,7 @@ from ..models import (
     EvidenceValidationResult, UniversityEvaluationSummary,
     EvaluationPeriod,
 )
-from .document_processor import process_document
+from .document_processor import detect_lotaip_document_type, process_document
 from .comparison_engine import (
     evaluate_existence, evaluate_format, evaluate_period,
     evaluate_structure, evaluate_content, evaluate_accessibility,
@@ -77,10 +77,10 @@ def evaluar_documento(evidence_id):
         }
 
     # Verificar que esté aprobada
-    if evidence.validation_status != "aprobado":
+    if evidence.validation_status not in ("aprobado", "pendiente"):
         return {
             "error": True,
-            "message": f"Solo se pueden validar documentos aprobados. Estado actual: {evidence.validation_status}",
+            "message": f"Solo se pueden validar documentos aprobados o pendientes. Estado actual: {evidence.validation_status}",
         }
 
     # Buscar plantilla base del indicador
@@ -100,6 +100,11 @@ def evaluar_documento(evidence_id):
 
         score_existence, obs = evaluate_existence(processed_data)
         all_observations.extend(obs)
+
+        package_score, package_obs = _evaluate_lotaip_document_package(evidence)
+        if package_obs:
+            all_observations.extend(package_obs)
+            score_existence = min(score_existence, package_score)
 
         # Si no existe, puntaje directo = 0
         if score_existence == 0:
@@ -208,6 +213,34 @@ def _month_name(month_num):
     return months.get(month_num, "")
 
 
+def _evaluate_lotaip_document_package(evidence):
+    """Verifica que el literal tenga sus 3 CSV LOTAIP aprobados."""
+    current_type = detect_lotaip_document_type(f"{evidence.title} {evidence.file_path or ''}")
+    if not current_type:
+        return 20, []
+
+    required = {"Metadatos", "Diccionario", "Conjunto de datos"}
+    siblings = Evidence.objects.filter(
+        university_id=evidence.university_id,
+        period_id=evidence.period_id,
+        indicator_id=evidence.indicator_id,
+        month=evidence.month,
+        validation_status__in=["aprobado", "pendiente"],
+    )
+
+    found = set()
+    for sibling in siblings:
+        doc_type = detect_lotaip_document_type(f"{sibling.title} {sibling.file_path or ''}")
+        if doc_type:
+            found.add(doc_type)
+
+    missing = sorted(required - found)
+    if not missing:
+        return 20, ["Paquete LOTAIP completo: Metadatos, Diccionario y Conjunto de datos."]
+
+    return 10, [f"Paquete LOTAIP incompleto. Faltan: {', '.join(missing)}."]
+
+
 def _save_validation_result(evidence, result_data):
     """Crea o actualiza el EvidenceValidationResult en la BD."""
     try:
@@ -234,7 +267,7 @@ def _save_validation_result(evidence, result_data):
 # VALIDAR TODOS LOS DOCUMENTOS DE UNA UNIVERSIDAD
 # ──────────────────────────────────────────────────────────────────────
 
-def evaluar_universidad(university_id, period_id):
+def evaluar_universidad(university_id, period_id, month=None):
     """
     Valida todos los documentos aprobados de una universidad en un período.
     Genera el resumen de evaluación (UniversityEvaluationSummary).
@@ -250,18 +283,24 @@ def evaluar_universidad(university_id, period_id):
     """
     import json
 
-    evidences = Evidence.objects.filter(
-        university_id=university_id,
-        period_id=period_id,
-        validation_status="aprobado",
-    ).select_related("university", "indicator", "period").order_by("indicator__code")
+    filters = {
+        "university_id": university_id,
+        "period_id": period_id,
+        "validation_status__in": ["aprobado", "pendiente"],
+    }
+    if month:
+        filters["month"] = month
+
+    evidences = Evidence.objects.filter(**filters).select_related(
+        "university", "indicator", "period"
+    ).order_by("indicator__code")
 
     total = evidences.count()
 
     if total == 0:
         yield json.dumps({
             "status": "done",
-            "message": "No hay documentos aprobados para validar en este período.",
+            "message": "No hay documentos aprobados o pendientes para validar en este período.",
             "results": [],
             "summary": None,
         }) + "\n"
@@ -269,7 +308,7 @@ def evaluar_universidad(university_id, period_id):
 
     yield json.dumps({
         "status": "progress",
-        "msg": f"Iniciando validación de {total} documentos aprobados...",
+        "msg": f"Iniciando validación de {total} documentos...",
         "pct": 0,
     }) + "\n"
 

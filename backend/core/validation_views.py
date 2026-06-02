@@ -91,11 +91,13 @@ def validate_all_university(request, univ_id):
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
     period_id = request.GET.get("periodo_id")
+    month = request.GET.get("month") or request.GET.get("mes")
     if not period_id:
         # Intentar leer del body
         try:
             body = json.loads(request.body)
             period_id = body.get("periodo_id")
+            month = month or body.get("month") or body.get("mes")
         except (json.JSONDecodeError, Exception):
             pass
 
@@ -108,8 +110,17 @@ def validate_all_university(request, univ_id):
     except (University.DoesNotExist, EvaluationPeriod.DoesNotExist) as exc:
         return JsonResponse({"error": f"Referencia inválida: {str(exc)}"}, status=404)
 
+    month_int = None
+    if month:
+        try:
+            month_int = int(month)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "El mes debe ser un número entre 1 y 12"}, status=400)
+        if month_int < 1 or month_int > 12:
+            return JsonResponse({"error": "El mes debe estar entre 1 y 12"}, status=400)
+
     from .services.evaluator import evaluar_universidad
-    gen = evaluar_universidad(univ_id, period_id)
+    gen = evaluar_universidad(univ_id, period_id, month=month_int)
 
     _log(
         user_id=getattr(request, "_user_id", None),
@@ -179,6 +190,49 @@ def _validation_result_to_dict(vr):
     }
 
 
+def _summary_from_validations(validations):
+    counters = {
+        "CUMPLE": 0,
+        "CUMPLE_PARCIALMENTE": 0,
+        "INCOMPLETO": 0,
+        "NO_CUMPLE": 0,
+        "NO_PRESENTADO": 0,
+        "ERROR_PROCESAMIENTO": 0,
+    }
+    total_score = 0
+    total = 0
+
+    for vr in validations:
+        total += 1
+        total_score += float(vr.total_score)
+        if vr.compliance_status in counters:
+            counters[vr.compliance_status] += 1
+
+    general_observations = []
+    if counters["CUMPLE"]:
+        general_observations.append(f"{counters['CUMPLE']} documentos cumplen completamente.")
+    if counters["CUMPLE_PARCIALMENTE"]:
+        general_observations.append(f"{counters['CUMPLE_PARCIALMENTE']} documentos cumplen parcialmente.")
+    if counters["INCOMPLETO"]:
+        general_observations.append(f"{counters['INCOMPLETO']} documentos estan incompletos.")
+    if counters["NO_CUMPLE"]:
+        general_observations.append(f"{counters['NO_CUMPLE']} documentos no cumplen.")
+    if counters["NO_PRESENTADO"]:
+        general_observations.append(f"{counters['NO_PRESENTADO']} documentos no fueron presentados.")
+
+    return {
+        "total_index": round(total_score / total, 2) if total else 0,
+        "total_indicators": total,
+        "indicators_compliant": counters["CUMPLE"],
+        "indicators_partial": counters["CUMPLE_PARCIALMENTE"],
+        "indicators_incomplete": counters["INCOMPLETO"],
+        "indicators_non_compliant": counters["NO_CUMPLE"] + counters["ERROR_PROCESAMIENTO"],
+        "indicators_not_presented": counters["NO_PRESENTADO"],
+        "general_observations": general_observations,
+        "calculated_at": timezone.now().isoformat(),
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  RESUMEN DE CUMPLIMIENTO POR UNIVERSIDAD
 # ══════════════════════════════════════════════════════════════════════
@@ -197,6 +251,7 @@ def get_compliance_summary(request, univ_id):
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
     period_id = request.GET.get("periodo_id")
+    month = request.GET.get("month") or request.GET.get("mes")
     if not period_id:
         return JsonResponse({"error": "Se requiere periodo_id"}, status=400)
 
@@ -207,6 +262,8 @@ def get_compliance_summary(request, univ_id):
     ).select_related(
         "evidence", "evidence__indicator", "evidence__university", "evidence__period"
     ).order_by("evidence__indicator__code")
+    if month:
+        validations = validations.filter(evidence__month=month)
 
     # Obtener resumen general si existe
     summary = None
@@ -228,12 +285,15 @@ def get_compliance_summary(request, univ_id):
     except UniversityEvaluationSummary.DoesNotExist:
         pass
 
+    summary = _summary_from_validations(validations)
+
     # Lista de resultados por literal
     results = [_validation_result_to_dict(vr) for vr in validations]
 
     return JsonResponse({
         "university_id": univ_id,
         "period_id": int(period_id),
+        "month": int(month) if month else None,
         "summary": summary,
         "results": results,
     })
@@ -257,6 +317,7 @@ def get_observations(request, univ_id):
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
     period_id = request.GET.get("periodo_id")
+    month = request.GET.get("month") or request.GET.get("mes")
     if not period_id:
         return JsonResponse({"error": "Se requiere periodo_id"}, status=400)
 
@@ -266,6 +327,8 @@ def get_observations(request, univ_id):
     ).select_related(
         "evidence", "evidence__indicator"
     ).order_by("evidence__indicator__code")
+    if month:
+        validations = validations.filter(evidence__month=month)
 
     observations_list = []
     for vr in validations:
@@ -281,5 +344,6 @@ def get_observations(request, univ_id):
     return JsonResponse({
         "university_id": univ_id,
         "period_id": int(period_id),
+        "month": int(month) if month else None,
         "observations": observations_list,
     })

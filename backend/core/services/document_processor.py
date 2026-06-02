@@ -12,17 +12,25 @@ Responsabilidades:
 - Guardar metadatos procesados en Evidence
 """
 
+import csv
 import hashlib
 import os
 import re
 import logging
 from pathlib import Path
 from datetime import datetime
+from zipfile import ZipFile
+import xml.etree.ElementTree as ET
 
 from django.conf import settings
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+XLSX_NS = {
+    "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -71,6 +79,20 @@ def get_file_extension(file_path):
 # METADATOS
 # ──────────────────────────────────────────────────────────────────────
 
+def detect_lotaip_document_type(name_or_path):
+    """Clasifica los 3 archivos LOTAIP esperados por literal."""
+    text = Path(str(name_or_path or "")).name.lower()
+    text = re.sub(r"[_\-.]+", " ", text)
+
+    if "metadato" in text:
+        return "Metadatos"
+    if "diccionario" in text or "dicionario" in text:
+        return "Diccionario"
+    if "conjunto" in text and "dato" in text:
+        return "Conjunto de datos"
+    return None
+
+
 def get_file_metadata(file_path):
     """Extrae metadatos básicos del archivo."""
     try:
@@ -102,10 +124,17 @@ def is_file_corrupted(file_path, mime_type=None):
             doc.close()
             return False
 
-        elif ext in (".xlsx", ".xls"):
-            import openpyxl
-            wb = openpyxl.load_workbook(str(file_path), read_only=True)
-            wb.close()
+        elif ext == ".xlsx":
+            with ZipFile(file_path) as zf:
+                return "xl/workbook.xml" not in zf.namelist()
+
+        elif ext == ".xls":
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(str(file_path), read_only=True)
+                wb.close()
+            except ImportError:
+                logger.warning("openpyxl no disponible para verificar XLS; se asume accesible")
             return False
 
         elif ext == ".docx":
@@ -137,14 +166,20 @@ def is_password_protected(file_path):
             doc.close()
             return protected
 
-        elif ext in (".xlsx", ".xls"):
-            import openpyxl
+        elif ext == ".xlsx":
+            return False
+
+        elif ext == ".xls":
             try:
-                wb = openpyxl.load_workbook(str(file_path), read_only=True)
-                wb.close()
+                import openpyxl
+                try:
+                    wb = openpyxl.load_workbook(str(file_path), read_only=True)
+                    wb.close()
+                    return False
+                except Exception:
+                    return True
+            except ImportError:
                 return False
-            except Exception:
-                return True
 
         elif ext == ".docx":
             from docx import Document
@@ -184,6 +219,77 @@ def extract_text_pdf(file_path):
     return text.strip(), tables
 
 
+def _xlsx_shared_strings(zf):
+    if "xl/sharedStrings.xml" not in zf.namelist():
+        return []
+
+    root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+    return [
+        "".join(t.text or "" for t in item.findall(".//m:t", XLSX_NS))
+        for item in root.findall("m:si", XLSX_NS)
+    ]
+
+
+def _xlsx_cell_value(cell, shared_strings):
+    value_node = cell.find("m:v", XLSX_NS)
+    if value_node is None:
+        return ""
+
+    value = value_node.text or ""
+    if cell.attrib.get("t") == "s" and value:
+        try:
+            return shared_strings[int(value)]
+        except (IndexError, ValueError):
+            return ""
+    return value
+
+
+def _extract_text_excel_xml(file_path):
+    text = ""
+    columns = []
+    sheet_names = []
+    row_count = 0
+
+    with ZipFile(file_path) as zf:
+        workbook = ET.fromstring(zf.read("xl/workbook.xml"))
+        rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+        rel_map = {rel.attrib["Id"]: rel.attrib["Target"] for rel in rels}
+        shared_strings = _xlsx_shared_strings(zf)
+
+        for sheet in workbook.findall("m:sheets/m:sheet", XLSX_NS):
+            sheet_name = sheet.attrib.get("name", "")
+            rel_id = sheet.attrib.get(f"{{{XLSX_NS['r']}}}id")
+            target = rel_map.get(rel_id)
+            if not target:
+                continue
+
+            sheet_names.append(sheet_name)
+            sheet_path = f"xl/{target}" if not target.startswith("xl/") else target
+            root = ET.fromstring(zf.read(sheet_path))
+            rows = root.findall(".//m:sheetData/m:row", XLSX_NS)
+            if not rows:
+                continue
+
+            parsed_rows = []
+            for row in rows[:51]:
+                values = [
+                    _xlsx_cell_value(cell, shared_strings).strip()
+                    for cell in row.findall("m:c", XLSX_NS)
+                ]
+                values = [value for value in values if value]
+                if values:
+                    parsed_rows.append(values)
+
+            if parsed_rows:
+                columns.extend(parsed_rows[0])
+                for row in parsed_rows[:50]:
+                    text += " | ".join(row) + "\n"
+
+            row_count += max(0, len(rows) - 1)
+
+    return text.strip(), list(dict.fromkeys(columns)), sheet_names, row_count
+
+
 def extract_text_excel(file_path):
     """Extrae texto, columnas y datos de un archivo Excel."""
     text = ""
@@ -216,7 +322,12 @@ def extract_text_excel(file_path):
         xls.close()
 
     except Exception as e:
-        logger.error(f"Error extrayendo datos Excel: {e}")
+        logger.warning(f"Extraccion Excel con pandas no disponible o fallo: {e}")
+        if get_file_extension(file_path) == ".xlsx":
+            try:
+                return _extract_text_excel_xml(file_path)
+            except Exception as fallback_error:
+                logger.error(f"Error extrayendo datos Excel por XML: {fallback_error}")
 
     return text.strip(), list(set(columns)), sheet_names, row_count
 
@@ -259,15 +370,37 @@ def extract_text_csv(file_path):
     row_count = 0
 
     try:
-        import pandas as pd
-        # Intentar con diferentes encodings
-        for encoding in ["utf-8", "latin-1", "cp1252"]:
+        for encoding in ["utf-8-sig", "utf-8", "latin-1", "cp1252"]:
             try:
-                df = pd.read_csv(str(file_path), encoding=encoding, nrows=100)
-                columns = [str(c).strip() for c in df.columns.tolist() if str(c).strip()]
-                row_count = len(df)
-                for _, row in df.head(50).iterrows():
-                    row_text = " | ".join([str(v) for v in row.values if pd.notna(v)])
+                with open(file_path, "r", encoding=encoding, newline="") as f:
+                    sample = f.read(4096)
+                    f.seek(0)
+                    try:
+                        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+                    except csv.Error:
+                        dialect = csv.excel
+
+                    reader = csv.reader(f, dialect)
+                    rows = []
+                    for idx, row in enumerate(reader):
+                        rows.append([str(v).strip() for v in row])
+                        if idx >= 100:
+                            break
+
+                if not rows:
+                    break
+
+                document_type = detect_lotaip_document_type(file_path)
+                if document_type in {"Metadatos", "Diccionario"}:
+                    columns = [row[0] for row in rows if row and row[0]]
+                    data_rows = rows
+                else:
+                    columns = [c for c in rows[0] if c]
+                    data_rows = rows[1:]
+                row_count = len([r for r in data_rows if any(cell for cell in r)])
+
+                for row in data_rows[:50]:
+                    row_text = " | ".join([v for v in row if v])
                     if row_text:
                         text += row_text + "\n"
                 break
@@ -305,6 +438,7 @@ def process_document(evidence):
         "tables": [],
         "sheet_names": [],
         "row_count": 0,
+        "document_type": None,
     }
 
     # Verificar existencia del archivo
@@ -326,6 +460,7 @@ def process_document(evidence):
 
     # Metadatos
     result["metadata"] = get_file_metadata(abs_path)
+    result["document_type"] = detect_lotaip_document_type(f"{evidence.title} {abs_path.name}")
 
     # Integridad
     result["is_corrupted"] = is_file_corrupted(abs_path)
@@ -391,6 +526,7 @@ def _save_processing_results(evidence, result):
             "columns": result.get("columns", []),
             "sheet_names": result.get("sheet_names", []),
             "row_count": result.get("row_count", 0),
+            "document_type": result.get("document_type"),
         }
         evidence.processing_status = "processed" if result.get("file_exists") else "error"
         evidence.save(update_fields=["file_hash", "extracted_text", "metadata_json", "processing_status"])

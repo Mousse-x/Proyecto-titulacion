@@ -105,7 +105,7 @@ export default function AdminDashboard() {
               <div style={{ fontSize: '0.875rem' }}>El ranking aparecerá cuando haya evaluaciones completadas</div>
             </div>
           ) : (
-            <RankingBar data={[]} height={260} />
+            <RankingBar data={(stats.ranking || []).map(u => ({ name: u.name, transparency_score: u.transparency_score }))} height={260} />
           )}
         </div>
         <div className="card">
@@ -114,7 +114,9 @@ export default function AdminDashboard() {
           </div>
           <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-subtle)' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>📝</div>
-            <div style={{ fontSize: '0.875rem' }}>No hay actividad registrada todavía</div>
+            <div style={{ fontSize: '0.875rem' }}>
+              {stats.recent_documents?.length ? `${stats.recent_documents.length} documentos recientes registrados` : 'No hay actividad registrada todavía'}
+            </div>
           </div>
         </div>
       </div>

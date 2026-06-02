@@ -15,9 +15,20 @@ El puntaje total es sobre 100 puntos:
 import re
 import unicodedata
 import logging
+from difflib import SequenceMatcher
 from datetime import datetime
+from pathlib import Path
+from zipfile import ZipFile
+import xml.etree.ElementTree as ET
+
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+XLSX_NS = {
+    "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+}
 
 # Formatos de archivo permitidos
 ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".csv", ".docx"}
@@ -54,6 +65,120 @@ def normalize_text(text):
     # Eliminar espacios múltiples
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def _similarity_percent(left, right):
+    if not left or not right:
+        return 0
+    if left == right:
+        return 100
+    return round(SequenceMatcher(None, left, right).ratio() * 100)
+
+
+def _xlsx_shared_strings(zf):
+    if "xl/sharedStrings.xml" not in zf.namelist():
+        return []
+
+    root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+    return [
+        "".join(t.text or "" for t in item.findall(".//m:t", XLSX_NS))
+        for item in root.findall("m:si", XLSX_NS)
+    ]
+
+
+def _xlsx_cell_value(cell, shared_strings):
+    value_node = cell.find("m:v", XLSX_NS)
+    if value_node is None:
+        return ""
+
+    value = value_node.text or ""
+    if cell.attrib.get("t") == "s" and value:
+        try:
+            return shared_strings[int(value)]
+        except (IndexError, ValueError):
+            return ""
+    return value
+
+
+def _resolve_template_path(template):
+    if not template or not template.file_path:
+        return None
+
+    raw_path = Path(str(template.file_path))
+    if raw_path.is_absolute():
+        return raw_path
+    return Path(settings.MEDIA_ROOT) / raw_path
+
+
+def _find_template_sheet_columns(template, document_type):
+    if not document_type:
+        return []
+
+    file_path = _resolve_template_path(template)
+    if not file_path or file_path.suffix.lower() != ".xlsx" or not file_path.exists():
+        return []
+
+    wanted = normalize_text(document_type)
+
+    try:
+        with ZipFile(file_path) as zf:
+            workbook = ET.fromstring(zf.read("xl/workbook.xml"))
+            rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+            rel_map = {rel.attrib["Id"]: rel.attrib["Target"] for rel in rels}
+            shared_strings = _xlsx_shared_strings(zf)
+
+            for sheet in workbook.findall("m:sheets/m:sheet", XLSX_NS):
+                sheet_name = sheet.attrib.get("name", "")
+                if normalize_text(sheet_name) != wanted:
+                    continue
+
+                rel_id = sheet.attrib.get(f"{{{XLSX_NS['r']}}}id")
+                target = rel_map.get(rel_id)
+                if not target:
+                    return []
+
+                sheet_path = f"xl/{target}" if not target.startswith("xl/") else target
+                root = ET.fromstring(zf.read(sheet_path))
+                rows = root.findall(".//m:sheetData/m:row", XLSX_NS)
+                return _expected_columns_from_template_rows(rows, shared_strings, document_type)
+    except Exception as exc:
+        logger.warning(f"No se pudo leer la hoja '{document_type}' de la plantilla: {exc}")
+
+    return []
+
+
+def _expected_columns_from_template_rows(rows, shared_strings, document_type):
+    parsed_rows = []
+    for row in rows[:20]:
+        values = [
+            _xlsx_cell_value(cell, shared_strings).strip()
+            for cell in row.findall("m:c", XLSX_NS)
+        ]
+        values = [value for value in values if value]
+        if values:
+            parsed_rows.append(values)
+
+    if not parsed_rows:
+        return []
+
+    normalized_type = normalize_text(document_type)
+    if normalized_type == "diccionario":
+        return [row[0] for row in parsed_rows if row]
+
+    # En "Metadatos" los nombres de campos van verticales en la primera columna.
+    if normalized_type == "metadatos":
+        return [row[0] for row in parsed_rows if row]
+
+    # En "Conjunto de datos" los encabezados estan en la primera fila.
+    return parsed_rows[0]
+
+
+def _expected_columns_for_document(processed_data, template):
+    document_type = processed_data.get("document_type")
+    sheet_columns = _find_template_sheet_columns(template, document_type)
+    if sheet_columns:
+        return sheet_columns, document_type
+    return (template.expected_columns or []), None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -175,7 +300,7 @@ def evaluate_period(evidence, processed_data, expected_month=None, expected_year
 # EVALUADOR: ESTRUCTURA (20 pts)
 # ──────────────────────────────────────────────────────────────────────
 
-def evaluate_structure(processed_data, template):
+def _evaluate_structure_legacy(processed_data, template):
     """
     Compara las columnas/secciones del documento con las esperadas en la plantilla base.
     Usa fuzzy matching para detectar columnas similares.
@@ -186,7 +311,7 @@ def evaluate_structure(processed_data, template):
         obs.append("⚠️ No se encontró plantilla base para este indicador. La evaluación de estructura se omite.")
         return 10, obs  # Puntaje parcial por defecto sin plantilla
 
-    expected_columns = template.expected_columns or []
+    expected_columns, matched_sheet = _expected_columns_for_document(processed_data, template)
 
     if not expected_columns:
         obs.append("⚠️ La plantilla base no tiene columnas esperadas configuradas. Se omite la evaluación de estructura.")
@@ -206,7 +331,7 @@ def evaluate_structure(processed_data, template):
     try:
         from rapidfuzz import fuzz
     except ImportError:
-        logger.warning("rapidfuzz no disponible, usando comparación exacta")
+        logger.warning("rapidfuzz no disponible, usando similitud estandar")
         fuzz = None
 
     matched = []
@@ -227,7 +352,7 @@ def evaluate_structure(processed_data, template):
             if fuzz:
                 score = fuzz.ratio(expected_norm, doc_norm)
             else:
-                score = 100 if expected_norm == doc_norm else 0
+                score = _similarity_percent(expected_norm, doc_norm)
 
             if score > best_score:
                 best_score = score
@@ -265,6 +390,85 @@ def evaluate_structure(processed_data, template):
 # ──────────────────────────────────────────────────────────────────────
 # EVALUADOR: CONTENIDO MÍNIMO (20 pts)
 # ──────────────────────────────────────────────────────────────────────
+
+def evaluate_structure(processed_data, template):
+    """
+    Compara columnas contra la pestana equivalente del Excel modelo:
+    Metadatos, Diccionario o Conjunto de datos.
+    """
+    obs = []
+
+    if not template:
+        obs.append("No se encontro plantilla base para este indicador. Se omite estructura.")
+        return 10, obs
+
+    expected_columns, matched_sheet = _expected_columns_for_document(processed_data, template)
+    if not expected_columns:
+        obs.append("La plantilla base no tiene columnas esperadas configuradas. Se omite estructura.")
+        return 10, obs
+
+    doc_columns = processed_data.get("columns", [])
+    if not doc_columns:
+        obs.append("No se pudieron extraer columnas o secciones del documento.")
+        return 0, obs
+
+    normalized_expected = [(c, normalize_text(c)) for c in expected_columns]
+    normalized_doc = [(c, normalize_text(c)) for c in doc_columns]
+
+    try:
+        from rapidfuzz import fuzz
+    except ImportError:
+        logger.warning("rapidfuzz no disponible, usando similitud estandar")
+        fuzz = None
+
+    matched = []
+    missing = []
+    threshold = 70
+
+    for expected_orig, expected_norm in normalized_expected:
+        if not expected_norm:
+            continue
+
+        best_score = 0
+        best_match = None
+        for doc_orig, doc_norm in normalized_doc:
+            if not doc_norm:
+                continue
+            score = fuzz.ratio(expected_norm, doc_norm) if fuzz else _similarity_percent(expected_norm, doc_norm)
+            if score > best_score:
+                best_score = score
+                best_match = doc_orig
+
+        if best_score >= threshold:
+            matched.append((expected_orig, best_match, best_score))
+        else:
+            missing.append(expected_orig)
+
+    total_expected = len([c for _, c in normalized_expected if c])
+    if total_expected == 0:
+        return 10, obs
+
+    match_ratio = len(matched) / total_expected
+    score = round(20 * match_ratio, 2)
+
+    if match_ratio >= 0.9:
+        obs.append(f"La estructura coincide con la plantilla base ({len(matched)}/{total_expected} columnas).")
+    elif match_ratio >= 0.5:
+        obs.append(f"La estructura coincide parcialmente ({len(matched)}/{total_expected} columnas: {int(match_ratio * 100)}%).")
+    else:
+        obs.append(f"La estructura difiere de la plantilla ({len(matched)}/{total_expected} columnas: {int(match_ratio * 100)}%).")
+
+    if missing:
+        missing_display = missing[:10]
+        obs.append(f"Columnas faltantes: {', '.join(missing_display)}.")
+        if len(missing) > 10:
+            obs.append(f"... y {len(missing) - 10} columnas mas.")
+
+    if matched_sheet:
+        obs.append(f"Plantilla evaluada con la pestana '{matched_sheet}'.")
+
+    return score, obs
+
 
 def evaluate_content(processed_data, template):
     """

@@ -7,22 +7,24 @@ import client from './client';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
 export const validationApi = {
-  /** Validate a single approved document */
+  /** Validate a single document */
   validateDocument: (evidenceId) =>
     client.post(`/evaluacion/documentos/${evidenceId}/validar/`),
 
-  /** Validate all approved documents for a university in a period (streaming) */
-  validateAllStream: async (universityId, periodId, onProgress) => {
+  /** Validate all pending/approved documents for a university in a period (streaming) */
+  validateAllStream: async (universityId, periodId, month, onProgress) => {
     const token = sessionStorage.getItem('auth_token');
+    const params = new URLSearchParams({ periodo_id: periodId });
+    if (month) params.set('month', month);
     const resp = await fetch(
-      `${API_BASE}/evaluacion/universidades/${universityId}/validar-todo/?periodo_id=${periodId}`,
+      `${API_BASE}/evaluacion/universidades/${universityId}/validar-todo/?${params.toString()}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ periodo_id: periodId }),
+        body: JSON.stringify({ periodo_id: periodId, month: month || null }),
       }
     );
 
@@ -61,14 +63,14 @@ export const validationApi = {
     client.get(`/evaluacion/documentos/${evidenceId}/resultado/`),
 
   /** Get compliance summary for a university in a period */
-  getSummary: (universityId, periodId) =>
+  getSummary: (universityId, periodId, month) =>
     client.get(`/evaluacion/universidades/${universityId}/resumen/`, {
-      params: { periodo_id: periodId },
+      params: { periodo_id: periodId, ...(month ? { month } : {}) },
     }),
 
   /** Get observations for a university in a period */
-  getObservations: (universityId, periodId) =>
+  getObservations: (universityId, periodId, month) =>
     client.get(`/evaluacion/universidades/${universityId}/observaciones/`, {
-      params: { periodo_id: periodId },
+      params: { periodo_id: periodId, ...(month ? { month } : {}) },
     }),
 };
