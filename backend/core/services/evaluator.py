@@ -22,6 +22,7 @@ from .comparison_engine import (
     evaluate_existence, evaluate_format, evaluate_period,
     evaluate_structure, evaluate_content, evaluate_accessibility,
 )
+from .international_evaluator import evaluate_international_standards, summarize_indices
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,12 @@ def evaluar_documento(evidence_id):
                 status=EvidenceValidationResult.ComplianceStatus.NO_PRESENTADO,
                 observations=all_observations,
             )
+            result_data["evaluacion_internacional"] = evaluate_international_standards(
+                evidence,
+                processed_data=processed_data,
+                template=template,
+                lotaip_result=result_data,
+            )
             _save_validation_result(evidence, result_data)
             return result_data
 
@@ -156,6 +163,12 @@ def evaluar_documento(evidence_id):
             status=status,
             observations=all_observations,
         )
+        result_data["evaluacion_internacional"] = evaluate_international_standards(
+            evidence,
+            processed_data=processed_data,
+            template=template,
+            lotaip_result=result_data,
+        )
 
         # 6. Guardar en BD
         _save_validation_result(evidence, result_data)
@@ -169,6 +182,11 @@ def evaluar_documento(evidence_id):
             total_score=0,
             status=EvidenceValidationResult.ComplianceStatus.ERROR_PROCESAMIENTO,
             observations=[f"❌ Error durante el procesamiento: {str(e)}"],
+        )
+        error_result["evaluacion_internacional"] = evaluate_international_standards(
+            evidence,
+            template=template,
+            lotaip_result=error_result,
         )
         _save_validation_result(evidence, error_result)
         return error_result
@@ -341,6 +359,7 @@ def evaluar_universidad(university_id, period_id, month=None):
     # Calcular índice general
     total_score_sum = sum(r.get("puntaje_total", 0) for r in results)
     total_index = round(total_score_sum / len(results), 2) if results else 0
+    indices = summarize_indices(results)
 
     # Generar observaciones generales
     general_obs = []
@@ -362,7 +381,7 @@ def evaluar_universidad(university_id, period_id, month=None):
             university_id=university_id,
             period=period,
             defaults={
-                "total_index": Decimal(str(total_index)),
+                "total_index": Decimal(str(indices["indice_nacional"])),
                 "total_indicators": total,
                 "indicators_compliant": counters["CUMPLE"],
                 "indicators_partial": counters["CUMPLE_PARCIALMENTE"],
@@ -377,10 +396,15 @@ def evaluar_universidad(university_id, period_id, month=None):
 
     yield json.dumps({
         "status": "done",
-        "msg": f"Validación completada. Índice general: {total_index}%",
+        "msg": f"Validación completada. Índice nacional: {indices['indice_nacional']}% | Nacional + internacional: {indices['indice_nacional_internacional']}%",
         "pct": 100,
         "summary": {
-            "total_index": total_index,
+            "total_index": indices["indice_nacional"],
+            "national_index": indices["indice_nacional"],
+            "international_index": indices["indice_internacional"],
+            "integrated_index": indices["indice_nacional_internacional"],
+            "international_average_score": indices["puntaje_internacional_promedio"],
+            "international_max_score": indices["puntaje_internacional_maximo"],
             "total_indicators": total,
             "counters": counters,
             "general_observations": general_obs,

@@ -15,6 +15,7 @@ from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, 
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
+from .services.international_evaluator import evaluate_international_standards
 
 
 # ─── Helpers de auditoría ────────────────────────────────────────────
@@ -874,7 +875,7 @@ def system_stats(request):
 
             evidences = Evidence.objects.all()
             validations = EvidenceValidationResult.objects.select_related(
-                "evidence", "evidence__university"
+                "evidence", "evidence__university", "evidence__indicator", "evidence__period"
             )
             if period_id:
                 evidences = evidences.filter(period_id=period_id)
@@ -885,11 +886,25 @@ def system_stats(request):
 
             validation_count = validations.count()
             avg_transparency = 0
+            avg_transparency_integrated = 0
             if validation_count:
+                integrated_sum = 0
+                for vr in validations:
+                    national_score = float(vr.total_score)
+                    international = evaluate_international_standards(
+                        vr.evidence,
+                        lotaip_result={
+                            "puntaje_total": national_score,
+                            "puntaje_estructura": float(vr.score_structure),
+                        },
+                    )
+                    integrated_sum += international["indice_nacional_internacional"]
+
                 avg_transparency = round(
                     sum(float(v.total_score) for v in validations) / validation_count,
                     2,
                 )
+                avg_transparency_integrated = round(integrated_sum / validation_count, 2)
 
             ranking = []
             by_university = {}
@@ -905,6 +920,14 @@ def system_stats(request):
                     "count": 0,
                 })
                 bucket["score_sum"] += float(vr.total_score)
+                international = evaluate_international_standards(
+                    vr.evidence,
+                    lotaip_result={
+                        "puntaje_total": float(vr.total_score),
+                        "puntaje_estructura": float(vr.score_structure),
+                    },
+                )
+                bucket["integrated_score_sum"] = bucket.get("integrated_score_sum", 0) + international["indice_nacional_internacional"]
                 bucket["count"] += 1
 
             for item in by_university.values():
@@ -913,6 +936,7 @@ def system_stats(request):
                     "name": item["name"],
                     "full_name": item["full_name"],
                     "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
+                    "integrated_transparency_score": round(item.get("integrated_score_sum", 0) / item["count"], 2) if item["count"] else 0,
                     "evaluated_documents": item["count"],
                 })
             ranking.sort(key=lambda item: item["transparency_score"], reverse=True)
@@ -936,6 +960,7 @@ def system_stats(request):
                 "pending_reviews":    evidences.filter(validation_status="pendiente").count(),
                 "approved_docs":      evidences.filter(validation_status="aprobado").count(),
                 "avg_transparency":   avg_transparency,
+                "avg_transparency_integrated": avg_transparency_integrated,
                 "active_users":       AppUser.objects.filter(is_active=True).count(),
                 "observations_open":  validations.exclude(observations=[]).count(),
                 "indicators_active":  Indicator.objects.filter(is_active=True).count(),

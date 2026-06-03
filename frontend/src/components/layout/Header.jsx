@@ -15,6 +15,7 @@ const PAGE_META = {
   '/auditor/index':          { title: 'Índice de Transparencia',sub: 'Cálculo del índice institucional' },
   '/auditor/comparatives':   { title: 'Análisis Comparativo',   sub: 'Comparar universidades' },
   '/auditor/rankings':       { title: 'Rankings',               sub: 'Clasificación nacional de transparencia' },
+  '/auditor/validation':     { title: 'Evaluacion LOTAIP',      sub: 'Consulta detallada de literales y observaciones' },
 };
 
 export default function Header() {

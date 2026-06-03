@@ -1,126 +1,130 @@
 import { useEffect, useState } from 'react';
 import { ScoreCard } from '../../components/common/StatCard';
 import RankingBar from '../../components/charts/RankingBar';
-import TrendLine from '../../components/charts/TrendLine';
-import TransparencyRadar from '../../components/charts/TransparencyRadar';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
-import { mockRankings, mockHistoricalScores, getRadarData, getScoreColor, getScoreLabel } from '../../data/mockData';
+import { getScoreColor, getScoreLabel } from '../../data/mockData';
 
 export default function RankingsPage() {
-  const [selected, setSelected] = useState(mockRankings[0]);
-  const [year, setYear]         = useState('2026');
-  const [rankings, setRankings] = useState(mockRankings);
+  const [selected, setSelected] = useState(null);
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [rankings, setRankings] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.stats().then(res => {
-      if (res.data.ranking?.length) {
-        const realRankings = res.data.ranking.map(u => ({
+    api.stats()
+      .then((res) => {
+        const realRankings = (res.data.ranking || []).map((u) => ({
           ...u,
           logo_initials: u.name,
           color: 'var(--primary)',
-          categories: {},
         }));
         setRankings(realRankings);
-        setSelected(realRankings[0]);
-      }
-    }).catch(() => {});
+        setSelected(realRankings[0] || null);
+      })
+      .catch(() => {
+        setRankings([]);
+        setSelected(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const radarData = getRadarData(selected.id);
-
   return (
-    <div style={{ animation:'slideIn 0.3s ease' }}>
+    <div style={{ animation: 'slideIn 0.3s ease' }}>
       <div className="page-header">
         <div className="page-header-info">
-          <h1>Rankings Nacionales 2026</h1>
-          <p>Clasificación de universidades por Índice de Transparencia Institucional</p>
+          <h1>Rankings Nacionales</h1>
+          <p>Clasificacion de universidades por indices reales de transparencia</p>
         </div>
         <div className="page-header-actions">
-          <select className="form-input" style={{ width:'auto' }} value={year} onChange={e=>setYear(e.target.value)}>
-            {['2022','2023','2024','2025','2026'].map(y=><option key={y}>{y}</option>)}
+          <select className="form-input" style={{ width: 'auto' }} value={year} onChange={(e) => setYear(e.target.value)}>
+            {['2022', '2023', '2024', '2025', '2026'].map((item) => <option key={item}>{item}</option>)}
           </select>
-          <button className="btn btn-secondary">📥 Exportar PDF</button>
+          <button className="btn btn-secondary">Exportar PDF</button>
         </div>
       </div>
 
-      {/* Main ranking table */}
-      <div className="grid-21" style={{ marginBottom:24 }}>
+      {loading ? (
+        <div className="card"><div className="empty-state"><h4>Cargando ranking...</h4></div></div>
+      ) : rankings.length === 0 ? (
         <div className="card">
-          <div className="card-header">
-            <span className="card-title">🏆 Tabla de Clasificación {year}</span>
+          <div className="empty-state">
+            <h4>Sin evaluaciones calculadas</h4>
+            <p>Ejecuta la evaluacion LOTAIP para generar rankings reales.</p>
           </div>
-          {rankings.map((u,i) => (
-            <div
-              key={u.id}
-              className={`doc-status-row`}
-              style={{ cursor:'pointer', border: selected.id===u.id ? '1px solid var(--primary)':'1px solid var(--border)', background: selected.id===u.id?'var(--primary-subtle)':undefined }}
-              onClick={()=>setSelected(u)}
-            >
-              <div className={`rank-number rank-${i<3?i+1:'n'}`}>{i+1}</div>
-              <div style={{ width:40, height:40, borderRadius:8, background:`${u.color}22`, border:`1px solid ${u.color}44`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:800, color:u.color }}>
-                {u.logo_initials}
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:700, color:'var(--text)', fontSize:'0.9375rem' }}>{u.name}</div>
-                <div style={{ fontSize:'0.75rem', color:'var(--text-subtle)' }}>{u.full_name}</div>
-                <div className="progress-bar" style={{ marginTop:6 }}>
-                  <div className="progress-fill" style={{ width:`${u.transparency_score}%`, background:getScoreColor(u.transparency_score) }} />
-                </div>
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:'1.5rem', fontWeight:900, color:getScoreColor(u.transparency_score) }}>{u.transparency_score}</div>
-                <Badge status={getScoreLabel(u.transparency_score)} />
-              </div>
-            </div>
-          ))}
         </div>
-
-        {/* Selected university detail */}
-        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <div className="card">
-            <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:16 }}>
-              <div style={{ width:52, height:52, borderRadius:12, background:`${selected.color}22`, border:`2px solid ${selected.color}`, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, color:selected.color, fontSize:'0.875rem' }}>
-                {selected.logo_initials}
+      ) : (
+        <>
+          <div className="grid-21" style={{ marginBottom: 24 }}>
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Tabla de clasificacion {year}</span>
               </div>
-              <div>
-                <div style={{ fontWeight:700, fontSize:'1.125rem', color:'var(--text)' }}>{selected.name}</div>
-                <div style={{ fontSize:'0.8125rem', color:'var(--text-subtle)' }}>{selected.city} · {selected.type}</div>
-              </div>
-              <ScoreCard score={selected.transparency_score} size={64} />
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              {Object.entries(selected.categories || {}).map(([cat, score])=>(
-                <div key={cat} style={{ background:'var(--bg-tertiary)', borderRadius:'var(--radius-sm)', padding:'8px 12px' }}>
-                  <div style={{ fontSize:'0.6875rem', color:'var(--text-subtle)' }}>{cat}</div>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:3 }}>
-                    <span style={{ fontWeight:700, color:getScoreColor(score) }}>{score}</span>
-                    <div className="progress-bar" style={{ width:45 }}>
-                      <div className="progress-fill" style={{ width:`${score}%`, background:getScoreColor(score) }} />
+              {rankings.map((u, i) => (
+                <div
+                  key={u.id}
+                  className="doc-status-row"
+                  style={{ cursor: 'pointer', border: selected?.id === u.id ? '1px solid var(--primary)' : '1px solid var(--border)', background: selected?.id === u.id ? 'var(--primary-subtle)' : undefined }}
+                  onClick={() => setSelected(u)}
+                >
+                  <div className={`rank-number rank-${i < 3 ? i + 1 : 'n'}`}>{i + 1}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, background: `${u.color}22`, border: `1px solid ${u.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 800, color: u.color }}>
+                    {u.logo_initials}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.9375rem' }}>{u.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{u.full_name}</div>
+                    <div className="progress-bar" style={{ marginTop: 6 }}>
+                      <div className="progress-fill" style={{ width: `${u.transparency_score}%`, background: getScoreColor(u.transparency_score) }} />
                     </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 900, color: getScoreColor(u.transparency_score) }}>{u.transparency_score}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Integrado: {u.integrated_transparency_score || 0}%</div>
+                    <Badge status={getScoreLabel(u.transparency_score)} />
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-          <div className="chart-card">
-            <div className="chart-title">Perfil de Transparencia — {selected.name}</div>
-            <TransparencyRadar data={radarData} color={selected.color} height={220} />
-          </div>
-        </div>
-      </div>
 
-      {/* Bar + Trend */}
-      <div className="grid-2">
-        <div className="chart-card">
-          <div className="chart-title">📊 Comparativa de Índices {year}</div>
-          <RankingBar data={rankings} height={260} />
-        </div>
-        <div className="chart-card">
-          <div className="chart-title">📈 Evolución Histórica 2022–2026</div>
-          <TrendLine data={mockHistoricalScores} height={260} />
-        </div>
-      </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="card">
+                {selected && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 12, background: `${selected.color}22`, border: `2px solid ${selected.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: selected.color, fontSize: '0.875rem' }}>
+                        {selected.logo_initials}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--text)' }}>{selected.name}</div>
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>{selected.full_name}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <ScoreCard score={selected.transparency_score || 0} size={82} label="Nacional" />
+                      <ScoreCard score={selected.integrated_transparency_score || 0} size={82} label="Nacional + internacional" />
+                    </div>
+                    <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.8125rem' }}>
+                      {selected.evaluated_documents || 0} documentos evaluados
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid-2">
+            <div className="chart-card">
+              <div className="chart-title">Indice nacional {year}</div>
+              <RankingBar data={rankings.map((u) => ({ name: u.name, transparency_score: u.transparency_score }))} height={260} />
+            </div>
+            <div className="chart-card">
+              <div className="chart-title">Indice nacional + internacional {year}</div>
+              <RankingBar data={rankings.map((u) => ({ name: u.name, transparency_score: u.integrated_transparency_score || 0 }))} height={260} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

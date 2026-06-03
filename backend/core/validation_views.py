@@ -18,9 +18,10 @@ from django.utils import timezone
 
 from .models import (
     Evidence, EvidenceValidationResult, UniversityEvaluationSummary,
-    University, EvaluationPeriod, Indicator, AuditLog,
+    University, EvaluationPeriod, Indicator, IndicatorTemplate, AuditLog,
 )
 from .middleware import require_auth, require_role
+from .services.international_evaluator import evaluate_international_standards, summarize_indices
 
 
 # ─── Helper de auditoría ────────────────────────────────────────────
@@ -161,12 +162,18 @@ def get_validation_result(request, ev_id):
 def _validation_result_to_dict(vr):
     """Serializa un EvidenceValidationResult a dict."""
     ev = vr.evidence
+    template = None
+    try:
+        if ev.indicator_id:
+            template = IndicatorTemplate.objects.get(indicator_id=ev.indicator_id)
+    except IndicatorTemplate.DoesNotExist:
+        pass
     months = {
         1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
         5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
         9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
     }
-    return {
+    result = {
         "id": vr.id,
         "evidence_id": ev.id,
         "universidad": ev.university.acronym if ev.university else "N/A",
@@ -188,6 +195,12 @@ def _validation_result_to_dict(vr):
         "observaciones": vr.observations or [],
         "fecha_validacion": vr.validated_at.isoformat() if vr.validated_at else None,
     }
+    result["evaluacion_internacional"] = evaluate_international_standards(
+        ev,
+        template=template,
+        lotaip_result=result,
+    )
+    return result
 
 
 def _summary_from_validations(validations):
@@ -285,10 +298,18 @@ def get_compliance_summary(request, univ_id):
     except UniversityEvaluationSummary.DoesNotExist:
         pass
 
-    summary = _summary_from_validations(validations)
-
     # Lista de resultados por literal
     results = [_validation_result_to_dict(vr) for vr in validations]
+    summary = _summary_from_validations(validations)
+    indices = summarize_indices(results)
+    summary.update({
+        "total_index": indices["indice_nacional"],
+        "national_index": indices["indice_nacional"],
+        "international_index": indices["indice_internacional"],
+        "integrated_index": indices["indice_nacional_internacional"],
+        "international_average_score": indices["puntaje_internacional_promedio"],
+        "international_max_score": indices["puntaje_internacional_maximo"],
+    })
 
     return JsonResponse({
         "university_id": univ_id,

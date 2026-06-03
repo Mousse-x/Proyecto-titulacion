@@ -24,7 +24,7 @@ function ScoreBar({ score, max = 100, color }) {
   );
 }
 
-function TransparencyGauge({ value = 0 }) {
+function TransparencyGauge({ value = 0, label = 'Indice' }) {
   const r = 58, stroke = 8, c = 2 * Math.PI * r;
   const offset = c - (value / 100) * c;
   const color = value >= 90 ? 'var(--success)' : value >= 70 ? 'var(--warning)' : value >= 40 ? 'var(--info)' : 'var(--danger)';
@@ -39,13 +39,13 @@ function TransparencyGauge({ value = 0 }) {
       </svg>
       <div style={{ position: 'absolute', marginTop: 42, textAlign: 'center' }}>
         <div style={{ fontSize: '2rem', fontWeight: 800, color }}>{Math.round(value)}%</div>
-        <div style={{ fontSize: '0.6875rem', color: 'var(--text-subtle)' }}>Índice General</div>
+        <div style={{ fontSize: '0.6875rem', color: 'var(--text-subtle)' }}>{label}</div>
       </div>
     </div>
   );
 }
 
-export default function ValidationPage() {
+export default function ValidationPage({ readOnly = false }) {
   const [universities, setUniversities] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [selectedUniv, setSelectedUniv] = useState('');
@@ -57,6 +57,7 @@ export default function ValidationPage() {
   const [summary, setSummary] = useState(null);
   const [results, setResults] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [activeTab, setActiveTab] = useState('lotaip');
   const [error, setError] = useState(null);
 
   const MONTHS = [
@@ -147,6 +148,34 @@ export default function ValidationPage() {
 
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.NO_PRESENTADO;
   const getScoreColor = (score) => score >= 90 ? 'var(--success)' : score >= 70 ? 'var(--warning)' : score >= 40 ? 'var(--info)' : 'var(--danger)';
+  const getCriterionStatus = (score, max) => {
+    const pct = max ? (score / max) * 100 : 0;
+    if (pct >= 99) return { label: 'Cumple', badge: 'badge-success' };
+    if (pct > 0) return { label: 'Parcial', badge: 'badge-warning' };
+    return { label: 'No cumple', badge: 'badge-danger' };
+  };
+  const internationalKeys = ['ogp', 'ocde', 'ods'];
+  const internationalRows = results.flatMap((r) =>
+    internationalKeys
+      .map((key) => {
+        const standard = r.evaluacion_internacional?.[key];
+        return standard ? { result: r, key, standard } : null;
+      })
+      .filter(Boolean)
+  );
+  const internationalSummary = internationalKeys.map((key) => {
+    const standards = results.map((r) => r.evaluacion_internacional?.[key]).filter(Boolean);
+    const total = standards.reduce((sum, item) => sum + (item.puntaje || 0), 0);
+    const max = standards[0]?.puntaje_maximo || 0;
+    const avg = standards.length ? total / standards.length : 0;
+    return {
+      key,
+      name: standards[0]?.nombre || key.toUpperCase(),
+      score: Number(avg.toFixed(2)),
+      max,
+      pct: max ? Number(((avg / max) * 100).toFixed(2)) : 0,
+    };
+  });
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -154,9 +183,9 @@ export default function ValidationPage() {
       <div className="page-header">
         <div className="page-header-info">
           <h1>🔍 Evaluación LOTAIP</h1>
-          <p>Validación automática de documentos de transparencia contra plantillas oficiales</p>
+          <p>{readOnly ? 'Consulta detallada de literales, observaciones y estandares internacionales' : 'Validación automática de documentos de transparencia contra plantillas oficiales'}</p>
         </div>
-        <div className="page-header-actions">
+        <div className="page-header-actions" style={{ display: readOnly ? 'none' : undefined }}>
           <button className="btn btn-primary btn-lg" onClick={handleValidateAll}
             disabled={!selectedUniv || !selectedPeriod || validating}>
             {validating ? '⏳ Validando...' : '🚀 Validar documentos'}
@@ -235,8 +264,19 @@ export default function ValidationPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 20, marginBottom: 24 }}>
               {/* Transparency Gauge */}
               <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', paddingTop: 32, paddingBottom: 32 }}>
-                <TransparencyGauge value={summary.total_index} />
-                <div style={{ marginTop: 64 }}>
+                <TransparencyGauge value={summary.national_index ?? summary.total_index} label="Indice nacional" />
+                <div style={{ marginTop: 64, width: '100%', display: 'grid', gap: 8 }}>
+                  <div style={{ padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: getScoreColor(summary.integrated_index ?? summary.total_index) }}>
+                      {Math.round(summary.integrated_index ?? summary.total_index)}%
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Nacional + internacional</div>
+                  </div>
+                  {summary.international_index !== undefined && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textAlign: 'center' }}>
+                      Internacional: {Math.round(summary.international_index)}% ({summary.international_average_score}/{summary.international_max_score})
+                    </div>
+                  )}
                   <div style={{ textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
                     {summary.total_indicators} indicadores evaluados
                   </div>
@@ -274,16 +314,33 @@ export default function ValidationPage() {
             </div>
           )}
 
+          {results.length > 0 && (
+            <div className="tabs" style={{ marginBottom: 16 }}>
+              <button
+                className={`tab ${activeTab === 'lotaip' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('lotaip'); setExpandedRow(null); }}
+              >
+                LOTAIP
+              </button>
+              <button
+                className={`tab ${activeTab === 'international' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('international'); setExpandedRow(null); }}
+              >
+                Evaluacion internacional
+              </button>
+            </div>
+          )}
+
           {/* Results Table */}
           {results.length === 0 && !summary ? (
             <div className="card">
               <div className="empty-state">
                 <div className="empty-icon">📄</div>
                 <h4>Sin resultados de validación</h4>
-                <p>Haz clic en "Validar documentos" para ejecutar la validación automática.</p>
+                <p>{readOnly ? 'No hay resultados de evaluacion disponibles para la seleccion actual.' : 'Haz clic en "Validar documentos" para ejecutar la validación automática.'}</p>
               </div>
             </div>
-          ) : results.length > 0 && (
+          ) : results.length > 0 && activeTab === 'lotaip' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 600 }}>📋 Detalle por Literal LOTAIP</span>
@@ -300,7 +357,7 @@ export default function ValidationPage() {
                       <th>Período</th>
                       <th>Puntaje</th>
                       <th>Estado</th>
-                      <th>Acción</th>
+                      <th style={{ display: readOnly ? 'none' : undefined }}>Acción</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -332,8 +389,8 @@ export default function ValidationPage() {
                             <td>
                               <span className={`badge ${sc.badge}`}>{sc.icon} {sc.label}</span>
                             </td>
-                            <td>
-                              <button className="btn btn-sm btn-secondary" onClick={(e) => { e.stopPropagation(); handleValidateOne(r.evidence_id); }}
+                            <td style={{ display: readOnly ? 'none' : undefined }}>
+                              <button className="btn btn-sm btn-secondary" style={{ display: readOnly ? 'none' : undefined }} onClick={(e) => { e.stopPropagation(); handleValidateOne(r.evidence_id); }}
                                 title="Revalidar documento">
                                 🔄
                               </button>
@@ -383,6 +440,91 @@ export default function ValidationPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {results.length > 0 && activeTab === 'international' && (
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+                {internationalSummary.map((item) => (
+                  <div key={item.key} className="card-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginBottom: 4 }}>{item.name}</div>
+                        <div style={{ fontSize: '1.375rem', fontWeight: 800, color: getScoreColor(item.pct) }}>
+                          {item.score}/{item.max}
+                        </div>
+                      </div>
+                      <div style={{ minWidth: 96 }}>
+                        <ScoreBar score={item.pct} color={getScoreColor(item.pct)} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 600 }}>Detalle de evaluacion internacional</span>
+                  <span className="tag">{internationalRows.length} evaluaciones</span>
+                </div>
+                <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Literal</th>
+                        <th>Documento</th>
+                        <th>Marco</th>
+                        <th>Puntaje</th>
+                        <th>Criterios</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {internationalRows.map(({ result, key, standard }) => (
+                        <tr key={`${result.evidence_id}-${key}`}>
+                          <td>
+                            <div style={{ fontWeight: 700, color: 'var(--primary-light)' }}>{result.literal}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {result.literal_name}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ maxWidth: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
+                              {result.documento}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 700 }}>{standard.nombre}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{Math.round(standard.porcentaje)}%</div>
+                          </td>
+                          <td>
+                            <ScoreBar score={standard.puntaje} max={standard.puntaje_maximo} color={getScoreColor(standard.porcentaje)} />
+                          </td>
+                          <td>
+                            <div style={{ display: 'grid', gap: 8 }}>
+                              {(standard.criterios || []).map((criterion) => {
+                                const status = getCriterionStatus(criterion.puntaje, criterion.puntaje_maximo);
+                                return (
+                                  <div key={criterion.criterio} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1fr) auto auto', gap: 10, alignItems: 'center', paddingBottom: 8, borderBottom: '1px solid var(--border-light)' }}>
+                                    <div>
+                                      <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{criterion.criterio}</div>
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{criterion.observacion}</div>
+                                    </div>
+                                    <span className={`badge ${status.badge}`}>{status.label}</span>
+                                    <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: getScoreColor((criterion.puntaje / criterion.puntaje_maximo) * 100), minWidth: 48, textAlign: 'right' }}>
+                                      {criterion.puntaje}/{criterion.puntaje_maximo}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

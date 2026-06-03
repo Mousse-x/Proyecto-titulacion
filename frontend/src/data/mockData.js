@@ -288,6 +288,7 @@ export const mockSystemStats = {
   approved_docs: 89,
   rejected_docs: 7,
   avg_transparency: 73.1,
+  avg_transparency_integrated: 76.4,
   indicators_active: 18,
   observations_open: 3,
   last_calculation: "2026-04-12T08:00:00Z",
