@@ -672,6 +672,7 @@ def list_universities(request):
                 province         = data.get("province", ""),
                 city             = data.get("city", ""),
                 website_url      = data.get("website", ""),
+                transparency_url = data.get("transparency_url", ""),
                 institution_type = data.get("type", "Pública"),
                 is_active        = data.get("is_active", True),
                 created_at       = now,

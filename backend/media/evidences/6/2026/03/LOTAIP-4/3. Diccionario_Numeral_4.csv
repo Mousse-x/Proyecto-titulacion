@@ -1,0 +1,9 @@
+﻿Institución;Escuela Superior Politécnica de Chimborazo.
+ Descripción;Detalle de personas servidoras publicas que gocen de licencia de servicio o de comision de servicio
+ Nombre del Campo;Descripcion del campo
+ Apellidos y Nombres;Nombres y apellidos de la persona servidora 
+ Puesto Institucional;Puesto ocupado por la persona servidora publica correspondiente
+ Fecha de inicio;Fecha en la que inicia la licencia de servicio o la comision de servicio
+ Fecha de fin;Fecha en la que finaliza la licencia de servicio o la comision de servicio
+ Lugar;Entidad o pais de destino de la persona a la que se otorga la licencia de servicio o la comision de servicio
+ Tipo;"Tipo de licencia de servicio o de comision de servicio. Contempla todos los tipos de licencia sin remuneracion; comision de servicio con remuneracion y comision de servicio sin remuneracion establecidos en la normativa vigente "

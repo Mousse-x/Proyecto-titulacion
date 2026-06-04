@@ -9,8 +9,8 @@ export default function Login() {
   const { login, verify2fa, loading, error, errorData } = useAuth();
   const navigate = useNavigate();
 
-  // Tab: 'login' | 'register' | 'forgot'
-  const [tab, setTab] = useState('login');
+  // Tab: 'home' | 'login' | 'register' | 'forgot'
+  const [tab, setTab] = useState('home');
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
@@ -208,7 +208,7 @@ export default function Login() {
           </div>
 
           {/* Tabs — solo login y register, forgot es un panel oculto */}
-          {tab !== 'forgot' && (
+          {tab !== 'forgot' && tab !== 'home' && (
             <div style={{
               display: 'flex', gap: 4,
               background: 'var(--bg-tertiary)',
@@ -217,8 +217,8 @@ export default function Login() {
               marginBottom: 24,
             }}>
               {[
-                { id: 'login', label: '→ Iniciar sesión' },
-                { id: 'register', label: '✦ Registrarse' },
+                { id: 'login', label: 'Iniciar sesion' },
+                { id: 'register', label: 'Registrarse' },
               ].map(t => (
                 <button
                   key={t.id}
@@ -240,6 +240,26 @@ export default function Login() {
           )}
 
           {/* ── LOGIN PANEL ── */}
+          {tab === 'home' && (
+            <div className="login-home">
+              <h2 className="login-title">Sistema de Transparencia Institucional</h2>
+              <p className="login-subtitle">
+                Consulta, registra y evalua informacion publica con criterios LOTAIP, OGP, OCDE y ODS.
+              </p>
+              <div className="login-home-actions">
+                <button type="button" className="btn btn-primary btn-lg" onClick={() => switchTab('login')}>
+                  Iniciar sesion
+                </button>
+                <button type="button" className="btn btn-secondary btn-lg" onClick={() => switchTab('register')}>
+                  Registrarse
+                </button>
+              </div>
+              <div className="login-home-footer">
+                Correo institucional de la Escuela Superior Politecnica de Chimborazo - DTIC
+              </div>
+            </div>
+          )}
+
           {tab === 'login' && (
             <>
               {errorData?.error === 'ACCOUNT_LOCKED' ? (
@@ -457,9 +477,9 @@ export default function Login() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: 12, borderRadius: 'var(--radius)' }}>
+                  <div className="password-rules">
                     <div style={{ marginBottom: 6, fontWeight: 600 }}>Tu contraseña debe contener:</div>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <ul className="password-rules-list">
                       <li style={{ color: isLen ? 'var(--success)' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
                         {isLen ? '✅' : '○'} Mínimo 8 caracteres
                       </li>
@@ -488,19 +508,6 @@ export default function Login() {
                       onChange={e => setRegForm(p => ({ ...p, confirm: e.target.value }))}
                       required
                     />
-                  </div>
-
-                  {/* Role info badge */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                    background: 'var(--primary-subtle)', borderRadius: 'var(--radius)',
-                    border: '1px solid rgba(99,102,241,0.2)',
-                  }}>
-                    <span style={{ fontSize: '1.25rem' }}>🔍</span>
-                    <div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>Rol asignado: Auditor</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Acceso de lectura y análisis del sistema</div>
-                    </div>
                   </div>
 
                   {regError && (

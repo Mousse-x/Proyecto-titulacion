@@ -68,6 +68,7 @@ export default function App() {
           <Route path="/auditor/index"        element={<ProtectedRoute allowedRoles={[4]}><WithLayout><TransparencyIndexPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/comparatives" element={<ProtectedRoute allowedRoles={[4]}><WithLayout><ComparativesPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/rankings"     element={<ProtectedRoute allowedRoles={[4]}><WithLayout><AuditorRankingsPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/auditor/reports"      element={<ProtectedRoute allowedRoles={[4]}><WithLayout><ReportsPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/documents"    element={<ProtectedRoute allowedRoles={[4]}><WithLayout><DocumentsAuditorPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/validation"   element={<ProtectedRoute allowedRoles={[4]}><WithLayout><ValidationPage readOnly /></WithLayout></ProtectedRoute>} />
 

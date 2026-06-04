@@ -1,0 +1,14 @@
+Institucion;Nombre de la Entidad
+Descripcion;Detalle de Audiencias y reuniones
+Nombre del campo;Descripcion del campo
+Nombres y Apellidos;Nombres y Apellidos de la autoridad
+Puesto institucional;Puesto al que pertenece la autoridad
+Asunto;Tema tratado en la audiencia o reunion
+Fecha de la reunion;Fecha en la que se realiza la audiencia o reunion
+Modalidad;Modalidad en la que se realiza la reunion  - presencial o virtual
+Lugar;Lugar en el que se realiza la reunion  presencial.  Si la reunion es telematica en conjunto de datos se debe incluir NO APLICA
+Descripcion de la reunion;Resumen de lo tratado en la audiencia o reunion
+Duracion de la reunion;Tiempo de duracion de la audiencia o reunion
+Personas externas;Personas externas a la institucion que participan
+Institucion externa;Nombre de la institucion externa
+Enlace para descargar el registro de asistencia de las personas que participaron en las reuniones o audiencias;Enlace para descargar el registro de asistencia de las personas que participaron en las reuniones o audiencias

@@ -554,6 +554,57 @@ MONTH_RE = re.compile(
     re.IGNORECASE,
 )
 
+DPE_ENTITY_PRESETS = {
+    "1126": {
+        "acronym": "UNL",
+        "name": "Universidad Nacional de Loja",
+        "transparency_url": "https://transparencia.dpe.gob.ec/entidades/1126",
+    },
+}
+
+
+def _get_or_create_dpe_university(transparency_url, acronym=None, name=None):
+    match = re.search(r"/entidades/(\d+)", transparency_url or "")
+    if not match:
+        return None, "URL de transparencia DPE invalida. Usa https://transparencia.dpe.gob.ec/entidades/XXXX"
+
+    entity_id = match.group(1)
+    preset = DPE_ENTITY_PRESETS.get(entity_id, {})
+    acronym = (acronym or preset.get("acronym") or f"DPE-{entity_id}").strip().upper()
+    name = (name or preset.get("name") or f"Entidad DPE {entity_id}").strip()
+
+    existing = University.objects.filter(transparency_url__icontains=f"/entidades/{entity_id}").first()
+    if existing:
+        if not existing.is_active:
+            existing.is_active = True
+            existing.updated_at = timezone.now()
+            existing.save(update_fields=["is_active", "updated_at"])
+        return existing, None
+
+    existing = University.objects.filter(acronym=acronym).first()
+    if existing:
+        existing.transparency_url = transparency_url
+        existing.name = existing.name or name
+        existing.is_active = True
+        existing.updated_at = timezone.now()
+        existing.save(update_fields=["transparency_url", "name", "is_active", "updated_at"])
+        return existing, None
+
+    now = timezone.now()
+    university = University.objects.create(
+        name=name,
+        acronym=acronym,
+        province="",
+        city="",
+        website_url="",
+        transparency_url=transparency_url,
+        institution_type="Publica",
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    return university, None
+
 
 @csrf_exempt
 def scrape_espoch(request):
@@ -575,9 +626,22 @@ def scrape_espoch(request):
         return JsonResponse({"error": "JSON inválido"}, status=400)
 
     university_id = body.get("university_id")
+    transparency_url = (body.get("transparency_url") or "").strip()
+    university_name = (body.get("university_name") or "").strip()
+    university_acronym = (body.get("university_acronym") or "").strip()
     year       = body.get("year")
     month      = body.get("month")
     user_id    = body.get("user_id")
+
+    if not university_id and transparency_url:
+        university, create_error = _get_or_create_dpe_university(
+            transparency_url,
+            acronym=university_acronym,
+            name=university_name,
+        )
+        if create_error:
+            return JsonResponse({"error": create_error}, status=400)
+        university_id = university.id
 
     if not university_id or not year or not month:
         return JsonResponse({"error": "Faltan parámetros: university_id, year, month"}, status=400)

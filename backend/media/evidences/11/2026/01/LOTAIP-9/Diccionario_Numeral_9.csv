@@ -1,0 +1,9 @@
+Institución;Institución
+Descripción;Listado de las empresas y personas, jurídicas o naturales, que han incumplido contratos. NO APLICA en el periodo no se registra incumplimiento
+Nombre del campo;Descripción del campo
+No.;Número secuencial en el registro de la información
+RUC - Número Identificación de la empresa o persona contratista;Registro Único de Contribuyentes o número de identificación de la empresa o persona contratista
+Número de contrato - código del proceso de contratación fallido o incumplido;Número de contrato - código del proceso de contratación fallido o incumplido
+Monto del contrato incumplido;Monto del contrato que ha sido incumplido o no ha sido cumplido según lo acordado
+Fecha desde;Fecha de inicio o inicio del período de tiempo considerado para el incumplimiento o falla
+Fecha hasta;Fecha de finalización o final del período de tiempo considerado para el incumplimiento o falla

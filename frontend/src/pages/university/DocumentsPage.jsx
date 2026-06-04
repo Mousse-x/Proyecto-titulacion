@@ -4,6 +4,15 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
 const MEDIA_BASE = 'http://127.0.0.1:8000';
+const DPE_SCRAPER_PRESETS = [
+  {
+    value: '__dpe_1126',
+    label: 'UNL - Universidad Nacional de Loja',
+    acronym: 'UNL',
+    name: 'Universidad Nacional de Loja',
+    transparency_url: 'https://transparencia.dpe.gob.ec/entidades/1126',
+  },
+];
 
 const STATUS_CONFIG = {
   pendiente:  { label: 'Pendiente',  color: 'var(--warning)',  bg: 'var(--warning-subtle)',  icon: '⏳' },
@@ -414,6 +423,24 @@ export default function DocumentsPage() {
     setScrapeResult(null);
     try {
       const token = sessionStorage.getItem('auth_token'); // o cookie
+      const selectedPreset = DPE_SCRAPER_PRESETS.find((item) => item.value === scrapeForm.university_id);
+      const scrapePayload = selectedPreset
+        ? {
+            period_id: 1,
+            user_id: user.id,
+            transparency_url: selectedPreset.transparency_url,
+            university_name: selectedPreset.name,
+            university_acronym: selectedPreset.acronym,
+            year: scrapeForm.year,
+            month: scrapeForm.month,
+          }
+        : {
+            period_id: 1,
+            user_id: user.id,
+            university_id: scrapeForm.university_id,
+            year: scrapeForm.year,
+            month: scrapeForm.month,
+          };
       // Usamos fetch nativo para leer el stream en tiempo real
       const response = await fetch('http://127.0.0.1:8000/api/scraper/espoch/', {
         method: 'POST',
@@ -421,13 +448,7 @@ export default function DocumentsPage() {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({
-          period_id: 1,
-          user_id: user.id,
-          university_id: scrapeForm.university_id,
-          year: scrapeForm.year,
-          month: scrapeForm.month
-        })
+        body: JSON.stringify(scrapePayload)
       });
 
       if (!response.ok) {
@@ -735,6 +756,11 @@ export default function DocumentsPage() {
                       onChange={e => setForm(p => ({ ...p, university_id: e.target.value }))}
                       disabled={!!user.university_id}>
                       <option value="">— Seleccione una universidad —</option>
+                      {DPE_SCRAPER_PRESETS
+                        .filter((preset) => !universities.some((u) => u.transparency_url === preset.transparency_url))
+                        .map((preset) => (
+                          <option key={preset.value} value={preset.value}>{preset.label}</option>
+                        ))}
                       {universities.map(u => (
                         <option key={u.id} value={u.id}>{u.name}</option>
                       ))}
