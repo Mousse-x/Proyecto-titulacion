@@ -208,7 +208,9 @@ def list_evidences(request):
                 file_type = ext_map.get(ext, "PDF")
 
                 safe_name = re.sub(r"[^a-zA-Z0-9._\-]", "_", orig_name)
-                rel_dir   = f"evidences/{university_id}/{indicator_id}"
+                period_year = period.year if period else timezone.now().year
+                month_folder = f"{int(month_val):02d}" if month_val else "sin_mes"
+                rel_dir   = f"evidences/{university_id}/{period_year}/{month_folder}/{indicator.code}"
                 abs_dir   = Path(settings.MEDIA_ROOT) / rel_dir
                 abs_dir.mkdir(parents=True, exist_ok=True)
 

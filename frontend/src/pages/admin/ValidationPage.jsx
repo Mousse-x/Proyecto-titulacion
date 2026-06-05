@@ -58,6 +58,7 @@ export default function ValidationPage({ readOnly = false }) {
   const [results, setResults] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
   const [activeTab, setActiveTab] = useState('lotaip');
+  const [expandedInternationalFolders, setExpandedInternationalFolders] = useState({});
   const [error, setError] = useState(null);
 
   const MONTHS = [
@@ -154,6 +155,33 @@ export default function ValidationPage({ readOnly = false }) {
     if (pct > 0) return { label: 'Parcial', badge: 'badge-warning' };
     return { label: 'No cumple', badge: 'badge-danger' };
   };
+  const getObservationConfig = (observation = '') => {
+    const text = String(observation);
+    if (text.startsWith('✅')) return { label: 'Correcto', color: 'var(--success)', bg: 'var(--success-subtle)' };
+    if (text.startsWith('⚠️') || text.startsWith('⚠')) return { label: 'Revisar', color: 'var(--warning)', bg: 'var(--warning-subtle)' };
+    if (text.startsWith('❌')) return { label: 'Falta', color: 'var(--danger)', bg: 'var(--danger-subtle)' };
+    if (text.startsWith('📋')) return { label: 'Detalle', color: 'var(--info)', bg: 'var(--info-subtle)' };
+    return { label: 'Info', color: 'var(--primary)', bg: 'var(--primary-subtle)' };
+  };
+  const cleanObservation = (observation = '') =>
+    String(observation).replace(/^(✅|⚠️|⚠|❌|📋)\s*/u, '');
+  const getLiteralSortValue = (literal = '') => {
+    const match = literal.match(/(\d+(?:\.\d+)?)/);
+    return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+  };
+  const getDocumentKind = (documento = '') => {
+    const lower = documento.toLowerCase();
+    if (lower.includes('conjunto')) return 'Conjunto de datos';
+    if (lower.includes('metadato')) return 'Metadatos';
+    if (lower.includes('diccionario')) return 'Diccionario';
+    return 'Documento';
+  };
+  const toggleInternationalFolder = (literal) => {
+    setExpandedInternationalFolders((prev) => ({
+      ...prev,
+      [literal]: !(prev[literal] ?? true),
+    }));
+  };
   const internationalKeys = ['ogp', 'ocde', 'ods'];
   const internationalRows = results.flatMap((r) =>
     internationalKeys
@@ -176,6 +204,20 @@ export default function ValidationPage({ readOnly = false }) {
       pct: max ? Number(((avg / max) * 100).toFixed(2)) : 0,
     };
   });
+  const internationalGroups = Object.values(
+    results.reduce((acc, result) => {
+      const key = result.literal || 'Sin literal';
+      if (!acc[key]) {
+        acc[key] = {
+          literal: key,
+          literal_name: result.literal_name,
+          documents: [],
+        };
+      }
+      acc[key].documents.push(result);
+      return acc;
+    }, {})
+  ).sort((a, b) => getLiteralSortValue(a.literal) - getLiteralSortValue(b.literal));
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -315,7 +357,7 @@ export default function ValidationPage({ readOnly = false }) {
           )}
 
           {results.length > 0 && (
-            <div className="tabs" style={{ marginBottom: 16 }}>
+            <div className="tabs">
               <button
                 className={`tab ${activeTab === 'lotaip' ? 'active' : ''}`}
                 onClick={() => { setActiveTab('lotaip'); setExpandedRow(null); }}
@@ -421,15 +463,31 @@ export default function ValidationPage({ readOnly = false }) {
                                   </div>
 
                                   {/* Observations */}
-                                  <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
-                                    Observaciones:
-                                  </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    {(r.observaciones || []).map((obs, oi) => (
-                                      <div key={oi} style={{ fontSize: '0.8125rem', color: 'var(--text)', padding: '4px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                        {obs}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                                    <div>
+                                      <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)' }}>
+                                        Observaciones
                                       </div>
-                                    ))}
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                                        Hallazgos de la validacion automatica
+                                      </div>
+                                    </div>
+                                    <span className="tag">{(r.observaciones || []).length} registros</span>
+                                  </div>
+                                  <div style={{ display: 'grid', gap: 8 }}>
+                                    {(r.observaciones || []).map((obs, oi) => {
+                                      const config = getObservationConfig(obs);
+                                      return (
+                                        <div key={oi} style={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 12, alignItems: 'start', padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderLeft: `4px solid ${config.color}`, borderRadius: 8 }}>
+                                          <span style={{ justifySelf: 'start', padding: '3px 9px', borderRadius: 999, background: config.bg, color: config.color, fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                                            {config.label}
+                                          </span>
+                                          <div style={{ fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
+                                            {cleanObservation(obs)}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               </td>
@@ -469,61 +527,91 @@ export default function ValidationPage({ readOnly = false }) {
                   <span style={{ fontWeight: 600 }}>Detalle de evaluacion internacional</span>
                   <span className="tag">{internationalRows.length} evaluaciones</span>
                 </div>
-                <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Literal</th>
-                        <th>Documento</th>
-                        <th>Marco</th>
-                        <th>Puntaje</th>
-                        <th>Criterios</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {internationalRows.map(({ result, key, standard }) => (
-                        <tr key={`${result.evidence_id}-${key}`}>
-                          <td>
-                            <div style={{ fontWeight: 700, color: 'var(--primary-light)' }}>{result.literal}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {result.literal_name}
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ maxWidth: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
-                              {result.documento}
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 700 }}>{standard.nombre}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{Math.round(standard.porcentaje)}%</div>
-                          </td>
-                          <td>
-                            <ScoreBar score={standard.puntaje} max={standard.puntaje_maximo} color={getScoreColor(standard.porcentaje)} />
-                          </td>
-                          <td>
-                            <div style={{ display: 'grid', gap: 8 }}>
-                              {(standard.criterios || []).map((criterion) => {
-                                const status = getCriterionStatus(criterion.puntaje, criterion.puntaje_maximo);
-                                return (
-                                  <div key={criterion.criterio} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1fr) auto auto', gap: 10, alignItems: 'center', paddingBottom: 8, borderBottom: '1px solid var(--border-light)' }}>
-                                    <div>
-                                      <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{criterion.criterio}</div>
-                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{criterion.observacion}</div>
+                <div style={{ display: 'grid', gap: 10, padding: 14, background: 'var(--bg-secondary)' }}>
+                  {internationalGroups.map((group) => {
+                    const isOpen = expandedInternationalFolders[group.literal] ?? false;
+                    return (
+                      <div key={group.literal} style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)', overflow: 'hidden' }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleInternationalFolder(group.literal)}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'transparent',
+                            padding: '14px 18px',
+                            display: 'grid',
+                            gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
+                            gap: 12,
+                            alignItems: 'center',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ fontSize: '1.1rem', color: 'var(--primary-light)' }}>{isOpen ? '▾' : '▸'}</span>
+                          <span>
+                            <span style={{ display: 'block', fontWeight: 800, color: 'var(--primary-light)' }}>{group.literal}</span>
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {group.literal_name}
+                            </span>
+                          </span>
+                          <span className="tag">{group.documents.length} archivos</span>
+                          <span className="tag">{group.documents.length * internationalKeys.length} evaluaciones</span>
+                        </button>
+
+                        {isOpen && (
+                          <div style={{ display: 'grid', gap: 12, padding: '0 14px 14px' }}>
+                            {group.documents.map((result) => (
+                              <div key={result.evidence_id} style={{ border: '1px solid var(--border-light)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-primary)' }}>
+                                <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-light)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
+                                  <div>
+                                    <div style={{ fontWeight: 700, color: 'var(--text)' }}>{getDocumentKind(result.documento)}</div>
+                                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {result.documento}
                                     </div>
-                                    <span className={`badge ${status.badge}`}>{status.label}</span>
-                                    <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: getScoreColor((criterion.puntaje / criterion.puntaje_maximo) * 100), minWidth: 48, textAlign: 'right' }}>
-                                      {criterion.puntaje}/{criterion.puntaje_maximo}
-                                    </span>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                                  <span className="tag">Archivo</span>
+                                </div>
+
+                                <div style={{ display: 'grid' }}>
+                                  {internationalKeys.map((key) => {
+                                    const standard = result.evaluacion_internacional?.[key];
+                                    if (!standard) return null;
+                                    return (
+                                      <div key={`${result.evidence_id}-${key}`} style={{ display: 'grid', gridTemplateColumns: '170px 160px minmax(0, 1fr)', gap: 18, padding: '14px', borderBottom: '1px solid var(--border-light)', alignItems: 'start' }}>
+                                        <div>
+                                          <div style={{ fontWeight: 800 }}>{standard.nombre}</div>
+                                          <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{Math.round(standard.porcentaje)}%</div>
+                                        </div>
+                                        <ScoreBar score={standard.puntaje} max={standard.puntaje_maximo} color={getScoreColor(standard.porcentaje)} />
+                                        <div style={{ display: 'grid', gap: 8 }}>
+                                          {(standard.criterios || []).map((criterion) => {
+                                            const status = getCriterionStatus(criterion.puntaje, criterion.puntaje_maximo);
+                                            return (
+                                              <div key={criterion.criterio} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1fr) auto auto', gap: 10, alignItems: 'center', paddingBottom: 8, borderBottom: '1px solid var(--border-light)' }}>
+                                                <div>
+                                                  <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{criterion.criterio}</div>
+                                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{criterion.observacion}</div>
+                                                </div>
+                                                <span className={`badge ${status.badge}`}>{status.label}</span>
+                                                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: getScoreColor((criterion.puntaje / criterion.puntaje_maximo) * 100), minWidth: 48, textAlign: 'right' }}>
+                                                  {criterion.puntaje}/{criterion.puntaje_maximo}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

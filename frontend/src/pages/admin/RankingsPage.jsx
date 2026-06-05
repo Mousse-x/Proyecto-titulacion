@@ -4,6 +4,7 @@ import RankingBar from '../../components/charts/RankingBar';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
 import { getScoreColor, getScoreLabel } from '../../data/mockData';
+import { getUniversityLogo } from '../../data/universityLogos';
 
 export default function RankingsPage() {
   const [selected, setSelected] = useState(null);
@@ -28,6 +29,8 @@ export default function RankingsPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const selectedLogo = selected ? getUniversityLogo(selected) : null;
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -60,31 +63,34 @@ export default function RankingsPage() {
               <div className="card-header">
                 <span className="card-title">Tabla de clasificacion {year}</span>
               </div>
-              {rankings.map((u, i) => (
-                <div
-                  key={u.id}
-                  className="doc-status-row"
-                  style={{ cursor: 'pointer', border: selected?.id === u.id ? '1px solid var(--primary)' : '1px solid var(--border)', background: selected?.id === u.id ? 'var(--primary-subtle)' : undefined }}
-                  onClick={() => setSelected(u)}
-                >
-                  <div className={`rank-number rank-${i < 3 ? i + 1 : 'n'}`}>{i + 1}</div>
-                  <div style={{ width: 40, height: 40, borderRadius: 8, background: `${u.color}22`, border: `1px solid ${u.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 800, color: u.color }}>
-                    {u.logo_initials}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.9375rem' }}>{u.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{u.full_name}</div>
-                    <div className="progress-bar" style={{ marginTop: 6 }}>
-                      <div className="progress-fill" style={{ width: `${u.transparency_score}%`, background: getScoreColor(u.transparency_score) }} />
+              {rankings.map((u, i) => {
+                const logo = getUniversityLogo(u);
+                return (
+                  <div
+                    key={u.id}
+                    className="doc-status-row"
+                    style={{ cursor: 'pointer', border: selected?.id === u.id ? '1px solid var(--primary)' : '1px solid var(--border)', background: selected?.id === u.id ? 'var(--primary-subtle)' : undefined }}
+                    onClick={() => setSelected(u)}
+                  >
+                    <div className={`rank-number rank-${i < 3 ? i + 1 : 'n'}`}>{i + 1}</div>
+                    <div style={{ width: 40, height: 40, borderRadius: 8, background: logo ? '#fff' : `${u.color}22`, border: logo ? '1px solid var(--border)' : `1px solid ${u.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 800, color: u.color, padding: logo ? 4 : 0 }}>
+                      {logo ? <img src={logo} alt={`Logo ${u.full_name || u.name}`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : u.logo_initials}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.9375rem' }}>{u.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{u.full_name}</div>
+                      <div className="progress-bar" style={{ marginTop: 6 }}>
+                        <div className="progress-fill" style={{ width: `${u.transparency_score}%`, background: getScoreColor(u.transparency_score) }} />
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 900, color: getScoreColor(u.transparency_score) }}>{u.transparency_score}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Integrado: {u.integrated_transparency_score || 0}%</div>
+                      <Badge status={getScoreLabel(u.transparency_score)} />
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 900, color: getScoreColor(u.transparency_score) }}>{u.transparency_score}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Integrado: {u.integrated_transparency_score || 0}%</div>
-                    <Badge status={getScoreLabel(u.transparency_score)} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -92,8 +98,8 @@ export default function RankingsPage() {
                 {selected && (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 12, background: `${selected.color}22`, border: `2px solid ${selected.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: selected.color, fontSize: '0.875rem' }}>
-                        {selected.logo_initials}
+                      <div style={{ width: 52, height: 52, borderRadius: 12, background: selectedLogo ? '#fff' : `${selected.color}22`, border: selectedLogo ? '1px solid var(--border)' : `2px solid ${selected.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: selected.color, fontSize: '0.875rem', padding: selectedLogo ? 5 : 0 }}>
+                        {selectedLogo ? <img src={selectedLogo} alt={`Logo ${selected.full_name || selected.name}`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : selected.logo_initials}
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: '1.125rem', color: 'var(--text)' }}>{selected.name}</div>

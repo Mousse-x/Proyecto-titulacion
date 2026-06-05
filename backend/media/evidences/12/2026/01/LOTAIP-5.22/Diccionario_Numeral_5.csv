@@ -1,0 +1,15 @@
+Institucion;Escuela Politecnica Nacional
+Descripcion;Servicios que se ofrecen y forma de acceder a ellos - Formato y formulario de solicitudes
+Nombre del Campo;Descripcion del campo
+Denominacion del servicio publico que se brinda;Nombre del servicio que brinda la entidad
+Enlace para acceder al reporte del servicio;"Enlace que permite acceder al reporte del servicio brindado. En el enlace se debe incluir  descripcion del servicio; a quien esta dirigido; requisitos para acceder al servicio; procedimiento para acceder al servicio; costo del servicio; oficinas que ofrecen el servicio; horarios de atencion; tiempo estimado de respuesta
+Esta columna puede contener:
+No disponible; La institucion se encuentra en proceso de inclusion de la informacion"
+Numero de personas que acceden mensualmente al servicio institucional;Registro mensual del numero de personas que acceden a los servicios que ofrece la institucion
+Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio;Enlace para poder descargar el formulario o formato del servicio
+Enlace para el servicio por internet en linea;"Enlace para acceder al servicio en linea directamente
+Esta columna puede contener:
+No disponible; El tramite aun no esta disponible en linea"
+Porcentaje de satisfaccion sobre el uso del servicio;"Porcentaje de satisfaccion sobre el uso del servicio obtenido de encuestas a las personas que usaron el servicio
+Esta columna puede contener:
+No disponible; La institucion se encuentra en proceso de construccion de una encuesta para medir la satisfaccion del servicio"

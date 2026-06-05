@@ -4,8 +4,9 @@ import Modal, { ConfirmModal } from '../../components/common/Modal';
 import Badge from '../../components/common/Badge';
 import { ScoreCard } from '../../components/common/StatCard';
 import { api } from '../../api/client';
+import { getUniversityLogo } from '../../data/universityLogos';
 
-const EMPTY = { name: '', full_name: '', city: '', province: '', type: 'Pública', website: '', is_active: true };
+const EMPTY = { name: '', full_name: '', city: '', province: '', type: 'Pública', website: '', dpe_entity_id: '', logo_file: null, logo_url: '', is_active: true };
 
 export default function UniversitiesPage() {
   const [univs, setUnivs]       = useState([]);
@@ -34,7 +35,7 @@ export default function UniversitiesPage() {
   useEffect(() => { fetchUnivs(); }, [fetchUnivs]);
 
   const openCreate = () => { setSelected(null); setForm(EMPTY); setModal(true); };
-  const openEdit   = (u)  => { setSelected(u); setForm({ name: u.name, full_name: u.full_name, city: u.city || '', province: u.province || '', type: u.type || 'Pública', website: u.website || '', is_active: u.is_active }); setModal(true); };
+  const openEdit   = (u)  => { setSelected(u); setForm({ name: u.name, full_name: u.full_name, city: u.city || '', province: u.province || '', type: u.type || 'Pública', website: u.website || '', dpe_entity_id: u.dpe_entity_id || '', logo_file: null, logo_url: u.logo_url || '', is_active: u.is_active }); setModal(true); };
 
   const handleSave = async () => {
     setSaving(true);
@@ -64,17 +65,20 @@ export default function UniversitiesPage() {
   };
 
   const columns = [
-    { key: 'name', label: 'Institución', render: (v, row) => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 8, background: `${row.color}22`, border: `1px solid ${row.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 800, color: row.color, flexShrink: 0 }}>
-          {row.logo_initials}
+    { key: 'name', label: 'Institución', render: (v, row) => {
+      const logo = getUniversityLogo(row);
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: logo ? '#fff' : `${row.color}22`, border: logo ? '1px solid var(--border)' : `1px solid ${row.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: 800, color: row.color, flexShrink: 0, padding: logo ? 4 : 0 }}>
+            {logo ? <img src={logo} alt={`Logo ${row.full_name || row.name}`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : row.logo_initials}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, color: 'var(--text)' }}>{v}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{row.city}{row.province ? `, ${row.province}` : ''}</div>
+          </div>
         </div>
-        <div>
-          <div style={{ fontWeight: 700, color: 'var(--text)' }}>{v}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{row.city}{row.province ? `, ${row.province}` : ''}</div>
-        </div>
-      </div>
-    )},
+      );
+    }},
     { key: 'type', label: 'Tipo', render: (v) => <Badge status={v} /> },
     { key: 'transparency_score', label: 'Índice', sortable: true,
       render: (v) => (
@@ -86,9 +90,9 @@ export default function UniversitiesPage() {
     { key: 'is_active', label: 'Estado', render: (v) => <Badge status={v ? 'Activo' : 'Inactivo'} /> },
     { key: 'id', label: 'Acciones', sortable: false, render: (_, row) => (
       <div className="table-actions">
-        <button className="btn btn-secondary btn-sm" onClick={() => setDetail(row)}>👁️</button>
-        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(row)}>✏️</button>
-        <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: row.id })}>🗑️</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setDetail(row)}>Ver</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(row)}>Editar</button>
+        <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: row.id })}>Eliminar</button>
       </div>
     )},
   ];
@@ -101,7 +105,7 @@ export default function UniversitiesPage() {
           <p>{loading ? 'Cargando...' : `${univs.length} instituciones registradas en el sistema`}</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary" onClick={fetchUnivs} disabled={loading}>🔄</button>
+          <button className="btn btn-secondary" onClick={fetchUnivs} disabled={loading}>Actualizar</button>
           <button className="btn btn-primary" onClick={openCreate}>+ Agregar Universidad</button>
         </div>
       </div>
@@ -113,12 +117,12 @@ export default function UniversitiesPage() {
             Cargando universidades...
           </div>
         ) : error ? (
-          <div className="alert alert-danger" style={{ margin: 24 }}>⚠️ {error}</div>
+          <div className="alert alert-danger" style={{ margin: 24 }}>Alerta: {error}</div>
         ) : univs.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 12 }}>🏛️</div>
+            <div style={{ fontSize: '2rem', marginBottom: 12 }}>UN</div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>No hay universidades registradas</div>
-            <div style={{ fontSize: '0.875rem' }}>Agrega la primera institución con el botón "+ Agregar Universidad"</div>
+            <div style={{ fontSize: '0.875rem' }}>Agrega la primera institucion con el boton "+ Agregar Universidad"</div>
           </div>
         ) : (
           <DataTable columns={columns} data={univs} searchKeys={['name', 'full_name', 'city', 'province']} />
@@ -127,7 +131,7 @@ export default function UniversitiesPage() {
 
       {/* Detail modal */}
       {detailView && (
-        <Modal isOpen={!!detailView} onClose={() => setDetail(null)} title={`🏛️ ${detailView.full_name || detailView.name}`} size="lg">
+        <Modal isOpen={!!detailView} onClose={() => setDetail(null)} title={`Universidad ${detailView.full_name || detailView.name}`} size="lg">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             {[
               ['Siglas', detailView.name],
@@ -136,15 +140,17 @@ export default function UniversitiesPage() {
               ['Ciudad', detailView.city],
               ['Provincia', detailView.province],
               ['Sitio web', detailView.website],
+              ['ID DPE', detailView.dpe_entity_id],
+              ['URL DPE', detailView.transparency_url],
             ].map(([k, v]) => (
               <div key={k} style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', padding: '10px 14px' }}>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{k}</div>
-                <div style={{ fontWeight: 600, color: 'var(--text)' }}>{v || '—'}</div>
+                <div style={{ fontWeight: 600, color: 'var(--text)' }}>{v || '-'}</div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 20, padding: '16px', background: 'var(--primary-subtle)', borderRadius: 'var(--radius)', border: '1px solid rgba(99,102,241,0.2)', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Índice de Transparencia</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Indice de Transparencia</div>
             <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary-light)', letterSpacing: '-0.04em' }}>{detailView.transparency_score ?? 0}</div>
           </div>
         </Modal>
@@ -152,7 +158,7 @@ export default function UniversitiesPage() {
 
       {/* Edit/Create modal */}
       <Modal isOpen={modal} onClose={() => setModal(false)}
-        title={selected ? '✏️ Editar Universidad' : '➕ Nueva Universidad'}
+        title={selected ? 'Editar Universidad' : '+ Nueva Universidad'}
         footer={<><button className="btn btn-secondary" onClick={() => setModal(false)} disabled={saving}>Cancelar</button><button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button></>}
         size="lg"
       >
@@ -163,12 +169,35 @@ export default function UniversitiesPage() {
             ['city', 'Ciudad', 'text'],
             ['province', 'Provincia', 'text'],
             ['website', 'Sitio web', 'url'],
+            ['dpe_entity_id', 'ID DPE Transparencia (ej: 1365)', 'text'],
           ].map(([k, l, t]) => (
             <div className="form-group" key={k}>
               <label className="form-label">{l}</label>
               <input className="form-input" type={t} value={form[k] || ''} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
             </div>
           ))}
+          <div className="form-group">
+            <label className="form-label">Logo de la universidad</label>
+            <input
+              className="form-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={e => {
+                const file = e.target.files?.[0] || null;
+                setForm(p => ({ ...p, logo_file: file }));
+              }}
+            />
+            {(form.logo_file || form.logo_url) && (
+              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 8, background: '#fff', border: '1px solid var(--border)', padding: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <img src={form.logo_file ? URL.createObjectURL(form.logo_file) : form.logo_url} alt="Vista previa del logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                  {form.logo_file ? form.logo_file.name : 'Logo actual'}
+                </span>
+              </div>
+            )}
+          </div>
           <div className="form-group">
             <label className="form-label">Tipo</label>
             <select className="form-input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>

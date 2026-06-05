@@ -4,6 +4,7 @@ import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
 import { getScoreColor, getScoreLabel } from '../../data/mockData';
+import { getUniversityLogo } from '../../data/universityLogos';
 
 export default function ComparativesPage() {
   const [rankings, setRankings] = useState([]);
@@ -71,11 +72,17 @@ export default function ComparativesPage() {
       ) : (
         <>
           <div className="grid-2" style={{ marginBottom: 24 }}>
-            {[[uA, univA, setUnivA, 'A'], [uB, univB, setUnivB, 'B']].map(([u, val, setter, label]) => (
+            {[[uA, univA, setUnivA, 'A'], [uB, univB, setUnivB, 'B']].map(([u, val, setter, label]) => {
+              const logo = getUniversityLogo(u);
+              return (
               <div key={label} className="card">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--primary-subtle)', border: '2px solid var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary-light)', fontSize: '0.8125rem', flexShrink: 0 }}>
-                    {u?.name || label}
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: logo ? '#fff' : 'var(--primary-subtle)', border: logo ? '1px solid var(--border)' : '2px solid var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary-light)', fontSize: '0.8125rem', flexShrink: 0, padding: logo ? 5 : 0 }}>
+                    {logo ? (
+                      <img src={logo} alt={`Logo ${u?.full_name || u?.name || label}`} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                    ) : (
+                      u?.name || label
+                    )}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700 }}>{u?.name || 'N/A'}</div>
@@ -91,7 +98,8 @@ export default function ComparativesPage() {
                   <span className="tag" style={{ marginLeft: 'auto' }}>Nacional {u?.transparency_score || 0}%</span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="grid-2" style={{ marginBottom: 24 }}>

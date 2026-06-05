@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../api/client';
+import { ArrowLeftIcon, DownloadIcon, EyeIcon, FolderIcon } from '../../components/common/ActionIcons';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -54,6 +55,7 @@ export default function DocumentsAuditorPage() {
   const [filterUniv, setFilterUniv] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
   const [tab, setTab]             = useState('all');
+  const [folderPath, setFolderPath] = useState([]);
 
   const loadDocs = useCallback(async () => {
     setLoading(true);
@@ -98,6 +100,67 @@ export default function DocumentsAuditorPage() {
   const compliancePct = totalReviewed > 0
     ? Math.round((counts.cumple / totalReviewed) * 100)
     : 0;
+
+  const getYear = (doc) => doc.year ? String(doc.year) : 'Sin periodo';
+  const getMonthName = (doc) => {
+    const m = doc.month || (doc.uploaded_at ? parseInt(doc.uploaded_at.split('-')[1], 10) : null);
+    const found = MONTHS.find(x => x.v === m);
+    return found ? found.l : 'Sin Mes';
+  };
+  const getLiteralFolderName = (doc) => {
+    const code = doc.indicator_code || 'Sin codigo';
+    const name = doc.indicator_name || doc.title || 'Sin literal';
+    return `${code} - ${name}`;
+  };
+
+  let currentDocs = displayed;
+  if (folderPath.length > 0) currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
+  if (folderPath.length > 1) currentDocs = currentDocs.filter(d => getYear(d) === folderPath[1]);
+  if (folderPath.length > 2) currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[2]);
+  if (folderPath.length > 3) currentDocs = currentDocs.filter(d => getLiteralFolderName(d) === folderPath[3]);
+
+  let viewType = 'docs';
+  if (folderPath.length === 0) viewType = 'universities';
+  else if (folderPath.length === 1) viewType = 'years';
+  else if (folderPath.length === 2) viewType = 'months';
+  else if (folderPath.length === 3) viewType = 'literals';
+
+  let itemsToRender = [];
+  if (viewType === 'universities') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = d.university_name || 'Universidad';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).sort().map(k => ({ type: 'folder', name: k, count: groups[k].length }));
+  } else if (viewType === 'years') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = getYear(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).sort((a, b) => Number(b) - Number(a)).map(k => ({ type: 'folder', name: k, count: groups[k].length }));
+  } else if (viewType === 'months') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = getMonthName(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length }));
+  } else if (viewType === 'literals') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = getLiteralFolderName(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).sort().map(k => ({ type: 'folder', name: k, count: groups[k].length }));
+  } else {
+    itemsToRender = currentDocs.map(d => ({ type: 'doc', ...d }));
+  }
 
   // ── Vista Previa Avanzada ──────────────────────────────────
   const openPreview = async (doc) => {
@@ -182,7 +245,7 @@ export default function DocumentsAuditorPage() {
       </div>
 
       {/* Barra de progreso de cumplimiento */}
-      {totalReviewed > 0 && (
+      {false && totalReviewed > 0 && (
         <div style={{
           background: 'var(--surface-elevated)', borderRadius: 12,
           padding: '16px 20px', marginBottom: 20,
@@ -214,12 +277,12 @@ export default function DocumentsAuditorPage() {
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <select className="form-input" style={{ maxWidth: 220, flex: 1 }}
-          value={filterUniv} onChange={e => setFilterUniv(e.target.value)}>
+          value={filterUniv} onChange={e => { setFilterUniv(e.target.value); setFolderPath([]); }}>
           <option value="">Todas las universidades</option>
           {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <select className="form-input" style={{ maxWidth: 180, flex: 1 }}
-          value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
+          value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setFolderPath([]); }}>
           <option value="">Todos los meses</option>
           {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
         </select>
@@ -236,18 +299,59 @@ export default function DocumentsAuditorPage() {
           ['inconsistente', `⚠️ Inconsistentes (${counts.inconsistente})`],
           ['pendiente', `⏳ Pendientes (${counts.pendiente})`],
         ].map(([k, l]) => (
-          <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
+          <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => { setTab(k); setFolderPath([]); }}>
             {l}
           </button>
         ))}
       </div>
+
+      {folderPath.length > 0 && (
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface-elevated)', padding: '10px 16px', borderRadius: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setFolderPath(p => p.slice(0, -1))}>
+            <ArrowLeftIcon /> Volver
+          </button>
+          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => setFolderPath([])}>Inicio</span>
+            {folderPath.map((path, idx) => (
+              <span key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: 'var(--text-subtle)' }}>/</span>
+                <span
+                  style={{ cursor: idx === folderPath.length - 1 ? 'default' : 'pointer', color: idx === folderPath.length - 1 ? 'inherit' : 'var(--primary)' }}
+                  onClick={() => setFolderPath(p => p.slice(0, idx + 1))}
+                >
+                  {path}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Lista */}
       {loading
         ? <div className="empty-state"><div className="empty-icon">⏳</div><p>Cargando documentos...</p></div>
         : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {displayed.map(doc => (
+            {itemsToRender.map((item, idx) => {
+              if (item.type === 'folder') {
+                return (
+                  <div key={`folder-${idx}`} className="doc-status-row" style={{ cursor: 'pointer' }} onClick={() => setFolderPath(p => [...p, item.name])}>
+                    <div className="doc-icon" title="Carpeta"><FolderIcon /></div>
+                    <div className="doc-info">
+                      <div className="doc-name">{item.name}</div>
+                      <div className="doc-meta">
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{item.count} documento(s)</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <button className="btn btn-secondary btn-sm"><FolderIcon /> Abrir</button>
+                    </div>
+                  </div>
+                );
+              }
+
+              const doc = item;
+              return (
               <div key={doc.id} className="doc-status-row">
                 <div className="doc-icon">{FILE_ICONS[doc.file_type] || '📁'}</div>
                 <div className="doc-info">
@@ -275,13 +379,14 @@ export default function DocumentsAuditorPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   <ComplianceBadge status={doc.validation_status} />
                   <button className="btn btn-secondary btn-sm" title="Vista previa"
-                    onClick={() => openPreview(doc)}>👁️</button>
+                    onClick={() => openPreview(doc)}><EyeIcon /></button>
                   <button className="btn btn-secondary btn-sm" title="Descargar"
-                    onClick={() => handleDownload(doc)}>⬇️</button>
+                    onClick={() => handleDownload(doc)}><DownloadIcon /></button>
                 </div>
               </div>
-            ))}
-            {displayed.length === 0 && (
+              );
+            })}
+            {itemsToRender.length === 0 && (
               <div className="empty-state">
                 <div className="empty-icon">📭</div>
                 <h4>Sin documentos</h4>
@@ -329,7 +434,7 @@ export default function DocumentsAuditorPage() {
                 ) : (
                    <div style={{ padding: 32, textAlign: 'center' }}>
                      <p>Error al generar previsualización.</p>
-                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar archivo</button>
+                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}><DownloadIcon /> Descargar archivo</button>
                    </div>
                 )
               ) : (
@@ -337,7 +442,7 @@ export default function DocumentsAuditorPage() {
                   <div style={{ fontSize: '3rem', marginBottom: 8 }}>{FILE_ICONS[previewDoc.file_type]}</div>
                   <p>Vista previa no disponible para este tipo de archivo.</p>
                   <button className="btn btn-primary" style={{ marginTop: 16 }}
-                    onClick={() => handleDownload(previewDoc)}>⬇️ Descargar</button>
+                    onClick={() => handleDownload(previewDoc)}><DownloadIcon /> Descargar</button>
                 </div>
               )}
             </div>
@@ -354,7 +459,7 @@ export default function DocumentsAuditorPage() {
                     📥 Descargar Documento Base
                   </a>
                 )}
-                <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar</button>
+                <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}><DownloadIcon /> Descargar</button>
                 <button className="btn btn-secondary" onClick={() => setPreviewDoc(null)}>Cerrar</button>
               </div>
             </div>
@@ -364,3 +469,4 @@ export default function DocumentsAuditorPage() {
     </div>
   );
 }
+

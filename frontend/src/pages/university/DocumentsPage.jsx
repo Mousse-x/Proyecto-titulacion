@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+﻿import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../../api/client';
+import { ArrowLeftIcon, DownloadIcon, EyeIcon, FolderIcon, TrashIcon } from '../../components/common/ActionIcons';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -539,7 +540,7 @@ export default function DocumentsPage() {
       {folderPath.length > 0 && (
         <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface-elevated)', padding: '10px 16px', borderRadius: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setFolderPath(p => p.slice(0, -1))}>
-            ⬅ Volver
+            <ArrowLeftIcon /> Volver
           </button>
           <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => setFolderPath([])}>Inicio</span>
@@ -573,7 +574,7 @@ export default function DocumentsPage() {
                 {selectedDocs.length > 0 && (
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                     <button className="btn btn-secondary btn-sm" onClick={handleBulkDelete} disabled={saving} style={{ color: 'var(--danger)', borderColor: 'var(--danger-subtle)' }}>
-                      🗑️ Eliminar ({selectedDocs.length})
+                      <TrashIcon /> Eliminar ({selectedDocs.length})
                     </button>
                     <button className="btn btn-primary btn-sm" onClick={handleBulkApprove} disabled={saving} style={{ background: 'var(--success)' }}>
                       ✅ Aprobar ({selectedDocs.length})
@@ -586,7 +587,7 @@ export default function DocumentsPage() {
               if (item.type === 'folder') {
                 return (
                   <div key={`folder-${idx}`} className="doc-status-row" style={{ cursor: 'pointer' }} onClick={() => setFolderPath(p => [...p, item.name])}>
-                    <div className="doc-icon">📁</div>
+                    <div className="doc-icon"><FolderIcon /></div>
                     <div className="doc-info">
                       <div className="doc-name">{item.name}</div>
                       <div className="doc-meta">
@@ -594,7 +595,7 @@ export default function DocumentsPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <button className="btn btn-secondary btn-sm">Abrir</button>
+                      <button className="btn btn-secondary btn-sm"><FolderIcon /> Abrir</button>
                     </div>
                   </div>
                 );
@@ -633,9 +634,9 @@ export default function DocumentsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     <StatusBadge status={doc.validation_status} />
                     <button className="btn btn-secondary btn-sm" title="Vista previa"
-                      onClick={() => openPreview(doc)}>👁️</button>
+                      onClick={() => openPreview(doc)}><EyeIcon /></button>
                     <button className="btn btn-secondary btn-sm" title="Descargar"
-                      onClick={() => handleDownload(doc)}>⬇️</button>
+                      onClick={() => handleDownload(doc)}><DownloadIcon /></button>
                     {(doc.validation_status === 'rechazado' || doc.validation_status === 'inconsistente') && (
                       <button className="btn btn-primary btn-sm"
                         onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title, university_id: doc.university_id || user.university_id })); }}>
@@ -643,7 +644,7 @@ export default function DocumentsPage() {
                       </button>
                     )}
                     <button className="btn btn-secondary btn-sm" title="Eliminar"
-                      onClick={() => handleDelete(doc.id)} style={{ color: 'var(--danger)' }}>🗑️</button>
+                      onClick={() => handleDelete(doc.id)} style={{ color: 'var(--danger)' }}><TrashIcon /></button>
                   </div>
                 </div>
               );
@@ -696,7 +697,7 @@ export default function DocumentsPage() {
                 ) : (
                    <div style={{ padding: 32, textAlign: 'center' }}>
                      <p>Error al generar previsualización.</p>
-                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar archivo</button>
+                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}><DownloadIcon /> Descargar archivo</button>
                    </div>
                 )
               ) : (
@@ -705,7 +706,7 @@ export default function DocumentsPage() {
                   <p>Vista previa no disponible para este tipo de archivo.</p>
                   <button className="btn btn-primary" style={{ marginTop: 16 }}
                     onClick={() => { handleDownload(previewDoc); setPreviewDoc(null); }}>
-                    ⬇️ Descargar archivo
+                    <DownloadIcon /> Descargar archivo
                   </button>
                 </div>
               )}
@@ -719,7 +720,7 @@ export default function DocumentsPage() {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}>
-                  ⬇️ Descargar
+                  <DownloadIcon /> Descargar
                 </button>
                 <button className="btn btn-secondary" onClick={() => setPreviewDoc(null)}>Cerrar</button>
               </div>
@@ -986,3 +987,4 @@ export default function DocumentsPage() {
     </div>
   );
 }
+

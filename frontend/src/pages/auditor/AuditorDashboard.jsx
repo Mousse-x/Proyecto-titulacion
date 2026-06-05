@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
+import { getUniversityLogo } from '../../data/universityLogos';
 
 const EMPTY_STATS = {
   total_universities: 0,
@@ -17,12 +19,19 @@ function getScoreTone(score) {
   return '#cf2027';
 }
 
-function UniversityMark({ name }) {
-  const letters = String(name || 'U').slice(0, 2).toUpperCase();
-  return <div className="auditor-university-mark">{letters}</div>;
+function UniversityMark({ university }) {
+  const logo = getUniversityLogo(university);
+  const letters = String(university?.name || 'U').slice(0, 2).toUpperCase();
+
+  return (
+    <div className={`auditor-university-mark${logo ? ' has-logo' : ''}`}>
+      {logo ? <img src={logo} alt={`Logo ${university?.full_name || university?.name || 'universidad'}`} /> : letters}
+    </div>
+  );
 }
 
 export default function AuditorDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -80,8 +89,7 @@ export default function AuditorDashboard() {
             <div className="auditor-ranking-head">
               <span>Posicion</span>
               <span>Entidad</span>
-              <span>Indice</span>
-              <span>Porcentaje</span>
+              <span>Indices</span>
             </div>
 
             {loading ? (
@@ -91,25 +99,48 @@ export default function AuditorDashboard() {
                 No hay universidades evaluadas para mostrar.
               </div>
             ) : rankings.map((item) => {
-              const score = Number(item.transparency_score || 0);
-              const color = getScoreTone(score);
+              const nationalScore = Number(item.transparency_score || 0);
+              const integratedScore = Number(item.integrated_transparency_score || 0);
+              const nationalColor = getScoreTone(nationalScore);
+              const integratedColor = getScoreTone(integratedScore);
               return (
-                <div className="auditor-ranking-row" key={item.id}>
+                <div
+                  className="auditor-ranking-row"
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/auditor/index?university_id=${item.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/auditor/index?university_id=${item.id}`);
+                    }
+                  }}
+                  title={`Ver indice de transparencia de ${item.full_name || item.name}`}
+                >
                   <div className="auditor-ranking-position">{item.position}</div>
                   <div className="auditor-ranking-entity">
-                    <UniversityMark name={item.name} />
+                    <UniversityMark university={item} />
                     <div>
                       <div className="auditor-ranking-name">{item.full_name || item.name}</div>
                       <div className="auditor-ranking-subname">{item.name}</div>
                     </div>
                   </div>
-                  <div className="auditor-ranking-index">
-                    <strong>{item.evaluated_documents || 0}</strong> de {item.indicatorTotal || 0}
-                    <span>documentos evaluados</span>
-                  </div>
-                  <div className="auditor-ranking-percent" style={{ '--score': `${Math.max(score, 6)}%`, '--score-color': color }}>
-                    <div className="auditor-ranking-bar" />
-                    <span>{score.toFixed(2)}%</span>
+                  <div className="auditor-ranking-indices">
+                    <div className="auditor-ranking-index-label">
+                      <span>Indice nacional</span>
+                      <strong>{nationalScore.toFixed(2)}%</strong>
+                    </div>
+                    <div className="auditor-ranking-percent auditor-ranking-percent-main" style={{ '--score': `${Math.max(nationalScore, 6)}%`, '--score-color': nationalColor }}>
+                      <div className="auditor-ranking-bar" />
+                    </div>
+                    <div className="auditor-ranking-index-label secondary">
+                      <span>Nacional + internacional</span>
+                      <strong>{integratedScore.toFixed(2)}%</strong>
+                    </div>
+                    <div className="auditor-ranking-percent auditor-ranking-percent-secondary" style={{ '--score': `${Math.max(integratedScore, 6)}%`, '--score-color': integratedColor }}>
+                      <div className="auditor-ranking-bar" />
+                    </div>
                   </div>
                 </div>
               );

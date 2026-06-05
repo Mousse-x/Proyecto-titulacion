@@ -1,0 +1,14 @@
+Institución;Escuela Politécnica Nacional
+ Descripción;Detalle de Audiencias y reuniones
+ Nombre del campo;Descripción del campo
+ Apellidos y Nombres;Nombres y Apellidos de la autoridad 
+ Puesto institucional;Puesto al que pertenece la autoridad
+ Asunto;Tema tratado en la audiencia o reunión
+ Fecha de la audiencia o reunión;Fecha en la que se realiza la audiencia o reunión
+ Modalidad;Modalidad en la que se realiza la reunión  (Presencial o virtual)
+ Lugar;"Lugar en el que se realiza la reunión  presencial (Si la reunión es telemática, en conjunto de datos se incluye ""No aplica"")"
+ Descripción de la audiencia o reunión;Resumen de lo tratado en la audiencia o reunión
+ Duración;Tiempo de duración de la audiencia o reunión
+ Nombre de personas externas;Personas externas a la institución que participan 
+ Institución externa;Nombre de la institución externa
+ Enlace para descargar el registro de asistencia de las personas que participaron en la reunión o audiencia;Enlace para descargar el registro de asistencia de las personas que participaron en las reuniones o audiencias

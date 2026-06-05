@@ -50,6 +50,23 @@ client.interceptors.response.use(
 
 export default client;
 
+const asUniversityPayload = (data = {}) => {
+  if (!data.logo_file) return data;
+
+  const formData = new FormData();
+  Object.entries(data).forEach(([key, value]) => {
+    if (key === 'logo_file') {
+      formData.append('logo', value);
+    } else if (value !== undefined && value !== null) {
+      formData.append(key, value);
+    }
+  });
+  return formData;
+};
+
+const universityRequestConfig = (payload) =>
+  payload instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+
 // ─── API helpers ────────────────────────────────────────────────
 export const api = {
   auth: {
@@ -66,8 +83,14 @@ export const api = {
   },
   universities: {
     list:   ()         => client.get('/universities/'),
-    create: (data)     => client.post('/universities/', data),
-    update: (id, data) => client.put(`/universities/${id}/`, data),
+    create: (data)     => {
+      const payload = asUniversityPayload(data);
+      return client.post('/universities/', payload, universityRequestConfig(payload));
+    },
+    update: (id, data) => {
+      const payload = asUniversityPayload(data);
+      return client.put(`/universities/${id}/`, payload, universityRequestConfig(payload));
+    },
     remove: (id)       => client.delete(`/universities/${id}/`),
   },
   indicators: {

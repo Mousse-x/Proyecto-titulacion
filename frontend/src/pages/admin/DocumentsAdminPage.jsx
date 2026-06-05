@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../api/client';
+import { ArrowLeftIcon, ClipboardIcon, DownloadIcon, EditIcon, EyeIcon, FolderIcon, TrashIcon } from '../../components/common/ActionIcons';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -38,6 +39,7 @@ export default function DocumentsAdminPage() {
 
   const [docs, setDocs]             = useState([]);
   const [universities, setUniversities] = useState([]);
+  const [indicators, setIndicators] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [reviewDoc, setReviewDoc]   = useState(null);   // doc a revisar
@@ -47,6 +49,26 @@ export default function DocumentsAdminPage() {
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [previewHtml, setPreviewHtml]   = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [uploadModal, setUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadForm, setUploadForm] = useState({
+    university_id: '',
+    indicator_id: '',
+    title: '',
+    year: new Date().getFullYear().toString(),
+    month: '',
+  });
+  const [scraperModal, setScraperModal] = useState(false);
+  const [scrapeLoading, setScrapeLoading] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState(null);
+  const [scrapeForm, setScrapeForm] = useState({
+    university_id: '',
+    year: new Date().getFullYear().toString(),
+    month: '',
+  });
 
   // Filtros
   const [filterUniv, setFilterUniv] = useState('');
@@ -55,6 +77,9 @@ export default function DocumentsAdminPage() {
   const [tab, setTab]               = useState('all');
 
   const [folderPath, setFolderPath] = useState([]);
+  const fileRef = useRef();
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
 
   const loadDocs = useCallback(async () => {
     setLoading(true);
@@ -72,6 +97,7 @@ export default function DocumentsAdminPage() {
   useEffect(() => {
     loadDocs();
     api.universities.list().then(r => setUniversities(r.data)).catch(() => {});
+    api.indicators.list().then(r => setIndicators(r.data)).catch(() => {});
   }, [loadDocs]);
 
   const displayed = tab === 'all' ? docs : docs.filter(d => d.validation_status === tab);
@@ -84,10 +110,16 @@ export default function DocumentsAdminPage() {
   };
 
   const getYear = (doc) => doc.uploaded_at ? doc.uploaded_at.split('-')[0] : 'Sin Año';
+  const getPeriodYear = (doc) => doc.year ? String(doc.year) : 'Sin periodo';
   const getMonthName = (doc) => {
     const m = doc.month || (doc.uploaded_at ? parseInt(doc.uploaded_at.split('-')[1], 10) : null);
     const found = MONTHS.find(x => x.v === m);
     return found ? found.l : 'Sin Mes';
+  };
+  const getLiteralFolderName = (doc) => {
+    const code = doc.indicator_code || 'Sin codigo';
+    const name = doc.indicator_name || doc.title || 'Sin literal';
+    return `${code} - ${name}`;
   };
 
   let currentDocs = displayed;
@@ -95,16 +127,20 @@ export default function DocumentsAdminPage() {
     currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
   }
   if (folderPath.length > 1) {
-    currentDocs = currentDocs.filter(d => getYear(d) === folderPath[1]);
+    currentDocs = currentDocs.filter(d => getPeriodYear(d) === folderPath[1]);
   }
   if (folderPath.length > 2) {
     currentDocs = currentDocs.filter(d => getMonthName(d) === folderPath[2]);
+  }
+  if (folderPath.length > 3) {
+    currentDocs = currentDocs.filter(d => getLiteralFolderName(d) === folderPath[3]);
   }
 
   let viewType = 'docs';
   if (folderPath.length === 0) viewType = 'universities';
   else if (folderPath.length === 1) viewType = 'years';
   else if (folderPath.length === 2) viewType = 'months';
+  else if (folderPath.length === 3) viewType = 'literals';
 
   let itemsToRender = [];
   if (viewType === 'universities') {
@@ -118,7 +154,7 @@ export default function DocumentsAdminPage() {
   } else if (viewType === 'years') {
     const groups = {};
     currentDocs.forEach(d => {
-      const key = getYear(d);
+      const key = getPeriodYear(d);
       if (!groups[key]) groups[key] = [];
       groups[key].push(d);
     });
@@ -131,6 +167,14 @@ export default function DocumentsAdminPage() {
       groups[key].push(d);
     });
     itemsToRender = Object.keys(groups).map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
+  } else if (viewType === 'literals') {
+    const groups = {};
+    currentDocs.forEach(d => {
+      const key = getLiteralFolderName(d);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(d);
+    });
+    itemsToRender = Object.keys(groups).sort().map(k => ({ type: 'folder', name: k, count: groups[k].length, nextPath: k }));
   } else {
     itemsToRender = currentDocs.map(d => ({ type: 'doc', ...d }));
   }
@@ -255,6 +299,143 @@ export default function DocumentsAdminPage() {
     }
   };
 
+  const resetUploadForm = () => {
+    setUploadForm({
+      university_id: '',
+      indicator_id: '',
+      title: '',
+      year: new Date().getFullYear().toString(),
+      month: '',
+    });
+    setSelectedFile(null);
+    setUploadProgress(0);
+    setError('');
+  };
+
+  const openUpload = () => {
+    setError('');
+    setUploadForm(prev => ({
+      ...prev,
+      university_id: filterUniv || prev.university_id || '',
+    }));
+    setUploadModal(true);
+  };
+
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    const allowed = ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'csv'];
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!allowed.includes(ext)) {
+      setError('Formato no permitido. Use PDF, XLSX, DOCX o CSV.');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setError('El archivo no debe superar 50 MB.');
+      return;
+    }
+    setError('');
+    setSelectedFile(file);
+    if (!uploadForm.title) {
+      setUploadForm(prev => ({ ...prev, title: file.name.replace(/\.[^/.]+$/, '') }));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadForm.university_id || !uploadForm.indicator_id || !uploadForm.title || !uploadForm.year || !uploadForm.month || !selectedFile) {
+      setError('Complete todos los campos obligatorios y seleccione un archivo.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const fd = new FormData();
+      fd.append('university_id', uploadForm.university_id);
+      fd.append('indicator_id', uploadForm.indicator_id);
+      fd.append('title', uploadForm.title.trim());
+      fd.append('year', uploadForm.year);
+      fd.append('month', uploadForm.month);
+      fd.append('uploaded_by_user_id', user.id || '');
+      fd.append('file', selectedFile);
+
+      await api.evidences.upload(fd, pct => setUploadProgress(pct));
+      setUploadModal(false);
+      resetUploadForm();
+      await loadDocs();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al subir el documento.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const openScraper = () => {
+    setScrapeResult(null);
+    setScrapeForm(prev => ({
+      ...prev,
+      university_id: filterUniv || prev.university_id || '',
+    }));
+    setScraperModal(true);
+  };
+
+  const handleScrape = async () => {
+    setScrapeLoading(true);
+    setScrapeResult(null);
+    try {
+      const token = sessionStorage.getItem('auth_token');
+      const response = await fetch('http://127.0.0.1:8000/api/scraper/espoch/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          period_id: 1,
+          user_id: user.id,
+          university_id: scrapeForm.university_id,
+          year: scrapeForm.year,
+          month: scrapeForm.month,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Error HTTP: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(Boolean);
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            if (data.status === 'progress') {
+              setScrapeResult({ isProgress: true, message: data.msg, pct: data.pct || 0 });
+            } else if (data.status === 'done') {
+              setScrapeResult({ ...data, isProgress: false });
+              await loadDocs();
+            } else if (data.status === 'error') {
+              setScrapeResult({ error: data.error || data.message || 'Error en el scraping' });
+            }
+          } catch (parseError) {
+            console.error('Error parsing scraper response', parseError);
+          }
+        }
+      }
+    } catch (e) {
+      setScrapeResult({ error: e.message || 'Error en el scraping' });
+    } finally {
+      setScrapeLoading(false);
+    }
+  };
+
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
 
@@ -263,6 +444,14 @@ export default function DocumentsAdminPage() {
         <div className="page-header-info">
           <h1>Documentos — Vista Administrador</h1>
           <p>Revisión y validación de evidencias de transparencia universitaria</p>
+        </div>
+        <div className="page-header-actions">
+          <button className="btn btn-secondary" onClick={openUpload}>
+            Subir documento
+          </button>
+          <button className="btn btn-primary" onClick={openScraper}>
+            Scrapear DPE
+          </button>
         </div>
       </div>
 
@@ -315,7 +504,7 @@ export default function DocumentsAdminPage() {
       {folderPath.length > 0 && (
         <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface-elevated)', padding: '10px 16px', borderRadius: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setFolderPath(p => p.slice(0, -1))}>
-            ⬅ Volver
+            <ArrowLeftIcon /> Volver
           </button>
           <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => setFolderPath([])}>Inicio</span>
@@ -349,7 +538,7 @@ export default function DocumentsAdminPage() {
                 {selectedDocs.length > 0 && (
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                     <button className="btn btn-secondary btn-sm" onClick={handleBulkDelete} disabled={saving} style={{ color: 'var(--danger)', borderColor: 'var(--danger-subtle)' }}>
-                      🗑️ Eliminar ({selectedDocs.length})
+                      <TrashIcon /> Eliminar ({selectedDocs.length})
                     </button>
                     <button className="btn btn-primary btn-sm" onClick={handleBulkApprove} disabled={saving} style={{ background: 'var(--success)' }}>
                       ✅ Aprobar ({selectedDocs.length})
@@ -362,7 +551,7 @@ export default function DocumentsAdminPage() {
               if (item.type === 'folder') {
                 return (
                   <div key={`folder-${idx}`} className="doc-status-row" style={{ cursor: 'pointer' }} onClick={() => setFolderPath(p => [...p, item.name])}>
-                    <div className="doc-icon">📁</div>
+                    <div className="doc-icon"><FolderIcon /></div>
                     <div className="doc-info">
                       <div className="doc-name">{item.name}</div>
                       <div className="doc-meta">
@@ -370,7 +559,7 @@ export default function DocumentsAdminPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <button className="btn btn-secondary btn-sm">Abrir</button>
+                      <button className="btn btn-secondary btn-sm"><FolderIcon /> Abrir</button>
                     </div>
                   </div>
                 );
@@ -394,6 +583,7 @@ export default function DocumentsAdminPage() {
                       </span>
                       {doc.month && `${MONTHS.find(m => m.v === doc.month)?.l} · `}
                       {doc.uploaded_at?.split('T')[0]}
+                      {doc.year && ` · Periodo ${doc.year}`}
                       {doc.uploaded_by && ` · ${doc.uploaded_by}`}
                     </div>
                     {doc.observations && (
@@ -409,21 +599,21 @@ export default function DocumentsAdminPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     <StatusBadge status={doc.validation_status} />
                     <button className="btn btn-secondary btn-sm" title="Vista previa"
-                      onClick={() => openPreview(doc)}>👁️</button>
+                      onClick={() => openPreview(doc)}><EyeIcon /></button>
                     <button className="btn btn-secondary btn-sm" title="Descargar"
-                      onClick={() => handleDownload(doc)}>⬇️</button>
+                      onClick={() => handleDownload(doc)}><DownloadIcon /></button>
                     {doc.validation_status === 'pendiente' && (
                       <button className="btn btn-primary btn-sm" onClick={() => openReview(doc)}>
-                        📋 Revisar
+                        <ClipboardIcon /> Revisar
                       </button>
                     )}
                     {doc.validation_status !== 'pendiente' && (
                       <button className="btn btn-secondary btn-sm" onClick={() => openReview(doc)}>
-                        ✏️ Editar
+                        <EditIcon /> Editar
                       </button>
                     )}
                     <button className="btn btn-secondary btn-sm" title="Eliminar"
-                      onClick={() => handleDelete(doc.id)} style={{ color: 'var(--danger)' }}>🗑️</button>
+                      onClick={() => handleDelete(doc.id)} style={{ color: 'var(--danger)' }}><TrashIcon /></button>
                   </div>
                 </div>
               );
@@ -439,6 +629,262 @@ export default function DocumentsAdminPage() {
         )}
 
       {/* ═══ MODAL — Vista Previa ══════════════════════════════ */}
+      {uploadModal && (
+        <div className="modal-overlay" onClick={() => !uploading && setUploadModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div className="modal-header">
+              <h3>Subir documento manual</h3>
+              <button className="modal-close" onClick={() => !uploading && setUploadModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {uploading ? (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div className="spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} />
+                  <p style={{ marginBottom: 14 }}>Subiendo documento...</p>
+                  <div className="progress-bar" style={{ height: 8, marginBottom: 8 }}>
+                    <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-subtle)' }}>{uploadProgress}%</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 14 }}>
+                  {error && <div className="alert alert-danger">{error}</div>}
+
+                  <div className="form-group">
+                    <label className="form-label">Universidad *</label>
+                    <select className="form-input" value={uploadForm.university_id} onChange={e => setUploadForm(p => ({ ...p, university_id: e.target.value }))}>
+                      <option value="">Seleccione universidad</option>
+                      {universities.map(u => (
+                        <option key={u.id} value={u.id}>{u.name} - {u.full_name || u.city || 'Universidad'}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Indicador LOTAIP *</label>
+                    <select className="form-input" value={uploadForm.indicator_id} onChange={e => setUploadForm(p => ({ ...p, indicator_id: e.target.value }))}>
+                      <option value="">Seleccione indicador</option>
+                      {indicators.map(i => (
+                        <option key={i.id} value={i.id}>{i.code} - {i.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Año *</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        min="2000"
+                        max={currentYear}
+                        value={uploadForm.year}
+                        onChange={e => {
+                          const y = parseInt(e.target.value, 10);
+                          if (y > currentYear) return;
+                          setUploadForm(p => ({ ...p, year: e.target.value, month: '' }));
+                        }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Mes *</label>
+                      <select className="form-input" value={uploadForm.month} onChange={e => setUploadForm(p => ({ ...p, month: e.target.value }))}>
+                        <option value="">Seleccione mes</option>
+                        {MONTHS.map(m => {
+                          const isFuture = parseInt(uploadForm.year, 10) === currentYear && m.v > currentMonth;
+                          return (
+                            <option key={m.v} value={m.v} disabled={isFuture}>
+                              {m.l}{isFuture ? ' (No disponible)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Título *</label>
+                    <input className="form-input" value={uploadForm.title} onChange={e => setUploadForm(p => ({ ...p, title: e.target.value }))} placeholder="Ej: Presupuesto institucional enero 2025" />
+                  </div>
+
+                  <div
+                    className={`upload-zone ${dragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
+                    onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={e => { e.preventDefault(); setDragging(false); handleFileSelect(e.dataTransfer.files[0]); }}
+                    onClick={() => fileRef.current?.click()}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {selectedFile ? (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>Archivo seleccionado</div>
+                        <strong>{selectedFile.name}</strong>
+                        <p style={{ fontSize: '0.8rem', marginTop: 4, color: 'var(--text-subtle)' }}>
+                          {(selectedFile.size / 1024).toFixed(1)} KB · haz clic para cambiar
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="upload-icon">Archivo</div>
+                        <h4>Arrastra tu archivo aquí</h4>
+                        <p>o haz clic para seleccionar</p>
+                        <p style={{ fontSize: '0.75rem', marginTop: 6 }}>PDF, XLSX, DOCX o CSV · máximo 50 MB</p>
+                      </>
+                    )}
+                    <input ref={fileRef} type="file" style={{ display: 'none' }} accept=".pdf,.xlsx,.xls,.docx,.doc,.csv" onChange={e => handleFileSelect(e.target.files[0])} />
+                  </div>
+
+                  <div className="alert alert-info">
+                    El documento quedará en estado <strong>Pendiente</strong> hasta su revisión.
+                  </div>
+                </div>
+              )}
+            </div>
+            {!uploading && (
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => { setUploadModal(false); resetUploadForm(); }}>
+                  Cancelar
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleUpload}
+                  disabled={!uploadForm.university_id || !uploadForm.indicator_id || !uploadForm.title || !uploadForm.year || !uploadForm.month || !selectedFile}
+                >
+                  Subir archivo
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {scraperModal && (
+        <div className="modal-overlay" onClick={() => !scrapeLoading && setScraperModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Extraccion Automatizada DPE</h3>
+              <button className="modal-close" onClick={() => !scrapeLoading && setScraperModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-subtle)', marginBottom: 16, lineHeight: 1.5 }}>
+                Selecciona la universidad y el periodo para descargar automaticamente los documentos publicados en el portal de transparencia de la DPE.
+              </p>
+
+              {!scrapeLoading && !scrapeResult && (
+                <div style={{ display: 'grid', gap: 14 }}>
+                  <div className="form-group">
+                    <label className="form-label">Universidad *</label>
+                    <select
+                      className="form-input"
+                      value={scrapeForm.university_id}
+                      onChange={e => setScrapeForm(p => ({ ...p, university_id: e.target.value }))}
+                    >
+                      <option value="">Seleccione universidad</option>
+                      {universities.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} - {u.full_name || u.city || 'Universidad'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Año *</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        min="2000"
+                        max={currentYear}
+                        value={scrapeForm.year}
+                        onChange={e => {
+                          const y = parseInt(e.target.value, 10);
+                          if (y > currentYear) return;
+                          setScrapeForm(p => ({ ...p, year: e.target.value, month: '' }));
+                        }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Mes *</label>
+                      <select
+                        className="form-input"
+                        value={scrapeForm.month}
+                        onChange={e => setScrapeForm(p => ({ ...p, month: e.target.value }))}
+                      >
+                        <option value="">Seleccione mes</option>
+                        {MONTHS.map(m => {
+                          const isFuture = parseInt(scrapeForm.year, 10) === currentYear && m.v >= currentMonth;
+                          return (
+                            <option key={m.v} value={m.v} disabled={isFuture}>
+                              {m.l}{isFuture ? ' (No disponible)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {scrapeLoading && (!scrapeResult || !scrapeResult.isProgress) && (
+                <div style={{ textAlign: 'center', padding: '18px 0' }}>
+                  <div className="spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} />
+                  <p>Iniciando extraccion...</p>
+                </div>
+              )}
+
+              {scrapeResult?.isProgress && (
+                <div style={{ padding: '20px 0' }}>
+                  <div style={{ width: '100%', background: 'var(--border-subtle)', borderRadius: 10, height: 12, overflow: 'hidden', marginBottom: 12 }}>
+                    <div style={{ width: `${scrapeResult.pct}%`, background: 'var(--primary)', height: '100%', transition: 'width 0.3s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-subtle)' }}>
+                    <span>{scrapeResult.message}</span>
+                    <span style={{ fontWeight: 600 }}>{scrapeResult.pct}%</span>
+                  </div>
+                </div>
+              )}
+
+              {scrapeResult && !scrapeResult.error && !scrapeResult.isProgress && (
+                <div className="alert alert-success" style={{ marginBottom: 0 }}>
+                  <strong>{scrapeResult.message}</strong><br />
+                  Creados: <strong>{scrapeResult.stats?.created}</strong> ·
+                  Omitidos: {scrapeResult.stats?.skipped} ·
+                  Errores: {scrapeResult.stats?.errors}
+                  {scrapeResult.items?.length > 0 && (
+                    <div style={{ marginTop: 10, maxHeight: 180, overflowY: 'auto' }}>
+                      {scrapeResult.items.slice(0, 10).map((item, i) => (
+                        <div key={i} style={{ fontSize: '0.75rem', padding: '3px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                          [{item.letter?.toUpperCase()}] {item.title?.slice(0, 70)}...
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {scrapeResult?.error && (
+                <div className="alert alert-danger">{scrapeResult.error}</div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setScraperModal(false)} disabled={scrapeLoading}>
+                Cerrar
+              </button>
+              {!scrapeResult && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleScrape}
+                  disabled={scrapeLoading || !scrapeForm.university_id || !scrapeForm.year || !scrapeForm.month}
+                >
+                  {scrapeLoading ? 'Procesando...' : 'Iniciar Extraccion'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {previewDoc && (
         <div className="modal-overlay" onClick={() => setPreviewDoc(null)}>
           <div className="modal" style={{ maxWidth: 900, width: '95%', maxHeight: '90vh' }}
@@ -474,15 +920,15 @@ export default function DocumentsAdminPage() {
                 ) : (
                    <div style={{ padding: 32, textAlign: 'center' }}>
                      <p>Error al generar previsualización.</p>
-                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar archivo</button>
+                     <button className="btn btn-primary" onClick={() => handleDownload(previewDoc)}><DownloadIcon /> Descargar archivo</button>
                    </div>
                 )
               ) : (
                 <div style={{ padding: 32, textAlign: 'center' }}>
                   <p>Vista previa no disponible. Descarga el archivo para visualizarlo.</p>
-                  <button className="btn btn-primary" style={{ marginTop: 16 }}
+                <button className="btn btn-primary" style={{ marginTop: 16 }}
                     onClick={() => handleDownload(previewDoc)}>
-                    ⬇️ Descargar
+                    <DownloadIcon /> Descargar
                   </button>
                 </div>
               )}
@@ -490,7 +936,7 @@ export default function DocumentsAdminPage() {
             <div className="modal-footer">
               <StatusBadge status={previewDoc.validation_status} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}>⬇️ Descargar</button>
+                <button className="btn btn-secondary" onClick={() => handleDownload(previewDoc)}><DownloadIcon /> Descargar</button>
                 <button className="btn btn-secondary" onClick={() => setPreviewDoc(null)}>Cerrar</button>
               </div>
             </div>
@@ -503,7 +949,7 @@ export default function DocumentsAdminPage() {
         <div className="modal-overlay" onClick={() => !saving && setReviewDoc(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>📋 Revisar Documento</h3>
+              <h3><ClipboardIcon /> Revisar Documento</h3>
               <button className="modal-close" onClick={() => setReviewDoc(null)}>✕</button>
             </div>
             <div className="modal-body">
@@ -558,3 +1004,4 @@ export default function DocumentsAdminPage() {
     </div>
   );
 }
+

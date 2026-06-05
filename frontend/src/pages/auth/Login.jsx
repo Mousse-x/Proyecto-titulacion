@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import { EyeIcon, EyeOffIcon } from '../../components/common/ActionIcons';
 
 const ROLE_REDIRECTS = { 1: '/admin/dashboard', 2: '/university/dashboard', 3: '/university/dashboard', 4: '/auditor/dashboard' };
 
@@ -21,6 +22,7 @@ export default function Login() {
   // Register form
   const [regForm, setRegForm] = useState({ fullName: '', email: '', password: '', confirm: '' });
   const [showRegPass, setShowRegPass] = useState(false);
+  const [showRegConfirmPass, setShowRegConfirmPass] = useState(false);
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState(null);
   const [regSuccess, setRegSuccess] = useState(false);
@@ -240,6 +242,10 @@ export default function Login() {
           )}
 
           {/* ── LOGIN PANEL ── */}
+          <div
+            key={`${tab}-${showOtp ? 'otp' : 'form'}-${regSuccess ? 'registered' : 'registering'}-${forgotSent ? 'sent' : 'request'}`}
+            className={`login-panel-motion login-panel-motion-${tab}`}
+          >
           {tab === 'home' && (
             <div className="login-home">
               <h2 className="login-title">Sistema de Transparencia Institucional</h2>
@@ -366,12 +372,13 @@ export default function Login() {
                         <button
                           type="button"
                           onClick={() => setShowPass(v => !v)}
+                          aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                           style={{
                             position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', fontSize: '1rem',
+                            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', padding: 4,
                           }}
                         >
-                          {showPass ? '🙈' : '👁️'}
+                          {showPass ? <EyeOffIcon /> : <EyeIcon />}
                         </button>
                       </div>
                     </div>
@@ -472,8 +479,9 @@ export default function Login() {
                         style={{ paddingRight: 44 }}
                       />
                       <button type="button" onClick={() => setShowRegPass(v => !v)}
-                        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', fontSize: '1rem' }}>
-                        {showRegPass ? '🙈' : '👁️'}
+                        aria-label={showRegPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', padding: 4 }}>
+                        {showRegPass ? <EyeOffIcon /> : <EyeIcon />}
                       </button>
                     </div>
                   </div>
@@ -497,17 +505,23 @@ export default function Login() {
                       </li>
                     </ul>
                   </div>
-                  <div className="form-group" style={{ marginTop: 16 }}>
+                  <div className="form-group" style={{ marginTop: 16, position: 'relative' }}>
                     <label className="form-label" htmlFor="reg-confirm">Confirmar contraseña *</label>
                     <input
                       id="reg-confirm"
-                      type="password"
+                      type={showRegConfirmPass ? 'text' : 'password'}
                       className="form-input"
                       placeholder="Repite tu contraseña"
                       value={regForm.confirm}
                       onChange={e => setRegForm(p => ({ ...p, confirm: e.target.value }))}
+                      style={{ paddingRight: 44 }}
                       required
                     />
+                    <button type="button" onClick={() => setShowRegConfirmPass(v => !v)}
+                      aria-label={showRegConfirmPass ? 'Ocultar confirmación' : 'Mostrar confirmación'}
+                      style={{ position: 'absolute', right: 12, bottom: 7, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-subtle)', padding: 4 }}>
+                      {showRegConfirmPass ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
                   </div>
 
                   {regError && (
@@ -627,6 +641,7 @@ export default function Login() {
               )}
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

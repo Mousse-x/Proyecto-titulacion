@@ -1,0 +1,236 @@
+Cuenta;Categoría;Descripción;Asignado;Modificado;Codificado;Monto certificado;Comprometido;Devengado;Pagado;Saldo por comprometer;Saldo por devengar;Saldo por pagar;Porcentaje de ejecución
+ 510105 1700 003;Egresos En Personal;Remuneraciones Unificadas;8056986.51;-10794.75;8046191.76;0;663861.94;663861.94;663861.94;7382329.82;7382329.82;0;8.25
+ 510106 1700 003;Egresos En Personal;Salarios Unificados;886153;-0.28;886152.72;0;73846.06;73846.06;73846.06;812306.66;812306.66;0;8.33
+ 510108 1700 003;Egresos En Personal;Remuneracion Mensual Unificada de Docentes del Magisterio y Docentes e Investigadores Universitarios;13937974;56934.32;13994908.32;0;1161533.14;1161533.14;1161533.14;12833375.18;12833375.18;0;8.3
+ 510111 1700 003;Egresos En Personal;Remuneraciones Unificadas de Profesionales de la Salud;100416;0;100416;0;8368;8368;8368;92048;92048;0;8.33
+ 510203 1700 003;Egresos En Personal;Decimo Tercer Sueldo;2547074;991.61;2548065.61;0;126715.63;126715.63;126198.46;2421349.98;2421349.98;517.17;4.97
+ 510204 1700 003;Egresos En Personal;Decimo Cuarto Sueldo;608885;-940;607945;0;27693.19;27693.19;27536.51;580251.81;580251.81;156.68;4.56
+ 510304 1700 003;Egresos En Personal;Compensacion por Transporte;11394;0;11394;0;472;472;472;10922;10922;0;4.14
+ 510306 1700 003;Egresos En Personal;Alimentacion;103118;0.24;103118.24;0;5704;5704;5704;97414.24;97414.24;0;5.53
+ 510401 1700 003;Egresos En Personal;Por Cargas Familiares;4469;-0.2;4468.8;0;381.8;381.8;381.8;4087;4087;0;8.54
+ 510408 1700 003;Egresos En Personal;Subsidio de Antiguedad;21019;-0.04;21018.96;0;1842.11;1842.11;1842.11;19176.85;19176.85;0;8.76
+ 510502 1700 003;Egresos En Personal;Remuneracion Unificada para Pasantes e Internos Rotativos de Salud;50599;3452.51;54051.51;0;0;0;0;54051.51;54051.51;0;0
+ 510509 1700 003;Egresos En Personal;Horas Extraordinarias y Suplementarias;25000;-15000;10000;0;4460.53;4460.53;2519.87;5539.47;5539.47;1940.66;44.61
+ 510510 1700 003;Egresos En Personal;Servicios Personales por Contrato;965760;-28503.21;937256.79;0;74620;74620;74620;862636.79;862636.79;0;7.96
+ 510512 1700 003;Egresos En Personal;Subrogacion;20000;0;20000;0;1168.05;1168.05;1168.05;18831.95;18831.95;0;5.84
+ 510513 1700 003;Egresos En Personal;Encargos;25000;-545.03;24454.97;0;0;0;0;24454.97;24454.97;0;0
+ 510517 1700 003;Egresos En Personal;Servicios Personales por Contrato de Profesionales de la Salud;42240;0;42240;0;3520;3520;3520;38720;38720;0;8.33
+ 510518 1700 003;Egresos En Personal;Servicios Personales por Contrato de Docentes del Magisterio y Docentes e Investigadores Universitarios;6575345;-9314.52;6566030.48;0;552062.85;552062.85;552062.85;6013967.63;6013967.63;0;8.41
+ 510601 1700 003;Egresos En Personal;Aporte Patronal;2895815;2732.49;2898547.49;0;238275.75;238275.75;238275.75;2660271.74;2660271.74;0;8.22
+ 510602 1700 003;Egresos En Personal;Fondo de Reserva;2546054;992.38;2547046.38;0;120.22;120.22;120.22;2546926.16;2546926.16;0;0
+ 510706 1700 003;Egresos En Personal;Beneficio por Jubilacion;300220;-5.52;300214.48;0;0;0;0;300214.48;300214.48;0;0
+ 530101 1701 002;Bienes Y Servicios De Consumo;Agua Potable;36415;-8815;27600;24000;3600;184.41;184.41;24000;27415.59;0;0.67
+ 530104 1701 001;Bienes Y Servicios De Consumo;Energia Electrica;132488;-0.04;132487.96;132103.49;373.47;359.03;291.71;132114.49;132128.93;67.32;0.27
+ 530104 1701 002;Bienes Y Servicios De Consumo;Energia Electrica;110698;-13898;96800;92000;4800;1293.73;1004.94;92000;95506.27;288.79;1.34
+ 530105 1701 001;Bienes Y Servicios De Consumo;Telecomunicaciones;118062;0;118062;107781.56;490.4;490.4;490.4;117571.6;117571.6;0;0.42
+ 530105 1701 002;Bienes Y Servicios De Consumo;Telecomunicaciones;263136;-0.34;263135.66;9820;2850;271.96;35.47;260285.66;262863.7;236.49;0.1
+ 530106 1701 002;Bienes Y Servicios De Consumo;Servicio de Correo;0;13;13;0;0;0;0;13;13;0;0
+ 530201 1701 002;Bienes Y Servicios De Consumo;Transporte de Personal;0;200;200;0;0;0;0;200;200;0;0
+ 530201 1701 003;Bienes Y Servicios De Consumo;Transporte de Personal;525927;-74299.73;451627.27;0;183025;0;0;268602.27;451627.27;0;0
+ 530202 1701 002;Bienes Y Servicios De Consumo;Fletes y Maniobras;9085;8;9093;0;0;0;0;9093;9093;0;0
+ 530203 1701 002;Bienes Y Servicios De Consumo;Almacenamiento Embalaje Desembalaje Envase Desenvase y Recarga de Extintores;600;0;600;0;0;0;0;600;600;0;0
+ 530203 1701 003;Bienes Y Servicios De Consumo;Almacenamiento Embalaje Desembalaje Envase Desenvase y Recarga de Extintores;8672;0;8672;0;0;0;0;8672;8672;0;0
+ 530204 1701 001;Bienes Y Servicios De Consumo;Edicion Impresion Reproduccion Publicaciones Suscripciones Fotocopiado Traduccion Empastado Enmarcacion Serigrafia Fotografia Carnetizacion Filmacion e Imagenes Satelitales;87144;-48398.8;38745.2;13638.11;0;0;0;38745.2;38745.2;0;0
+ 530204 1701 002;Bienes Y Servicios De Consumo;Edicion Impresion Reproduccion Publicaciones Suscripciones Fotocopiado Traduccion Empastado Enmarcacion Serigrafia Fotografia Carnetizacion Filmacion e Imagenes Satelitales;169527;-8999.9;160527.1;66500;13.1;13.1;13.1;160514;160514;0;0.01
+ 530204 1701 003;Bienes Y Servicios De Consumo;Edicion Impresion Reproduccion Publicaciones Suscripciones Fotocopiado Traduccion Empastado Enmarcacion Serigrafia Fotografia Carnetizacion Filmacion e Imagenes Satelitales;30712;2500.24;33212.24;0;0;0;0;33212.24;33212.24;0;0
+ 530205 1701 003;Bienes Y Servicios De Consumo;Espectaculos Culturales y Sociales;0;6500;6500;0;0;0;0;6500;6500;0;0
+ 530205 1701 701;Bienes Y Servicios De Consumo;Espectaculos Culturales y Sociales;0;6044.03;6044.03;0;0;0;0;6044.03;6044.03;0;0
+ 530207 1701 002;Bienes Y Servicios De Consumo;Difusion Informacion y Publicidad;114225;-28179.49;86045.51;2720;38430;4270;4270;47615.51;81775.51;0;4.96
+ 530208 1701 002;Bienes Y Servicios De Consumo;Servicio de Seguridad y Vigilancia;1337464;187977.71;1525441.71;2700;147624.68;21089.24;0;1377817.03;1504352.47;21089.24;1.38
+ 530209 1701 002;Bienes Y Servicios De Consumo;Servicios de Aseo Lavado de Vestimenta de Trabajo Fumigacion Desinfeccion Limpieza de Instalaciones manejo de desechos contaminados recuperacion y clasificacion de materiales reciclables;1057709;-18779.02;1038929.98;0;78948;19737;19737;959981.98;1019192.98;0;1.9
+ 530209 1701 003;Bienes Y Servicios De Consumo;Servicios de Aseo Lavado de Vestimenta de Trabajo Fumigacion Desinfeccion Limpieza de Instalaciones manejo de desechos contaminados recuperacion y clasificacion de materiales reciclables;66247;-0.11;66246.89;0;0;0;0;66246.89;66246.89;0;0
+ 530210 1701 003;Bienes Y Servicios De Consumo;Servicio de Guarderia;60000;0;60000;0;0;0;0;60000;60000;0;0
+ 530216 1701 002;Bienes Y Servicios De Consumo;Servicios de Voluntariado;7200;0;7200;4519.96;0;0;0;7200;7200;0;0
+ 530221 1701 001;Bienes Y Servicios De Consumo;Servicios Personales Eventuales sin Relacion de Dependencia;0;300;300;80;0;0;0;300;300;0;0
+ 530221 1701 002;Bienes Y Servicios De Consumo;Servicios Personales Eventuales sin Relacion de Dependencia;35000;-14800;20200;0;0;0;0;20200;20200;0;0
+ 530226 1701 003;Bienes Y Servicios De Consumo;Servicios Medicos Hospitalarios y Complementarios;31005;0;31005;0;0;0;0;31005;31005;0;0
+ 530239 1701 001;Bienes Y Servicios De Consumo;Membrecias;3500;650;4150;0;0;0;0;4150;4150;0;0
+ 530239 1701 002;Bienes Y Servicios De Consumo;Membrecias;5860;2800;8660;0;0;0;0;8660;8660;0;0
+ 530239 1701 003;Bienes Y Servicios De Consumo;Membrecias;4650;70090;74740;0;0;0;0;74740;74740;0;0
+ 530243 1701 002;Bienes Y Servicios De Consumo;Garantia Extendida de Bienes;97727;-2799.54;94927.46;82331.5;0;0;0;94927.46;94927.46;0;0
+ 530246 1701 003;Bienes Y Servicios De Consumo;Servicios de Identificacion Marcacion Autentificacion Rastreo Monitoreo Seguimiento y o Trazabilidad;2190;0;2190;0;0;0;0;2190;2190;0;0
+ 530248 1701 001;Bienes Y Servicios De Consumo;Eventos Oficiales;5850;10000;15850;0;0;0;0;15850;15850;0;0
+ 530249 1701 001;Bienes Y Servicios De Consumo;Eventos Publicos Promocionales;0;2200;2200;2200;0;0;0;2200;2200;0;0
+ 530249 1701 002;Bienes Y Servicios De Consumo;Eventos Publicos Promocionales;108025;-2435;105590;0;0;0;0;105590;105590;0;0
+ 530249 1701 003;Bienes Y Servicios De Consumo;Eventos Publicos Promocionales;16047;25607.25;41654.25;0;0;0;0;41654.25;41654.25;0;0
+ 530255 1701 002;Bienes Y Servicios De Consumo;Combustibles;31727;3961.63;35688.63;0;205.04;205.04;205.04;35483.59;35483.59;0;0.57
+ 530255 1701 003;Bienes Y Servicios De Consumo;Combustibles;71746;-40264.19;31481.81;0;8985.59;8985.59;1172.03;22496.22;22496.22;7813.56;28.54
+ 530301 1701 001;Bienes Y Servicios De Consumo;Pasajes al Interior;9092;2108;11200;50;7.77;7.77;7.77;11192.23;11192.23;0;0.07
+ 530301 1701 002;Bienes Y Servicios De Consumo;Pasajes al Interior;13608;-1448.68;12159.32;4263.72;95.6;95.6;95.6;12063.72;12063.72;0;0.79
+ 530301 1701 003;Bienes Y Servicios De Consumo;Pasajes al Interior;0;7212.6;7212.6;0;0;0;0;7212.6;7212.6;0;0
+ 530302 1701 001;Bienes Y Servicios De Consumo;Pasajes al Exterior;167500;-68196.05;99303.95;0;0;0;0;99303.95;99303.95;0;0
+ 530302 1701 002;Bienes Y Servicios De Consumo;Pasajes al Exterior;39960;6502.58;46462.58;26162.93;0;0;0;46462.58;46462.58;0;0
+ 530303 1701 001;Bienes Y Servicios De Consumo;Viaticos y Subsistencias en el Interior;26300;700;27000;4124.57;320;320;320;26680;26680;0;1.19
+ 530303 1701 002;Bienes Y Servicios De Consumo;Viaticos y Subsistencias en el Interior;23560;0;23560;19840;400;400;135;23160;23160;265;1.7
+ 530304 1701 001;Bienes Y Servicios De Consumo;Viaticos y Subsistencias en el Exterior;55000;-38366.29;16633.71;0;0;0;0;16633.71;16633.71;0;0
+ 530304 1701 002;Bienes Y Servicios De Consumo;Viaticos y Subsistencias en el Exterior;16417;0.6;16417.6;0;423.3;423.3;423.3;15994.3;15994.3;0;2.58
+ 530304 1701 003;Bienes Y Servicios De Consumo;Viaticos y Subsistencias en el Exterior;30200;0;30200;29084.8;0;0;0;30200;30200;0;0
+ 530307 1701 001;Bienes Y Servicios De Consumo;Atencion a Delegados Extranjeros y Nacionales Deportistas Entrenadores y Cuerpo Tecnico que Representen al Pais;26000;-6267.5;19732.5;0;0;0;0;19732.5;19732.5;0;0
+ 530307 1701 003;Bienes Y Servicios De Consumo;Atencion a Delegados Extranjeros y Nacionales Deportistas Entrenadores y Cuerpo Tecnico que Representen al Pais;0;7300;7300;7192.8;0;0;0;7300;7300;0;0
+ 530402 1701 002;Bienes Y Servicios De Consumo;Edificios Locales Residencias y Cableado Estructurado (Instalacion Mantenimiento y Reparacion);80475;10;80485;0;206;206;206;80279;80279;0;0.26
+ 530402 1701 003;Bienes Y Servicios De Consumo;Edificios Locales Residencias y Cableado Estructurado (Instalacion Mantenimiento y Reparacion);16086;0;16086;0;0;0;0;16086;16086;0;0
+ 530403 1701 002;Bienes Y Servicios De Consumo;Mobiliarios (Instalacion Mantenimiento y Reparacion);5128;3.4;5131.4;0;0;0;0;5131.4;5131.4;0;0
+ 530403 1701 003;Bienes Y Servicios De Consumo;Mobiliarios (Instalacion Mantenimiento y Reparacion);14372;1086.29;15458.29;0;0;0;0;15458.29;15458.29;0;0
+ 530404 1701 002;Bienes Y Servicios De Consumo;Maquinarias y Equipos (Instalacion Mantenimiento y Reparacion);20898;103483.38;124381.38;2097.42;1154;1154;50;123227.38;123227.38;1104;0.93
+ 530404 1701 003;Bienes Y Servicios De Consumo;Maquinarias y Equipos (Instalacion Mantenimiento y Reparacion);391341;41572.03;432913.03;2860;66;0;0;432847.03;432913.03;0;0
+ 530405 1701 001;Bienes Y Servicios De Consumo;Vehiculos (Servicio para Mantenimiento y Reparacion);10000;0;10000;0;0;0;0;10000;10000;0;0
+ 530405 1701 002;Bienes Y Servicios De Consumo;Vehiculos (Servicio para Mantenimiento y Reparacion);11000;4605;15605;0;4.35;4.35;4.35;15600.65;15600.65;0;0.03
+ 530406 1701 003;Bienes Y Servicios De Consumo;Herramientas (Mantenimiento y Reparacion);0;2000;2000;0;0;0;0;2000;2000;0;0
+ 530417 1701 002;Bienes Y Servicios De Consumo;Infraestructura;1686;-0.2;1685.8;0;0;0;0;1685.8;1685.8;0;0
+ 530417 1701 003;Bienes Y Servicios De Consumo;Infraestructura;314;0.2;314.2;0;0;0;0;314.2;314.2;0;0
+ 530418 1701 002;Bienes Y Servicios De Consumo;Mantenimiento de Areas Verdes y Arreglo de Vias Internas;27500;9460;36960;0;0;0;0;36960;36960;0;0
+ 530425 1701 003;Bienes Y Servicios De Consumo;Instalacion Readecuacion Montaje de Exposiciones Mantenimiento y Reparacion de Espacios y Bienes Culturales;4500;2000;6500;0;0;0;0;6500;6500;0;0
+ 530505 1701 002;Bienes Y Servicios De Consumo;Vehiculos (Arrendamiento);0;500;500;0;0;0;0;500;500;0;0
+ 530601 1701 003;Bienes Y Servicios De Consumo;Consultoria Asesoria e Investigacion Especializada;7000;147000;154000;147000;0;0;0;154000;154000;0;0
+ 530602 1701 002;Bienes Y Servicios De Consumo;Servicio de Auditoria;6000;0;6000;0;0;0;0;6000;6000;0;0
+ 530606 1701 002;Bienes Y Servicios De Consumo;Honorarios por Contratos Civiles de Servicios;1564293;-40183.05;1524109.95;523942;4546;4546;4546;1519563.95;1519563.95;0;0.3
+ 530606 1701 003;Bienes Y Servicios De Consumo;Honorarios por Contratos Civiles de Servicios;598649;-9008.06;589640.94;459468.31;15756;1212;0;573884.94;588428.94;1212;0.21
+ 530606 1701 701;Bienes Y Servicios De Consumo;Honorarios por Contratos Civiles de Servicios;0;10330.15;10330.15;10320;0;0;0;10330.15;10330.15;0;0
+ 530609 1701 001;Bienes Y Servicios De Consumo;Investigaciones Profesionales y Analisis de Laboratorio;2640;1710;4350;0;1755;0;0;2595;4350;0;0
+ 530609 1701 003;Bienes Y Servicios De Consumo;Investigaciones Profesionales y Analisis de Laboratorio;2000;0;2000;0;0;0;0;2000;2000;0;0
+ 530611 1701 002;Bienes Y Servicios De Consumo;Congresos Seminarios y Convenciones;4142;-0.02;4141.98;0;0;0;0;4141.98;4141.98;0;0
+ 530611 1701 003;Bienes Y Servicios De Consumo;Congresos Seminarios y Convenciones;0;2000;2000;0;0;0;0;2000;2000;0;0
+ 530612 1701 001;Bienes Y Servicios De Consumo;Capacitacion a Servidores Publicos;41119;-12802.15;28316.85;16000;0;0;0;28316.85;28316.85;0;0
+ 530612 1701 002;Bienes Y Servicios De Consumo;Capacitacion a Servidores Publicos;12500;0;12500;720;0;0;0;12500;12500;0;0
+ 530612 1701 003;Bienes Y Servicios De Consumo;Capacitacion a Servidores Publicos;61580;-0.43;61579.57;36548.51;0;0;0;61579.57;61579.57;0;0
+ 530701 1701 002;Bienes Y Servicios De Consumo;Desarrollo Actualizacion Asistencia Tecnica y Soporte de Sistemas Informaticos;86483;51536.75;138019.75;7000.02;0;0;0;138019.75;138019.75;0;0
+ 530701 1701 003;Bienes Y Servicios De Consumo;Desarrollo Actualizacion Asistencia Tecnica y Soporte de Sistemas Informaticos;23964;-2936.63;21027.37;0;0;0;0;21027.37;21027.37;0;0
+ 530702 1701 001;Bienes Y Servicios De Consumo;Arrendamiento y Licencias de Uso de Paquetes Informaticos;3074;-1929.91;1144.09;0;0;0;0;1144.09;1144.09;0;0
+ 530702 1701 002;Bienes Y Servicios De Consumo;Arrendamiento y Licencias de Uso de Paquetes Informaticos;362836;-1629.64;361206.36;2852;148;148;148;361058.36;361058.36;0;0.04
+ 530702 1701 003;Bienes Y Servicios De Consumo;Arrendamiento y Licencias de Uso de Paquetes Informaticos;266568;48602.18;315170.18;0;0;0;0;315170.18;315170.18;0;0
+ 530703 1701 002;Bienes Y Servicios De Consumo;Arrendamiento de Equipos Informaticos;17500;0;17500;17500;0;0;0;17500;17500;0;0
+ 530704 1701 001;Bienes Y Servicios De Consumo;Mantenimiento y Reparacion de Equipos y Sistemas Informaticos;1000;1000;2000;0;0;0;0;2000;2000;0;0
+ 530704 1701 002;Bienes Y Servicios De Consumo;Mantenimiento y Reparacion de Equipos y Sistemas Informaticos;78136;-54153.67;23982.33;2533.01;0;0;0;23982.33;23982.33;0;0
+ 530704 1701 003;Bienes Y Servicios De Consumo;Mantenimiento y Reparacion de Equipos y Sistemas Informaticos;18561;-2315.18;16245.82;0;0;0;0;16245.82;16245.82;0;0
+ 530802 1701 002;Bienes Y Servicios De Consumo;Vestuario Lenceria Prendas de Proteccion Insumos y Accesorios para uniformes del personal de Proteccion Vigilancia y Seguridad;3000;200;3200;0;0;0;0;3200;3200;0;0
+ 530802 1701 003;Bienes Y Servicios De Consumo;Vestuario Lenceria Prendas de Proteccion Insumos y Accesorios para uniformes del personal de Proteccion Vigilancia y Seguridad;150195;-63.26;150131.74;72151.48;0;0;0;150131.74;150131.74;0;0
+ 530803 1701 002;Bienes Y Servicios De Consumo;Lubricantes;6600;148;6748;0;0;0;0;6748;6748;0;0
+ 530803 1701 003;Bienes Y Servicios De Consumo;Lubricantes;317;150.36;467.36;0;0;0;0;467.36;467.36;0;0
+ 530804 1701 001;Bienes Y Servicios De Consumo;Materiales de Oficina;0;200;200;20;0;0;0;200;200;0;0
+ 530804 1701 002;Bienes Y Servicios De Consumo;Materiales de Oficina;12000;200;12200;1039.5;98;98;98;12102;12102;0;0.8
+ 530804 1701 003;Bienes Y Servicios De Consumo;Materiales de Oficina;30072;-412.8;29659.2;0;0;0;0;29659.2;29659.2;0;0
+ 530805 1701 002;Bienes Y Servicios De Consumo;Materiales de Aseo;1500;1400;2900;0;0;0;0;2900;2900;0;0
+ 530805 1701 003;Bienes Y Servicios De Consumo;Materiales de Aseo;15000;810;15810;0;0;0;0;15810;15810;0;0
+ 530807 1701 002;Bienes Y Servicios De Consumo;Materiales de Impresion Fotografia Reproduccion y Publicaciones;16000;300;16300;0;0;0;0;16300;16300;0;0
+ 530807 1701 003;Bienes Y Servicios De Consumo;Materiales de Impresion Fotografia Reproduccion y Publicaciones;14325;1599.71;15924.71;0;0;0;0;15924.71;15924.71;0;0
+ 530809 1701 003;Bienes Y Servicios De Consumo;Medicamentos;5923;-0.26;5922.74;0;0;0;0;5922.74;5922.74;0;0
+ 530811 1701 001;Bienes Y Servicios De Consumo;Insumos Materiales y Suministros para Construccion Electricidad Plomeria Carpinteria Senalizacion Vial Navegacion Contra Incendios y placas;0;200;200;40;0;0;0;200;200;0;0
+ 530811 1701 002;Bienes Y Servicios De Consumo;Insumos Materiales y Suministros para Construccion Electricidad Plomeria Carpinteria Senalizacion Vial Navegacion Contra Incendios y placas;49476;-26500;22976;11.67;3596.94;3596.94;3596.94;19379.06;19379.06;0;15.66
+ 530811 1701 003;Bienes Y Servicios De Consumo;Insumos Materiales y Suministros para Construccion Electricidad Plomeria Carpinteria Senalizacion Vial Navegacion Contra Incendios y placas;38417;8444.82;46861.82;0;0;0;0;46861.82;46861.82;0;0
+ 530812 1701 001;Bienes Y Servicios De Consumo;Materiales Didacticos;1430;0;1430;0;0;0;0;1430;1430;0;0
+ 530812 1701 002;Bienes Y Servicios De Consumo;Materiales Didacticos;0;2414.7;2414.7;0;0;0;0;2414.7;2414.7;0;0
+ 530813 1701 001;Bienes Y Servicios De Consumo;Repuestos y Accesorios;1935;1755.37;3690.37;20;0;0;0;3690.37;3690.37;0;0
+ 530813 1701 002;Bienes Y Servicios De Consumo;Repuestos y Accesorios;34445;7798;42243;0;50;50;50;42193;42193;0;0.12
+ 530813 1701 003;Bienes Y Servicios De Consumo;Repuestos y Accesorios;58726;41465.44;100191.44;0;0;0;0;100191.44;100191.44;0;0
+ 530814 1701 002;Bienes Y Servicios De Consumo;Suministros para Actividades Agropecuarias Pesca y Caza;0;300;300;0;0;0;0;300;300;0;0
+ 530814 1701 003;Bienes Y Servicios De Consumo;Suministros para Actividades Agropecuarias Pesca y Caza;0;299;299;0;0;0;0;299;299;0;0
+ 530819 1701 001;Bienes Y Servicios De Consumo;Accesorios e Insumos Quimicos y Organicos;0;98528.74;98528.74;0;0;0;0;98528.74;98528.74;0;0
+ 530819 1701 002;Bienes Y Servicios De Consumo;Accesorios e Insumos Quimicos y Organicos;62564;-59029;3535;0;0;0;0;3535;3535;0;0
+ 530819 1701 003;Bienes Y Servicios De Consumo;Accesorios e Insumos Quimicos y Organicos;18045;22.43;18067.43;0;0;0;0;18067.43;18067.43;0;0
+ 530820 1701 002;Bienes Y Servicios De Consumo;Menaje y Accesorios Descartables;0;30;30;0;0;0;0;30;30;0;0
+ 530820 1701 003;Bienes Y Servicios De Consumo;Menaje y Accesorios Descartables;1505;-0.05;1504.95;0;0;0;0;1504.95;1504.95;0;0
+ 530829 1701 001;Bienes Y Servicios De Consumo;Insumos Materiales Suministros y bienes para Investigacion;0;68779.39;68779.39;0;0;0;0;68779.39;68779.39;0;0
+ 530829 1701 002;Bienes Y Servicios De Consumo;Insumos Materiales Suministros y bienes para Investigacion;59167;-57967;1200;0;0;0;0;1200;1200;0;0
+ 530829 1701 003;Bienes Y Servicios De Consumo;Insumos Materiales Suministros y bienes para Investigacion;36055;25503.88;61558.88;0;0;0;0;61558.88;61558.88;0;0
+ 530832 1701 003;Bienes Y Servicios De Consumo;Dispositivos Medicos para Odontologia;10479;0.38;10479.38;0;0;0;0;10479.38;10479.38;0;0
+ 531403 1701 001;Bienes Y Servicios De Consumo;Mobiliario;0;2104.23;2104.23;0;0;0;0;2104.23;2104.23;0;0
+ 531403 1701 003;Bienes Y Servicios De Consumo;Mobiliario;2500;13200;15700;0;0;0;0;15700;15700;0;0
+ 531404 1701 001;Bienes Y Servicios De Consumo;Maquinarias y Equipos;120;285.14;405.14;0;0;0;0;405.14;405.14;0;0
+ 531404 1701 002;Bienes Y Servicios De Consumo;Maquinarias y Equipos;7189;-189;7000;0;0;0;0;7000;7000;0;0
+ 531404 1701 003;Bienes Y Servicios De Consumo;Maquinarias y Equipos;1707;21531;23238;0;0;0;0;23238;23238;0;0
+ 531406 1701 002;Bienes Y Servicios De Consumo;Herramientas y Equipos Menores;4600;-6;4594;0;0;0;0;4594;4594;0;0
+ 531406 1701 003;Bienes Y Servicios De Consumo;Herramientas y Equipos Menores;1136;2845;3981;0;0;0;0;3981;3981;0;0
+ 531407 1701 001;Bienes Y Servicios De Consumo;Equipos Sistemas y Paquetes Informaticos;1045;-74.28;970.72;0;0;0;0;970.72;970.72;0;0
+ 531407 1701 003;Bienes Y Servicios De Consumo;Equipos Sistemas y Paquetes Informaticos;380;0;380;0;0;0;0;380;380;0;0
+ 531408 1701 003;Bienes Y Servicios De Consumo;Bienes Artisticos Culturales Deportivos y Simbolos Patrios;0;5000;5000;0;0;0;0;5000;5000;0;0
+ 531409 1701 002;Bienes Y Servicios De Consumo;Libros y Colecciones;500;0;500;0;0;0;0;500;500;0;0
+ 531601 1701 001;Bienes Y Servicios De Consumo;Fondos de Reposicion Cajas Chicas;0;3000;3000;0;0;0;0;3000;3000;0;0
+ 531601 1701 002;Bienes Y Servicios De Consumo;Fondos de Reposicion Cajas Chicas;33120;-24217.23;8902.77;5034.25;0;0;0;8902.77;8902.77;0;0
+ 570102 1701 001;Otros Egresos Corrientes;Tasas Generales Impuestos Contribuciones Permisos Licencias y Patentes;5500;0;5500;2541.4;458.6;458.6;458.6;5041.4;5041.4;0;8.34
+ 570102 1701 002;Otros Egresos Corrientes;Tasas Generales Impuestos Contribuciones Permisos Licencias y Patentes;21949;-12499;9450;49.6;2393.28;2393.28;2393.28;7056.72;7056.72;0;25.33
+ 570102 1701 003;Otros Egresos Corrientes;Tasas Generales Impuestos Contribuciones Permisos Licencias y Patentes;6540;4917;11457;0;0;0;0;11457;11457;0;0
+ 570201 1701 001;Otros Egresos Corrientes;Seguros;65608;-17531.28;48076.72;0;0;0;0;48076.72;48076.72;0;0
+ 570201 1701 002;Otros Egresos Corrientes;Seguros;73500;92037.12;165537.12;3500;0;0;0;165537.12;165537.12;0;0
+ 570201 1701 003;Otros Egresos Corrientes;Seguros;160136;-1.05;160134.95;1421.91;528.84;528.84;0;159606.11;159606.11;528.84;0.33
+ 570203 1701 001;Otros Egresos Corrientes;Comisiones Bancarias;17300;100;17400;17320;0;0;0;17400;17400;0;0
+ 570203 1701 002;Otros Egresos Corrientes;Comisiones Bancarias;69897;567.54;70464.54;0;1505.09;68.7;5.09;68959.45;70395.84;63.61;0.1
+ 570203 1701 003;Otros Egresos Corrientes;Comisiones Bancarias;8400;0;8400;8400;0;0;0;8400;8400;0;0
+ 570206 1701 001;Otros Egresos Corrientes;Costas Judiciales Tramites Notariales Legalizacion de Documentos y Arreglos Extrajudiciales;0;100;100;40;0;0;0;100;100;0;0
+ 570206 1701 002;Otros Egresos Corrientes;Costas Judiciales Tramites Notariales Legalizacion de Documentos y Arreglos Extrajudiciales;1740;-120.51;1619.49;0;0;0;0;1619.49;1619.49;0;0
+ 580208 1701 001;Transferencias O Donaciones Corrientes;Becas y Ayudas Economicas;771914;-0.49;771913.51;73966.37;3980.58;0;0;767932.93;771913.51;0;0
+ 580208 1701 003;Transferencias O Donaciones Corrientes;Becas y Ayudas Economicas;168529;0.49;168529.49;0;71331;71331;71331;97198.49;97198.49;0;42.33
+ 580209 1701 002;Transferencias O Donaciones Corrientes;A Jubilados Patronales;500000;0;500000;0;0;0;0;500000;500000;0;0
+ 580209 1701 003;Transferencias O Donaciones Corrientes;A Jubilados Patronales;3300700;0;3300700;0;297671.18;297671.18;297671.18;3003028.82;3003028.82;0;9.02
+ 710203 1700 001;Egresos En Personal Para Inversion;Decimo Tercer Sueldo;3524;0;3524;0;117.67;117.67;117.67;3406.33;3406.33;0;3.34
+ 710203 1700 202;Egresos En Personal Para Inversion;Decimo Tercer Sueldo;53011.34;0;53011.34;0;1483.37;1483.37;0;51527.97;51527.97;1483.37;2.8
+ 710204 1700 001;Egresos En Personal Para Inversion;Decimo Cuarto Sueldo;1023;0;1023;0;39.17;39.17;39.17;983.83;983.83;0;3.83
+ 710204 1700 202;Egresos En Personal Para Inversion;Decimo Cuarto Sueldo;16508;0;16508;0;470.04;470.04;0;16037.96;16037.96;470.04;2.85
+ 710502 1700 202;Egresos En Personal Para Inversion;Remuneracion Unificada para Pasantes;39739;212;39951;0;0;0;0;39951;39951;0;0
+ 710510 1700 001;Egresos En Personal Para Inversion;Servicios Personales por Contrato;38888;0;38888;0;2824;2824;2824;36064;36064;0;7.26
+ 710510 1700 202;Egresos En Personal Para Inversion;Servicios Personales por Contrato;640532;0;640532;0;51711;51711;0;588821;588821;51711;8.07
+ 710601 1700 001;Egresos En Personal Para Inversion;Aporte Patronal;4270;0;4270;0;272.52;272.52;272.52;3997.48;3997.48;0;6.38
+ 710601 1700 202;Egresos En Personal Para Inversion;Aporte Patronal;85475;-212;85263;0;4990.11;4990.11;0;80272.89;80272.89;4990.11;5.85
+ 710602 1700 001;Egresos En Personal Para Inversion;Fondo de Reserva;3823;0;3823;0;0;0;0;3823;3823;0;0
+ 710602 1700 202;Egresos En Personal Para Inversion;Fondo de Reserva;55690;0;55690;0;0;0;0;55690;55690;0;0
+ 730105 1701 202;Bienes Y Servicios Para Inversion;Telecomunicaciones;4000;0;4000;0;0;0;0;4000;4000;0;0
+ 730204 1700 001;Bienes Y Servicios Para Inversion;Edicion Impresion Reproduccion Publicaciones Suscripciones Fotocopiado Traduccion Empastado Enmarcacion Serigrafia Fotografia Carnetizacion Filmacion e Imagenes Satelitales;600;0;600;0;0;0;0;600;600;0;0
+ 730204 1701 001;Bienes Y Servicios Para Inversion;Edicion Impresion Reproduccion Publicaciones Suscripciones Fotocopiado Traduccion Empastado Enmarcacion Serigrafia Fotografia Carnetizacion Filmacion e Imagenes Satelitales;30000;0;30000;0;0;0;0;30000;30000;0;0
+ 730207 1700 001;Bienes Y Servicios Para Inversion;Difusion Informacion y Publicidad;8271;0;8271;0;0;0;0;8271;8271;0;0
+ 730207 1701 001;Bienes Y Servicios Para Inversion;Difusion Informacion y Publicidad;800;0;800;0;0;0;0;800;800;0;0
+ 730224 1701 001;Bienes Y Servicios Para Inversion;Servicio de Implementacion de Bancos de Informacion;10000;0;10000;0;0;0;0;10000;10000;0;0
+ 730301 1700 001;Bienes Y Servicios Para Inversion;Pasajes al Interior;2222;0;2222;0;0;0;0;2222;2222;0;0
+ 730301 1701 001;Bienes Y Servicios Para Inversion;Pasajes al Interior;10500;0;10500;1000;0;0;0;10500;10500;0;0
+ 730302 1701 001;Bienes Y Servicios Para Inversion;Pasajes al Exterior;188000;0;188000;1200;0;0;0;188000;188000;0;0
+ 730303 1700 001;Bienes Y Servicios Para Inversion;Viaticos y Subsistencias en el Interior;6061;0;6061;0;0;0;0;6061;6061;0;0
+ 730303 1701 001;Bienes Y Servicios Para Inversion;Viaticos y Subsistencias en el Interior;35000;0;35000;600;0;0;0;35000;35000;0;0
+ 730303 1701 202;Bienes Y Servicios Para Inversion;Viaticos y Subsistencias en el Interior;26000;0;26000;5000;0;0;0;26000;26000;0;0
+ 730304 1701 001;Bienes Y Servicios Para Inversion;Viaticos y Subsistencias en el Exterior;80000;0;80000;3000;0;0;0;80000;80000;0;0
+ 730402 1701 001;Bienes Y Servicios Para Inversion;Edificios Locales Residencias y Cableado Estructurado (Mantenimiento Reparaciones e Instalacion);0;5160.5;5160.5;5160.5;0;0;0;5160.5;5160.5;0;0
+ 730402 1701 202;Bienes Y Servicios Para Inversion;Edificios Locales Residencias y Cableado Estructurado (Mantenimiento Reparaciones e Instalacion);10000;0;10000;0;0;0;0;10000;10000;0;0
+ 730405 1701 202;Bienes Y Servicios Para Inversion;Vehiculos (Servicio de Mantenimiento y Reparacion);10000;0;10000;0;0;0;0;10000;10000;0;0
+ 730601 1700 001;Bienes Y Servicios Para Inversion;Consultoria Asesoria e Investigacion Especializada;5550;0;5550;0;0;0;0;5550;5550;0;0
+ 730601 1701 001;Bienes Y Servicios Para Inversion;Consultoria Asesoria e Investigacion Especializada;278680;-0.11;278679.89;0;0;0;0;278679.89;278679.89;0;0
+ 730606 1700 001;Bienes Y Servicios Para Inversion;Honorarios por Contratos Civiles de Servicios;15658;0;15658;0;0;0;0;15658;15658;0;0
+ 730606 1701 001;Bienes Y Servicios Para Inversion;Honorarios por Contratos Civiles de Servicios;319520;0;319520;48788;41149;26529;25543;278371;292991;986;8.3
+ 730606 1701 202;Bienes Y Servicios Para Inversion;Honorarios por Contratos Civiles de Servicios;480;0;480;0;0;0;0;480;480;0;0
+ 730607 1701 001;Bienes Y Servicios Para Inversion;Servicios Tecnicos Especializados;480;0;480;0;0;0;0;480;480;0;0
+ 730609 1701 001;Bienes Y Servicios Para Inversion;Investigaciones Profesionales y Analisis de Laboratorio;67442;-0.33;67441.67;0;0;0;0;67441.67;67441.67;0;0
+ 730612 1701 001;Bienes Y Servicios Para Inversion;Capacitacion a Servidores Publicos;35000;0;35000;0;0;0;0;35000;35000;0;0
+ 730701 1701 001;Bienes Y Servicios Para Inversion;Desarrollo Actualizacion Asistencia Tecnica y Soporte de Sistemas Informaticos;8107;0;8107;3026.94;0;0;0;8107;8107;0;0
+ 730702 1701 001;Bienes Y Servicios Para Inversion;Arrendamiento y Licencias de Uso de Paquetes Informaticos;2937;0.06;2937.06;0;0;0;0;2937.06;2937.06;0;0
+ 730805 1701 001;Bienes Y Servicios Para Inversion;Materiales de Aseo;761;0.1;761.1;0;0;0;0;761.1;761.1;0;0
+ 730807 1701 202;Bienes Y Servicios Para Inversion;Materiales de Impresion Fotografia Reproduccion y Publicaciones;12000;0;12000;0;0;0;0;12000;12000;0;0
+ 730811 1701 202;Bienes Y Servicios Para Inversion;Insumos Materiales y Suministros para Construccion Electricidad Plomeria Carpinteria Senalizacion Vial Navegacion Contra Incendios y Placas;3853;0;3853;0;0;0;0;3853;3853;0;0
+ 730813 1701 001;Bienes Y Servicios Para Inversion;Repuestos y Accesorios;33273;-0.14;33272.86;0;0;0;0;33272.86;33272.86;0;0
+ 730813 1701 202;Bienes Y Servicios Para Inversion;Repuestos y Accesorios;40000;0;40000;0;0;0;0;40000;40000;0;0
+ 730819 1700 001;Bienes Y Servicios Para Inversion;Accesorios e Insumos Quimicos y Organicos;647;0;647;0;0;0;0;647;647;0;0
+ 730819 1701 001;Bienes Y Servicios Para Inversion;Accesorios e Insumos Quimicos y Organicos;75559;-0.36;75558.64;2912;5417.09;5417.09;0;70141.55;70141.55;5417.09;7.17
+ 730829 1700 001;Bienes Y Servicios Para Inversion;Insumos Materiales Suministros y Bienes para Investigacion;4180;0;4180;0;0;0;0;4180;4180;0;0
+ 730829 1701 001;Bienes Y Servicios Para Inversion;Insumos Materiales Suministros y Bienes para Investigacion;100609;0.56;100609.56;0;1048.84;1048.84;0;99560.72;99560.72;1048.84;1.04
+ 730829 1701 202;Bienes Y Servicios Para Inversion;Insumos Materiales Suministros y Bienes para Investigacion;48617;0.41;48617.41;0;0;0;0;48617.41;48617.41;0;0
+ 731404 1701 001;Bienes Y Servicios Para Inversion;Maquinarias y Equipos;36870;-0.28;36869.72;0;0;0;0;36869.72;36869.72;0;0
+ 731406 1701 001;Bienes Y Servicios Para Inversion;Herramientas y Equipos Menores;2744;0.45;2744.45;0;0;0;0;2744.45;2744.45;0;0
+ 731407 1701 001;Bienes Y Servicios Para Inversion;Equipos Sistemas y Paquetes Informaticos;248;0.1;248.1;0;0;0;0;248.1;248.1;0;0
+ 731409 1701 202;Bienes Y Servicios Para Inversion;Libros y Colecciones;926;-0.15;925.85;0;0;0;0;925.85;925.85;0;0
+ 750501 1701 001;Obras Publicas;Obras de Infraestructura;2248742;-5160.57;2243581.43;1745821.22;0;0;0;2243581.43;2243581.43;0;0
+ 770201 1701 202;Otros Egresos De Inversion;Seguros;95742;0;95742;0;0;0;0;95742;95742;0;0
+ 840103 1701 003;Egresos De Capital;Mobiliarios;2000;11550;13550;0;0;0;0;13550;13550;0;0
+ 840104 1700 001;Egresos De Capital;Maquinarias y Equipos;36311;0;36311;0;0;0;0;36311;36311;0;0
+ 840104 1701 001;Egresos De Capital;Maquinarias y Equipos;722251;33389.93;755640.93;241645.46;0;0;0;755640.93;755640.93;0;0
+ 840104 1701 002;Egresos De Capital;Maquinarias y Equipos;259868;5990;265858;0;0;0;0;265858;265858;0;0
+ 840104 1701 003;Egresos De Capital;Maquinarias y Equipos;337296;118004.05;455300.05;0;0;0;0;455300.05;455300.05;0;0
+ 840104 1701 202;Egresos De Capital;Maquinarias y Equipos;28000;0;28000;0;0;0;0;28000;28000;0;0
+ 840105 1701 002;Egresos De Capital;Vehiculos;54774;0;54774;52029.33;0;0;0;54774;54774;0;0
+ 840105 1701 003;Egresos De Capital;Vehiculos;89970;0;89970;78234.78;0;0;0;89970;89970;0;0
+ 840106 1701 003;Egresos De Capital;Herramientas;13561;1908.95;15469.95;0;0;0;0;15469.95;15469.95;0;0
+ 840107 1700 001;Egresos De Capital;Equipos Sistemas y Paquetes Informaticos;18827;0;18827;0;0;0;0;18827;18827;0;0
+ 840107 1701 001;Egresos De Capital;Equipos Sistemas y Paquetes Informaticos;31135;117636.22;148771.22;20391.71;0;0;0;148771.22;148771.22;0;0
+ 840107 1701 002;Egresos De Capital;Equipos Sistemas y Paquetes Informaticos;615641;-0.42;615640.58;266372.62;0;0;0;615640.58;615640.58;0;0
+ 840107 1701 003;Egresos De Capital;Equipos Sistemas y Paquetes Informaticos;316055;33928.2;349983.2;0;0;0;0;349983.2;349983.2;0;0
+ 840107 1701 202;Egresos De Capital;Equipos Sistemas y Paquetes Informaticos;159295;-0.26;159294.74;8000;0;0;0;159294.74;159294.74;0;0
+ 840111 1701 002;Egresos De Capital;Partes y Repuestos;0;0.42;0.42;0;0;0;0;0.42;0.42;0;0
+ 840111 1701 003;Egresos De Capital;Partes y Repuestos;3065;0;3065;0;0;0;0;3065;3065;0;0
+ 840113 1701 003;Egresos De Capital;Equipos Medicos;0;300;300;0;0;0;0;300;300;0;0
+ 840115 1701 003;Egresos De Capital;Equipos Odontologicos;2500;0;2500;0;0;0;0;2500;2500;0;0
+ 990101 1700 001;Otros Pasivos;Obligaciones de Ejercicios Anteriores por Egresos de Personal;170000;0;170000;0;0;0;0;170000;170000;0;0
+ 990102 1701 002;Otros Pasivos;Obligaciones de Ejercicios Anteriores por Egresos en Servicios;401;0;401;0;0;0;0;401;401;0;0

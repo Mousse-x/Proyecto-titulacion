@@ -1,0 +1,9 @@
+Institucion;Escuela Politecnica Nacional
+Descripcion;"Informacion clasificada como reservada
+Este conjunto de datos no aplica para esta entidad"
+Nombre del campo;Descripcion del campo
+Tema;Tema o asunto al que se refiere la informacion reservada
+Numero de resolucion;Numero que identifica a la informacion clasificada como reservada
+Fecha de la clasificacion de la informacion reservada;Fecha en la que se realizo la clasificacion de la informacion como reservada
+Periodo de vigencia de la clasificacion de la reserva;Periodo de tiempo durante el cual la informacion se mantiene clasificada como reservada
+Enlace para descargar la resolucion de clasificacion de informacion reservada;Enlace para descargar la resolucion con la que se clasifico la informacion reservada

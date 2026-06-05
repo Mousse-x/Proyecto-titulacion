@@ -28,6 +28,7 @@ class University(models.Model):
     city = models.CharField(max_length=100, blank=True, null=True)
     website_url = models.TextField(blank=True, null=True)
     transparency_url = models.TextField(blank=True, null=True)
+    logo_path = models.TextField(blank=True, null=True)
     institution_type = models.CharField(max_length=50)
     is_active = models.BooleanField()
     created_at = models.DateTimeField()

@@ -4,6 +4,7 @@ import traceback
 import os
 import re
 import mimetypes
+import uuid
 from pathlib import Path
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password, check_password
@@ -11,6 +12,8 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
 from django.conf import settings
+from django.core.files.storage import default_storage
+from django.http.multipartparser import MultiPartParser, MultiPartParserError
 from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, EvidenceValidationResult
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
@@ -18,10 +21,164 @@ from .sanitizers import sanitize_text, validate_name, validate_email_format, val
 from .services.international_evaluator import evaluate_international_standards
 
 
+DPE_ENTITY_URL_RE = re.compile(r"transparencia\.dpe\.gob\.ec/entidades/(\d+)", re.IGNORECASE)
+ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+MAX_LOGO_SIZE = 2 * 1024 * 1024
+
+
+def _normalize_dpe_transparency_url(value):
+    """Acepta un ID de entidad DPE o una URL completa y devuelve la URL canonica."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    if raw.isdigit():
+        return f"https://transparencia.dpe.gob.ec/entidades/{raw}"
+
+    match = DPE_ENTITY_URL_RE.search(raw)
+    if match:
+        return f"https://transparencia.dpe.gob.ec/entidades/{match.group(1)}"
+
+    return raw
+
+
+def _extract_dpe_entity_id(transparency_url):
+    match = DPE_ENTITY_URL_RE.search(transparency_url or "")
+    return match.group(1) if match else ""
+
+
+def _parse_body(request):
+    content_type = request.META.get("CONTENT_TYPE", "")
+    if content_type.startswith("multipart/form-data"):
+        if request.method == "POST":
+            return request.POST, request.FILES, None
+        try:
+            data, files = MultiPartParser(
+                request.META,
+                request,
+                request.upload_handlers,
+                request.encoding,
+            ).parse()
+            return data, files, None
+        except MultiPartParserError:
+            return None, None, "Formulario multipart invalido"
+
+    try:
+        return json.loads(request.body or b"{}"), {}, None
+    except json.JSONDecodeError:
+        return None, None, "Cuerpo JSON invalido"
+
+
+def _get_value(data, key, default=""):
+    if hasattr(data, "get"):
+        return data.get(key, default)
+    return default
+
+
+def _get_bool(data, key, default=True):
+    value = _get_value(data, key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "on", "yes", "si"}
+    return bool(value)
+
+
+def _save_university_logo(upload, acronym):
+    if not upload:
+        return None
+
+    ext = Path(upload.name or "").suffix.lower()
+    if ext not in ALLOWED_LOGO_EXTENSIONS:
+        raise ValueError("El logo debe ser una imagen PNG, JPG, JPEG o WEBP")
+    if upload.size and upload.size > MAX_LOGO_SIZE:
+        raise ValueError("El logo no debe superar 2 MB")
+
+    safe_acronym = re.sub(r"[^a-z0-9]+", "-", str(acronym or "universidad").lower()).strip("-") or "universidad"
+    filename = f"{safe_acronym}-{uuid.uuid4().hex[:10]}{ext}"
+    return default_storage.save(f"university_logos/{filename}", upload)
+
+
+def _logo_url(request, logo_path):
+    if not logo_path:
+        return ""
+    media_url = f"{settings.MEDIA_URL.rstrip('/')}/{str(logo_path).replace(os.sep, '/')}"
+    return request.build_absolute_uri(media_url)
+
+
+def _serialize_university(request, university, score_data=None):
+    score_data = score_data or {}
+    university_score = score_data.get(university.id, {})
+
+    return {
+        "id":               university.id,
+        "name":             university.acronym,
+        "full_name":        university.name,
+        "city":             university.city,
+        "province":         university.province,
+        "type":             university.institution_type,
+        "website":          university.website_url,
+        "transparency_url": university.transparency_url,
+        "dpe_entity_id":     _extract_dpe_entity_id(university.transparency_url),
+        "logo_url":          _logo_url(request, getattr(university, "logo_path", None)),
+        "logo_path":         getattr(university, "logo_path", "") or "",
+        "is_active":        university.is_active,
+        "transparency_score": university_score.get("transparency_score", 0),
+        "integrated_transparency_score": university_score.get("integrated_transparency_score", 0),
+        "evaluated_documents": university_score.get("evaluated_documents", 0),
+        "rank":             university_score.get("rank", 0),
+        "logo_initials":    university.acronym[:4] if university.acronym else "UNIV",
+        "color":            "#6366F1",
+    }
+
+
+def _get_university_score_data():
+    validations = EvidenceValidationResult.objects.select_related("evidence", "evidence__university")
+    by_university = {}
+
+    for vr in validations:
+        if not vr.evidence_id or not vr.evidence.university_id:
+            continue
+
+        bucket = by_university.setdefault(
+            vr.evidence.university_id,
+            {"score_sum": 0, "integrated_score_sum": 0, "count": 0},
+        )
+        national_score = float(vr.total_score)
+        bucket["score_sum"] += national_score
+        international = evaluate_international_standards(
+            vr.evidence,
+            lotaip_result={
+                "puntaje_total": national_score,
+                "puntaje_estructura": float(vr.score_structure),
+            },
+        )
+        bucket["integrated_score_sum"] += international["indice_nacional_internacional"]
+        bucket["count"] += 1
+
+    ranked = []
+    for university_id, item in by_university.items():
+        count = item["count"]
+        ranked.append((
+            university_id,
+            {
+                "transparency_score": round(item["score_sum"] / count, 2) if count else 0,
+                "integrated_transparency_score": round(item["integrated_score_sum"] / count, 2) if count else 0,
+                "evaluated_documents": count,
+            },
+        ))
+
+    ranked.sort(key=lambda entry: entry[1]["transparency_score"], reverse=True)
+    return {
+        university_id: {**score, "rank": index + 1}
+        for index, (university_id, score) in enumerate(ranked)
+    }
+
+
 # ─── Helpers de auditoría ────────────────────────────────────────────
 
 def _log(user_id, action, table_name=None, record_id=None, description=None):
-    """Registra auditoría exitosa — AÍSLA la lógica de persistencia"""
+    """Registra auditoria exitosa; aisla la logica de persistencia"""
     try:
         AuditLog.objects.create(
             user_id=user_id,
@@ -37,16 +194,16 @@ def _log(user_id, action, table_name=None, record_id=None, description=None):
 
 
 def _log_error(error_message, user_id=None, function_name=None, error_code=None, exc=None):
-    """Registra errores cifrados — AÍSLA la lógica de encriptación"""
+    """Registra errores cifrados; aisla la logica de encriptacion"""
     try:
         raw_trace = traceback.format_exc() if exc else None
         AuditError.objects.create(
             user_id=user_id,
             module="auth",
             function_name=function_name,
-            error_message=encrypt_field(error_message),      # ← cifrado
+            error_message=encrypt_field(error_message),      # cifrado
             error_code=error_code,
-            stack_trace=encrypt_field(raw_trace) if raw_trace else None,  # ← cifrado
+            stack_trace=encrypt_field(raw_trace) if raw_trace else None,  # cifrado
             created_at=timezone.now(),
         )
     except Exception:
@@ -123,8 +280,8 @@ def register_user(request):
             new_user = AppUser.objects.create(
                 role          = role,
                 full_name     = full_name,
-                email         = encrypt_email(email_raw),   # ← cifrado
-                email_hash    = email_idx,                   # ← índice HMAC
+                email         = encrypt_email(email_raw),   # cifrado
+                email_hash    = email_idx,                   # indice HMAC
                 password_hash = make_password(password),
                 is_active     = True,
                 created_at    = now,
@@ -465,13 +622,13 @@ def list_users(request):
                 {
                     "id":              u.id,
                     "full_name":       u.full_name,
-                    "email":           decrypt_email(u.email),  # ← descifrado al leer
+                    "email":           decrypt_email(u.email),  # descifrado al leer
                     "role_id":         u.role.id,
                     "role_name":       u.role.name,
                     "university_id":   u.university_id,
                     "university_name": u.university.name if u.university else None,
                     "is_active":       u.is_active,
-                    "is_superadmin":   u.id == superadmin_id,   # ← protegido
+                    "is_superadmin":   u.id == superadmin_id,   # protegido
                     "last_login":      u.last_login.isoformat() if u.last_login else None,
                     "created_at":      u.created_at.isoformat() if u.created_at else None,
                 }
@@ -636,33 +793,59 @@ def list_universities(request):
     if request.method == "GET":
         try:
             univs = University.objects.filter(is_active=True).order_by("name")
-            data = [
-                {
-                    "id":               u.id,
-                    "name":             u.acronym,
-                    "full_name":        u.name,
-                    "city":             u.city,
-                    "province":         u.province,
-                    "type":             u.institution_type,
-                    "website":          u.website_url,
-                    "transparency_url": u.transparency_url,
-                    "is_active":        u.is_active,
-                    "transparency_score": 0,
-                    "rank":             0,
-                    "logo_initials":    u.acronym[:4] if u.acronym else "UNIV",
-                    "color":            "#6366F1",
-                }
-                for u in univs
-            ]
+            score_data = _get_university_score_data()
+            data = [_serialize_university(request, u, score_data) for u in univs]
             return JsonResponse(data, safe=False)
         except Exception as exc:
             return JsonResponse({"error": f"Error al obtener universidades: {str(exc)}"}, status=500)
 
     if request.method == "POST":
+        if request.META.get("CONTENT_TYPE", "").startswith("multipart/form-data"):
+            data, files, parse_error = _parse_body(request)
+            if parse_error:
+                return JsonResponse({"error": parse_error}, status=400)
+
+            transparency_input = (
+                _get_value(data, "dpe_entity_id")
+                or _get_value(data, "transparency_id")
+                or _get_value(data, "establishment_id")
+                or _get_value(data, "transparency_url", "")
+            )
+            acronym = _get_value(data, "name", "").strip().upper()
+
+            try:
+                logo_path = _save_university_logo(files.get("logo"), acronym)
+                now = timezone.now()
+                univ = University.objects.create(
+                    name             = _get_value(data, "full_name", "").strip(),
+                    acronym          = acronym,
+                    province         = _get_value(data, "province", ""),
+                    city             = _get_value(data, "city", ""),
+                    website_url      = _get_value(data, "website", ""),
+                    transparency_url = _normalize_dpe_transparency_url(transparency_input),
+                    logo_path        = logo_path,
+                    institution_type = _get_value(data, "type", "Pública"),
+                    is_active        = _get_bool(data, "is_active", True),
+                    created_at       = now,
+                    updated_at       = now,
+                )
+                return JsonResponse({"id": univ.id, "logo_url": _logo_url(request, logo_path), "message": "Universidad creada"}, status=201)
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+            except Exception as exc:
+                return JsonResponse({"error": f"Error al crear universidad: {str(exc)}"}, status=500)
+
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+
+        transparency_input = (
+            data.get("dpe_entity_id")
+            or data.get("transparency_id")
+            or data.get("establishment_id")
+            or data.get("transparency_url", "")
+        )
 
         now = timezone.now()
         try:
@@ -672,7 +855,7 @@ def list_universities(request):
                 province         = data.get("province", ""),
                 city             = data.get("city", ""),
                 website_url      = data.get("website", ""),
-                transparency_url = data.get("transparency_url", ""),
+                transparency_url = _normalize_dpe_transparency_url(transparency_input),
                 institution_type = data.get("type", "Pública"),
                 is_active        = data.get("is_active", True),
                 created_at       = now,
@@ -698,6 +881,37 @@ def university_detail(request, univ_id):
         return JsonResponse({"error": "Universidad no encontrada"}, status=404)
 
     if request.method == "PUT":
+        if request.META.get("CONTENT_TYPE", "").startswith("multipart/form-data"):
+            data, files, parse_error = _parse_body(request)
+            if parse_error:
+                return JsonResponse({"error": parse_error}, status=400)
+
+            if "full_name" in data: univ.name = _get_value(data, "full_name")
+            if "name" in data:      univ.acronym = _get_value(data, "name").upper()
+            if "city" in data:      univ.city = _get_value(data, "city")
+            if "province" in data:  univ.province = _get_value(data, "province")
+            if "website" in data:   univ.website_url = _get_value(data, "website")
+            if any(k in data for k in ("dpe_entity_id", "transparency_id", "establishment_id", "transparency_url")):
+                transparency_input = (
+                    _get_value(data, "dpe_entity_id")
+                    or _get_value(data, "transparency_id")
+                    or _get_value(data, "establishment_id")
+                    or _get_value(data, "transparency_url", "")
+                )
+                univ.transparency_url = _normalize_dpe_transparency_url(transparency_input)
+            if "type" in data:      univ.institution_type = _get_value(data, "type")
+            if "is_active" in data: univ.is_active = _get_bool(data, "is_active", univ.is_active)
+            if files.get("logo"):
+                try:
+                    if getattr(univ, "logo_path", None):
+                        default_storage.delete(univ.logo_path)
+                    univ.logo_path = _save_university_logo(files.get("logo"), univ.acronym)
+                except ValueError as exc:
+                    return JsonResponse({"error": str(exc)}, status=400)
+            univ.updated_at = timezone.now()
+            univ.save()
+            return JsonResponse({"message": "Universidad actualizada", "logo_url": _logo_url(request, getattr(univ, "logo_path", None))})
+
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
@@ -708,8 +922,17 @@ def university_detail(request, univ_id):
         if "city" in data:      univ.city = data["city"]
         if "province" in data:  univ.province = data["province"]
         if "website" in data:   univ.website_url = data["website"]
+        if any(k in data for k in ("dpe_entity_id", "transparency_id", "establishment_id", "transparency_url")):
+            transparency_input = (
+                data.get("dpe_entity_id")
+                or data.get("transparency_id")
+                or data.get("establishment_id")
+                or data.get("transparency_url", "")
+            )
+            univ.transparency_url = _normalize_dpe_transparency_url(transparency_input)
         if "type" in data:      univ.institution_type = data["type"]
         if "is_active" in data: univ.is_active = data["is_active"]
+        univ.updated_at = timezone.now()
         univ.save()
         return JsonResponse({"message": "Universidad actualizada"})
 
@@ -1019,8 +1242,8 @@ def list_audit_errors(request):
                     "module":        e.module,
                     "function_name": e.function_name,
                     "error_code":    e.error_code,
-                    "error_message": decrypt_field(e.error_message),   # ← descifrado aquí
-                    "stack_trace":   decrypt_field(e.stack_trace) if e.stack_trace else None,  # ← descifrado aquí
+                    "error_message": decrypt_field(e.error_message),   # descifrado aqui
+                    "stack_trace":   decrypt_field(e.stack_trace) if e.stack_trace else None,  # descifrado aqui
                     "created_at":    e.created_at.isoformat() if e.created_at else None,
                 }
                 for e in errors
