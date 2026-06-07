@@ -73,6 +73,45 @@ class AppUser(models.Model):
         return self.full_name
 
 
+class UserFeedback(models.Model):
+    FEEDBACK_TYPE_CHOICES = [
+        ("system", "Sistema"),
+        ("transparency", "Transparencia"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pendiente"),
+        ("reviewed", "Revisado"),
+    ]
+
+    user_id = models.IntegerField(blank=True, null=True)
+    university_id = models.IntegerField(blank=True, null=True)
+    user_name = models.CharField(max_length=150, blank=True, null=True)
+    user_email = models.TextField(blank=True, null=True)
+    user_role = models.CharField(max_length=100, blank=True, null=True)
+    feedback_type = models.CharField(max_length=20, choices=FEEDBACK_TYPE_CHOICES)
+    subject = models.CharField(max_length=120)
+    message = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    email_sent = models.BooleanField(default=False)
+    recipient_email = models.CharField(max_length=254, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = '"core"."user_feedback"'
+        verbose_name = "Feedback de usuario"
+        verbose_name_plural = "Feedback de usuarios"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["feedback_type", "status"], name="user_feedback_type_status_idx"),
+            models.Index(fields=["created_at"], name="user_feedback_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_feedback_type_display()} - {self.subject}"
+
+
 # =========================
 # TRANSPARENCY
 # =========================

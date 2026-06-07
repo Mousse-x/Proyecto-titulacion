@@ -11,6 +11,9 @@ from .views import (
     request_password_reset,
     confirm_password_reset,
     verify_otp,
+    submit_feedback,
+    list_user_feedback,
+    user_feedback_detail,
     refresh_token,
     auth_status,
 )
@@ -51,6 +54,9 @@ urlpatterns = [
 
     # Roles
     path("roles/", list_roles, name="list_roles"),
+    path("feedback/", submit_feedback, name="submit_feedback"),
+    path("feedback/admin/", list_user_feedback, name="list_user_feedback"),
+    path("feedback/admin/<int:feedback_id>/", user_feedback_detail, name="user_feedback_detail"),
 
     # Auditoría — solo admin
     path("audit/errors/", list_audit_errors, name="list_audit_errors"),

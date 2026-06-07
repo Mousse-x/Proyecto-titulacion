@@ -14,7 +14,8 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
-from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, EvidenceValidationResult
+from email.utils import parseaddr
+from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, EvidenceValidationResult, UserFeedback
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
@@ -24,6 +25,10 @@ from .services.international_evaluator import evaluate_international_standards
 DPE_ENTITY_URL_RE = re.compile(r"transparencia\.dpe\.gob\.ec/entidades/(\d+)", re.IGNORECASE)
 ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 MAX_LOGO_SIZE = 2 * 1024 * 1024
+FEEDBACK_TYPES = {
+    "system": "Sistema",
+    "transparency": "Transparencia",
+}
 
 
 def _normalize_dpe_transparency_url(value):
@@ -104,6 +109,14 @@ def _logo_url(request, logo_path):
         return ""
     media_url = f"{settings.MEDIA_URL.rstrip('/')}/{str(logo_path).replace(os.sep, '/')}"
     return request.build_absolute_uri(media_url)
+
+
+def _default_feedback_recipient():
+    configured = getattr(settings, "FEEDBACK_RECIPIENT_EMAIL", "")
+    if configured:
+        return configured
+    _, email = parseaddr(settings.DEFAULT_FROM_EMAIL)
+    return email or settings.DEFAULT_FROM_EMAIL
 
 
 def _serialize_university(request, university, score_data=None):
@@ -313,7 +326,7 @@ def register_user(request):
 @csrf_exempt
 def login_user(request):
     MAX_ATTEMPTS = 5
-    SUPPORT_EMAIL = "sistematransparencia@hotmail.com"
+    SUPPORT_EMAIL = "sistema_transparencia@hotmail.com"
 
     if request.method == "POST":
         try:
@@ -544,6 +557,177 @@ def verify_otp(request):
         })
         
     return JsonResponse({"error": "Método no permitido"}, status=405)
+
+
+@csrf_exempt
+def submit_feedback(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Metodo no permitido"}, status=405)
+
+    user, err = require_auth(request)
+    if err:
+        return err
+
+    try:
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Cuerpo JSON invalido"}, status=400)
+
+    feedback_type = str(data.get("type", "")).strip().lower()
+    subject = sanitize_text(str(data.get("subject", "")).strip(), max_length=120)
+    message = sanitize_text(str(data.get("message", "")).strip(), max_length=2000)
+
+    if feedback_type not in FEEDBACK_TYPES:
+        return JsonResponse({"error": "Seleccione si el feedback es del sistema o de transparencia"}, status=400)
+    if not subject or not message:
+        return JsonResponse({"error": "Asunto y comentario son obligatorios"}, status=400)
+
+    type_label = FEEDBACK_TYPES[feedback_type]
+    recipient = _default_feedback_recipient()
+    try:
+        user_email = decrypt_email(user.email)
+    except Exception:
+        user_email = user.email or ""
+
+    mail_subject = f"[Feedback {type_label}] {subject}"
+    mail_message = (
+        f"Nuevo feedback recibido - {type_label}\n\n"
+        f"Usuario: {user.full_name}\n"
+        f"Correo: {user_email}\n"
+        f"Rol: {getattr(user.role, 'name', '')}\n"
+        f"Fecha: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        f"Asunto: {subject}\n\n"
+        f"Comentario:\n{message}"
+    )
+
+    try:
+        send_mail(
+            subject=mail_subject,
+            message=mail_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        _log_error(
+            f"Error enviando feedback: {str(exc)}",
+            user_id=user.id,
+            function_name="submit_feedback",
+            error_code="FEEDBACK_EMAIL_ERROR",
+            exc=exc,
+        )
+        return JsonResponse({"error": "No se pudo enviar el feedback. Intente nuevamente."}, status=500)
+
+    try:
+        UserFeedback.objects.create(
+            user_id=user.id,
+            university_id=user.university_id,
+            user_name=user.full_name,
+            user_email=user_email,
+            user_role=getattr(user.role, "name", ""),
+            feedback_type=feedback_type,
+            subject=subject,
+            message=message,
+            email_sent=True,
+            recipient_email=recipient,
+        )
+    except Exception as exc:
+        _log_error(
+            f"Error guardando feedback: {str(exc)}",
+            user_id=user.id,
+            function_name="submit_feedback",
+            error_code="FEEDBACK_SAVE_ERROR",
+            exc=exc,
+        )
+
+    _log(
+        user_id=user.id,
+        action="SEND_FEEDBACK",
+        table_name=None,
+        record_id=None,
+        description=f"Feedback enviado ({type_label})",
+    )
+    return JsonResponse({"message": "Feedback enviado correctamente"})
+
+
+def _serialize_user_feedback(item):
+    return {
+        "id": item.id,
+        "user_id": item.user_id,
+        "university_id": item.university_id,
+        "user_name": item.user_name,
+        "user_email": item.user_email,
+        "user_role": item.user_role,
+        "feedback_type": item.feedback_type,
+        "feedback_type_label": FEEDBACK_TYPES.get(item.feedback_type, item.feedback_type),
+        "subject": item.subject,
+        "message": item.message,
+        "status": item.status,
+        "email_sent": item.email_sent,
+        "recipient_email": item.recipient_email,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+    }
+
+
+@csrf_exempt
+def list_user_feedback(request):
+    user, err = require_role(request, [1])
+    if err:
+        return err
+
+    if request.method != "GET":
+        return JsonResponse({"error": "Metodo no permitido"}, status=405)
+
+    queryset = UserFeedback.objects.all().order_by("-created_at")
+    feedback_type = request.GET.get("type", "").strip().lower()
+    status = request.GET.get("status", "").strip().lower()
+
+    if feedback_type in FEEDBACK_TYPES:
+        queryset = queryset.filter(feedback_type=feedback_type)
+    if status in {"pending", "reviewed"}:
+        queryset = queryset.filter(status=status)
+
+    items = [_serialize_user_feedback(item) for item in queryset[:300]]
+    return JsonResponse(items, safe=False)
+
+
+@csrf_exempt
+def user_feedback_detail(request, feedback_id):
+    user, err = require_role(request, [1])
+    if err:
+        return err
+
+    try:
+        item = UserFeedback.objects.get(id=feedback_id)
+    except UserFeedback.DoesNotExist:
+        return JsonResponse({"error": "Comentario no encontrado"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_user_feedback(item))
+
+    if request.method in {"PUT", "PATCH"}:
+        try:
+            data = json.loads(request.body or b"{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Cuerpo JSON invalido"}, status=400)
+
+        status = str(data.get("status", "")).strip().lower()
+        if status not in {"pending", "reviewed"}:
+            return JsonResponse({"error": "Estado invalido"}, status=400)
+
+        item.status = status
+        item.save(update_fields=["status", "updated_at"])
+        _log(
+            user_id=user.id,
+            action="UPDATE_FEEDBACK_STATUS",
+            table_name="core.user_feedback",
+            record_id=item.id,
+            description=f"Estado de feedback actualizado a {status}",
+        )
+        return JsonResponse(_serialize_user_feedback(item))
+
+    return JsonResponse({"error": "Metodo no permitido"}, status=405)
 
 
 @csrf_exempt

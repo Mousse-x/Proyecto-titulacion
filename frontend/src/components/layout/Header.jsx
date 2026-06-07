@@ -9,6 +9,7 @@ const PAGE_META = {
   '/admin/rankings': { title: 'Rankings Nacionales', sub: 'Indice de transparencia institucional' },
   '/admin/reports': { title: 'Reportes', sub: 'Generar y exportar informes' },
   '/admin/audit': { title: 'Auditoria', sub: 'Registros y trazabilidad del sistema' },
+  '/admin/feedback': { title: 'Comentarios', sub: 'Feedback enviado por usuarios' },
   '/admin/documents': { title: 'Gestion Documental', sub: 'Administrar evidencias institucionales' },
   '/admin/validation': { title: 'Evaluacion LOTAIP', sub: 'Validacion nacional e internacional' },
   '/university/dashboard': { title: 'Mi Dashboard', sub: 'Estado de transparencia institucional' },

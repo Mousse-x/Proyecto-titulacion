@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { getUniversityLogo } from '../../data/universityLogos';
+import FeedbackForm from '../../components/common/FeedbackForm';
 
 const EMPTY_STATS = {
   total_universities: 0,
@@ -148,6 +149,14 @@ export default function AuditorDashboard() {
           </div>
         </div>
       </div>
+
+      <footer className="dashboard-feedback-footer">
+        <div>
+          <strong>Ayuda a mejorar la transparencia</strong>
+          <span>Reporta sugerencias, problemas del sistema o comentarios sobre la informacion evaluada.</span>
+        </div>
+        <FeedbackForm compact />
+      </footer>
     </div>
   );
 }

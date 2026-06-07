@@ -155,7 +155,7 @@ EMAIL_PORT          = 587
 EMAIL_USE_TLS       = True
 EMAIL_HOST_USER     = 'a8d5ed001@smtp-brevo.com'
 EMAIL_HOST_PASSWORD = 'KyXta5h1BqW3j8bL'
-DEFAULT_FROM_EMAIL  = 'SisTransp ESPOCH <sistematransparencia@hotmail.com>'
+DEFAULT_FROM_EMAIL  = 'SisTransp ESPOCH <sistema_transparencia@hotmail.com>'
 
 # URL base del frontend — usada en los links de reset
 FRONTEND_URL = 'http://localhost:5173'

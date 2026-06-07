@@ -143,6 +143,7 @@ const ICONS = {
   IT: IndexIcon,
   CO: CompareIcon,
   OB: ObservationIcon,
+  FB: ObservationIcon,
 };
 
 const ADMIN_NAV = [
@@ -161,6 +162,7 @@ const ADMIN_NAV = [
   { label: 'Rankings', icon: 'RK', to: '/admin/rankings' },
   { label: 'Reportes', icon: 'RP', to: '/admin/reports' },
   { section: 'Sistema' },
+  { label: 'Comentarios', icon: 'FB', to: '/admin/feedback' },
   { label: 'Auditoria', icon: 'AU', to: '/admin/audit' },
 ];
 

@@ -122,6 +122,11 @@ export const api = {
   },
   stats:  ()    => client.get('/stats/'),
   roles:  ()    => client.get('/roles/'),
+  feedback: {
+    submit: (data) => client.post('/feedback/', data),
+    list:   (params) => client.get('/feedback/admin/', { params }),
+    updateStatus: (id, status) => client.patch(`/feedback/admin/${id}/`, { status }),
+  },
   passwordReset: {
     request: (email)       => client.post('/auth/password-reset/request/', { email }),
     confirm: (token, data) => client.post(`/auth/password-reset/confirm/${token}/`, data),
