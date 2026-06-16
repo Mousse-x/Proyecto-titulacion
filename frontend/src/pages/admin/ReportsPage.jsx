@@ -164,14 +164,12 @@ export default function ReportsPage() {
       api.stats(),
       api.universities.list(),
       api.indicators.list(),
-      api.evidences.list(),
     ])
-      .then(([statsRes, universitiesRes, indicatorsRes, evidencesRes]) => {
+      .then(([statsRes, universitiesRes, indicatorsRes]) => {
         if (cancelled) return;
         setStats(statsRes.data || {});
         setUniversities(universitiesRes.data || []);
         setIndicators(indicatorsRes.data || []);
-        setEvidences(evidencesRes.data || []);
       })
       .catch((err) => {
         if (!cancelled) setError(err.response?.data?.error || 'No se pudieron cargar los datos reales del reporte.');
@@ -181,6 +179,31 @@ export default function ReportsPage() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (reportType !== 'documents') return;
+
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+
+    const params = {};
+    if (universityId !== 'all') params.university_id = universityId;
+    if (month) params.month = month;
+
+    api.evidences.list(params)
+      .then((res) => {
+        if (!cancelled) setEvidences(res.data || []);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.response?.data?.error || 'No se pudieron cargar las evidencias del reporte.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [month, reportType, universityId]);
 
   const filteredEvidences = useMemo(() => evidences.filter((item) => {
     const matchesUniversity = universityId === 'all' || String(item.university_id || item.university?.id) === String(universityId);

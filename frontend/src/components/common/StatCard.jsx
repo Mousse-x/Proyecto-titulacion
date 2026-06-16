@@ -1,4 +1,4 @@
-import { getScoreColor } from '../../data/mockData';
+import { getScoreColor } from '../../utils/score';
 
 export default function StatCard({ icon, label, value, change, changeDir, color, iconBg, suffix = '' }) {
   return (

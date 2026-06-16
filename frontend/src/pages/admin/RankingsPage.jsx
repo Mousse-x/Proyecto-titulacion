@@ -3,7 +3,7 @@ import { ScoreCard } from '../../components/common/StatCard';
 import RankingBar from '../../components/charts/RankingBar';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
-import { getScoreColor, getScoreLabel } from '../../data/mockData';
+import { getScoreColor, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 
 export default function RankingsPage() {

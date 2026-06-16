@@ -17,6 +17,7 @@ from ..models import (
     EvidenceValidationResult, UniversityEvaluationSummary,
     EvaluationPeriod,
 )
+from ..cache_utils import invalidate_dashboard_cache
 from .document_processor import detect_lotaip_document_type, process_document
 from .comparison_engine import (
     evaluate_existence, evaluate_format, evaluate_period,
@@ -277,6 +278,7 @@ def _save_validation_result(evidence, result_data):
             },
         )
         logger.info(f"Resultado de validación {'creado' if created else 'actualizado'} para evidencia {evidence.id}")
+        invalidate_dashboard_cache()
     except Exception as e:
         logger.error(f"Error guardando resultado de validación: {e}")
 
@@ -391,6 +393,7 @@ def evaluar_universidad(university_id, period_id, month=None):
                 "general_observations": general_obs,
             },
         )
+        invalidate_dashboard_cache()
     except Exception as e:
         logger.error(f"Error guardando resumen de evaluación: {e}")
 

@@ -21,6 +21,7 @@ from .models import (
 from .middleware import require_auth, require_role
 from .sanitizers import sanitize_text, sanitize_url
 from .encryption import decrypt_email
+from .cache_utils import invalidate_dashboard_cache
 
 
 # ─── Helper de auditoría local ───────────────────────────────────────
@@ -103,6 +104,10 @@ def list_evidences(request):
             status  = request.GET.get("status")
             ind_id  = request.GET.get("indicator_id")
             month   = request.GET.get("month")
+            period_id = request.GET.get("period_id") or request.GET.get("periodo_id")
+            year = request.GET.get("year")
+            page = request.GET.get("page")
+            page_size = request.GET.get("page_size")
 
             if univ_id:
                 qs = qs.filter(university_id=univ_id)
@@ -112,6 +117,29 @@ def list_evidences(request):
                 qs = qs.filter(indicator_id=ind_id)
             if month:
                 qs = qs.filter(month=month)
+            if period_id:
+                qs = qs.filter(period_id=period_id)
+            if year:
+                qs = qs.filter(period__year=year)
+
+            if page or page_size:
+                try:
+                    page_num = max(int(page or 1), 1)
+                    per_page = min(max(int(page_size or 50), 1), 500)
+                except ValueError:
+                    return JsonResponse({"error": "page y page_size deben ser nÃºmeros"}, status=400)
+
+                total = qs.count()
+                start = (page_num - 1) * per_page
+                end = start + per_page
+                rows = [_evidence_to_dict(ev) for ev in qs[start:end]]
+                return JsonResponse({
+                    "results": rows,
+                    "count": total,
+                    "page": page_num,
+                    "page_size": per_page,
+                    "total_pages": (total + per_page - 1) // per_page,
+                })
 
             return JsonResponse([_evidence_to_dict(ev) for ev in qs], safe=False)
         except Exception as exc:
@@ -246,6 +274,7 @@ def list_evidences(request):
                 record_id   = ev.id,
                 description = f"Evidencia subida: {title} [{indicator.code}]",
             )
+            invalidate_dashboard_cache()
             return JsonResponse(_evidence_to_dict(ev), status=201)
 
         except Exception as exc:
@@ -325,6 +354,7 @@ def evidence_detail(request, ev_id):
 
         ev.updated_at = timezone.now()
         ev.save()
+        invalidate_dashboard_cache()
 
         _log(
             user_id     = data.get("_reviewer_id"),
@@ -343,6 +373,7 @@ def evidence_detail(request, ev_id):
 
         ev_title = ev.title
         ev.delete()
+        invalidate_dashboard_cache()
         return JsonResponse({"message": f"Evidencia '{ev_title}' eliminada"})
 
     return JsonResponse({"error": "Método no permitido"}, status=405)
@@ -425,6 +456,7 @@ def bulk_update_evidences(request):
             description = f"Evidencias actualizadas ({updated_count}): {ev_ids} -> '{new_status}'",
         )
 
+        invalidate_dashboard_cache()
         return JsonResponse({"message": f"{updated_count} evidencias actualizadas correctamente"})
     except Exception as exc:
         return JsonResponse({"error": f"Error en actualización masiva: {str(exc)}"}, status=500)
@@ -478,6 +510,7 @@ def bulk_delete_evidences(request):
             description = f"Evidencias eliminadas masivamente ({deleted_count}): {ev_ids}",
         )
 
+        invalidate_dashboard_cache()
         return JsonResponse({"message": f"{deleted_count} evidencias eliminadas correctamente"})
     except Exception as exc:
         return JsonResponse({"error": f"Error en eliminación masiva: {str(exc)}"}, status=500)

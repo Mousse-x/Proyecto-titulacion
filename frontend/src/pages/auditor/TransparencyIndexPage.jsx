@@ -4,7 +4,7 @@ import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
 import { validationApi } from '../../api/validation';
-import { getScoreColor, getScoreLabel } from '../../data/mockData';
+import { getScoreColor, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 import {
   Bar,

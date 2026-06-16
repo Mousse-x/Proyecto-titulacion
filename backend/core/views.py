@@ -11,6 +11,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
+from django.core.cache import cache
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
@@ -19,6 +20,7 @@ from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, 
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
+from .cache_utils import stats_cache_key
 from .services.international_evaluator import evaluate_international_standards
 
 
@@ -1280,6 +1282,10 @@ def system_stats(request):
         try:
             period_id = request.GET.get("periodo_id")
             month = request.GET.get("month") or request.GET.get("mes")
+            cache_key = stats_cache_key(period_id, month)
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return JsonResponse(cached)
 
             evidences = Evidence.objects.all()
             validations = EvidenceValidationResult.objects.select_related(
@@ -1292,31 +1298,30 @@ def system_stats(request):
                 evidences = evidences.filter(month=month)
                 validations = validations.filter(evidence__month=month)
 
-            validation_count = validations.count()
+            validation_rows = list(validations)
+            validation_count = len(validation_rows)
             avg_transparency = 0
             avg_transparency_integrated = 0
-            if validation_count:
-                integrated_sum = 0
-                for vr in validations:
-                    national_score = float(vr.total_score)
-                    international = evaluate_international_standards(
-                        vr.evidence,
-                        lotaip_result={
-                            "puntaje_total": national_score,
-                            "puntaje_estructura": float(vr.score_structure),
-                        },
-                    )
-                    integrated_sum += international["indice_nacional_internacional"]
-
-                avg_transparency = round(
-                    sum(float(v.total_score) for v in validations) / validation_count,
-                    2,
-                )
-                avg_transparency_integrated = round(integrated_sum / validation_count, 2)
-
-            ranking = []
+            national_sum = 0
+            integrated_sum = 0
             by_university = {}
-            for vr in validations:
+            observations_open = 0
+
+            for vr in validation_rows:
+                national_score = float(vr.total_score)
+                international = evaluate_international_standards(
+                    vr.evidence,
+                    lotaip_result={
+                        "puntaje_total": national_score,
+                        "puntaje_estructura": float(vr.score_structure),
+                    },
+                )
+                integrated_score = international["indice_nacional_internacional"]
+                national_sum += national_score
+                integrated_sum += integrated_score
+                if vr.observations:
+                    observations_open += 1
+
                 univ = vr.evidence.university
                 if not univ:
                     continue
@@ -1327,17 +1332,15 @@ def system_stats(request):
                     "score_sum": 0,
                     "count": 0,
                 })
-                bucket["score_sum"] += float(vr.total_score)
-                international = evaluate_international_standards(
-                    vr.evidence,
-                    lotaip_result={
-                        "puntaje_total": float(vr.total_score),
-                        "puntaje_estructura": float(vr.score_structure),
-                    },
-                )
-                bucket["integrated_score_sum"] = bucket.get("integrated_score_sum", 0) + international["indice_nacional_internacional"]
+                bucket["score_sum"] += national_score
+                bucket["integrated_score_sum"] = bucket.get("integrated_score_sum", 0) + integrated_score
                 bucket["count"] += 1
 
+            if validation_count:
+                avg_transparency = round(national_sum / validation_count, 2)
+                avg_transparency_integrated = round(integrated_sum / validation_count, 2)
+
+            ranking = []
             for item in by_university.values():
                 ranking.append({
                     "id": item["id"],
@@ -1370,12 +1373,13 @@ def system_stats(request):
                 "avg_transparency":   avg_transparency,
                 "avg_transparency_integrated": avg_transparency_integrated,
                 "active_users":       AppUser.objects.filter(is_active=True).count(),
-                "observations_open":  validations.exclude(observations=[]).count(),
+                "observations_open":  observations_open,
                 "indicators_active":  Indicator.objects.filter(is_active=True).count(),
                 "evaluated_documents": validation_count,
                 "ranking": ranking[:10],
                 "recent_documents": recent_documents,
             }
+            cache.set(cache_key, data, 60)
             return JsonResponse(data)
         except Exception as exc:
             return JsonResponse({"error": f"Error al obtener estadísticas: {str(exc)}"}, status=500)

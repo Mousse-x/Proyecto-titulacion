@@ -2,7 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, LabelList
 } from 'recharts';
-import { getScoreColor } from '../../data/mockData';
+import { getScoreColor } from '../../utils/score';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload?.length) {
