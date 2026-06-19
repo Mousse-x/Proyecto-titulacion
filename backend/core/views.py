@@ -11,8 +11,8 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
-from django.core.cache import cache
 from django.conf import settings
+from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 from email.utils import parseaddr
@@ -20,8 +20,8 @@ from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, 
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
-from .cache_utils import stats_cache_key
 from .services.international_evaluator import evaluate_international_standards
+from .cache_utils import stats_cache_key
 
 
 DPE_ENTITY_URL_RE = re.compile(r"transparencia\.dpe\.gob\.ec/entidades/(\d+)", re.IGNORECASE)
@@ -414,7 +414,7 @@ def login_user(request):
                 "remaining": remaining,
             }, status=400)
 
-        # ✅ Login exitoso — reiniciar contador y actualizar last_login
+        #  Login exitoso — reiniciar contador y actualizar last_login
         try:
             user.last_login = timezone.now()
             user.failed_login_attempts = 0
@@ -1300,12 +1300,11 @@ def system_stats(request):
 
             validation_rows = list(validations)
             validation_count = len(validation_rows)
-            avg_transparency = 0
-            avg_transparency_integrated = 0
             national_sum = 0
             integrated_sum = 0
-            by_university = {}
             observations_open = 0
+            ranking = []
+            by_university = {}
 
             for vr in validation_rows:
                 national_score = float(vr.total_score)
@@ -1330,17 +1329,16 @@ def system_stats(request):
                     "name": univ.acronym,
                     "full_name": univ.name,
                     "score_sum": 0,
+                    "integrated_score_sum": 0,
                     "count": 0,
                 })
                 bucket["score_sum"] += national_score
-                bucket["integrated_score_sum"] = bucket.get("integrated_score_sum", 0) + integrated_score
+                bucket["integrated_score_sum"] += integrated_score
                 bucket["count"] += 1
 
-            if validation_count:
-                avg_transparency = round(national_sum / validation_count, 2)
-                avg_transparency_integrated = round(integrated_sum / validation_count, 2)
+            avg_transparency = round(national_sum / validation_count, 2) if validation_count else 0
+            avg_transparency_integrated = round(integrated_sum / validation_count, 2) if validation_count else 0
 
-            ranking = []
             for item in by_university.values():
                 ranking.append({
                     "id": item["id"],

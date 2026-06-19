@@ -97,7 +97,18 @@ def list_evidences(request):
         try:
             qs = (
                 Evidence.objects
-                .select_related("university", "indicator", "uploaded_by_user")
+                .select_related("university", "indicator", "indicator__template", "period", "uploaded_by_user")
+                .only(
+                    "id", "title", "university_id", "period_id", "indicator_id",
+                    "uploaded_by_user_id", "uploaded_at", "updated_at",
+                    "validation_status", "file_path", "source_url", "file_size",
+                    "file_type", "observations", "month",
+                    "university__id", "university__acronym",
+                    "indicator__id", "indicator__code", "indicator__name",
+                    "indicator__template__id", "indicator__template__indicator_id", "indicator__template__file_path",
+                    "uploaded_by_user__id", "uploaded_by_user__full_name",
+                    "period__id", "period__year",
+                )
                 .order_by("-uploaded_at")
             )
             univ_id = request.GET.get("university_id")
@@ -306,7 +317,7 @@ def evidence_detail(request, ev_id):
 
     try:
         ev = Evidence.objects.select_related(
-            "university", "indicator", "uploaded_by_user"
+            "university", "indicator", "indicator__template", "period", "uploaded_by_user"
         ).get(id=ev_id)
     except Evidence.DoesNotExist:
         return JsonResponse({"error": "Evidencia no encontrada"}, status=404)
