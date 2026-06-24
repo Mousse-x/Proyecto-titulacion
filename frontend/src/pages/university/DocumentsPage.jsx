@@ -55,7 +55,7 @@ export default function DocumentsPage() {
   const [progress, setProgress]   = useState(0);
   const [dragging, setDragging]   = useState(false);
   const [form, setForm]           = useState({ indicator_id: '', title: '', month: '' });
-  const [scrapeForm, setScrapeForm] = useState({ year: new Date().getFullYear().toString(), month: '', university_id: user.university_id || '' });
+  const [scrapeForm, setScrapeForm] = useState({ year: new Date().getFullYear().toString(), month: '', university_id: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError]         = useState('');
   const [selectedDocs, setSelectedDocs] = useState([]);
@@ -78,9 +78,7 @@ export default function DocumentsPage() {
   const loadDocs = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {};
-      if (user.university_id) params.university_id = user.university_id;
-      const res = await api.evidences.list(params);
+      const res = await api.evidences.list();
       setDocs(res.data);
     } catch {
       setError('No se pudieron cargar los documentos');
@@ -88,7 +86,7 @@ export default function DocumentsPage() {
       setLoading(false);
       setSelectedDocs([]);
     }
-  }, [user.university_id]);
+  }, []);
 
   useEffect(() => {
     loadDocs();
@@ -167,7 +165,7 @@ export default function DocumentsPage() {
     return doc.indicator_name || 'Sin Literal';
   };
 
-  const isSysadmin = !user.university_id;
+  const isSysadmin = true;
 
   let currentDocs = filtered;
   if (isSysadmin) {
@@ -374,7 +372,7 @@ export default function DocumentsPage() {
   };
 
   const resetForm = () => {
-    setForm({ indicator_id: '', title: '', month: '', year: new Date().getFullYear().toString(), university_id: user.university_id || '' });
+    setForm({ indicator_id: '', title: '', month: '', year: new Date().getFullYear().toString(), university_id: '' });
     setSelectedFile(null);
     setProgress(0);
   };
@@ -639,7 +637,7 @@ export default function DocumentsPage() {
                       onClick={() => handleDownload(doc)}><DownloadIcon /></button>
                     {(doc.validation_status === 'rechazado' || doc.validation_status === 'inconsistente') && (
                       <button className="btn btn-primary btn-sm"
-                        onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title, university_id: doc.university_id || user.university_id })); }}>
+                        onClick={() => { setUploadModal(true); setForm(p => ({ ...p, indicator_id: String(doc.indicator_id), title: doc.title, university_id: doc.university_id })); }}>
                         🔄 Resubir
                       </button>
                     )}
@@ -755,7 +753,7 @@ export default function DocumentsPage() {
                     <label className="form-label">Universidad *</label>
                     <select className="form-input" value={form.university_id}
                       onChange={e => setForm(p => ({ ...p, university_id: e.target.value }))}
-                      disabled={!!user.university_id}>
+                      disabled={false}>
                       <option value="">— Seleccione una universidad —</option>
                       {DPE_SCRAPER_PRESETS
                         .filter((preset) => !universities.some((u) => u.transparency_url === preset.transparency_url))
@@ -887,7 +885,7 @@ export default function DocumentsPage() {
                     <label className="form-label">Universidad *</label>
                     <select className="form-input" value={scrapeForm.university_id}
                       onChange={e => setScrapeForm(p => ({ ...p, university_id: e.target.value }))}
-                      disabled={!!user.university_id}>
+                      disabled={false}>
                       <option value="">— Seleccione una universidad —</option>
                       {universities.map(u => (
                         <option key={u.id} value={u.id}>{u.name}</option>

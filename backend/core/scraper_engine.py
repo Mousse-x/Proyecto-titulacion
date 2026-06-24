@@ -82,6 +82,18 @@ def _log(user_id, action, table_name=None, description=None):
         pass
 
 
+def _open_dpe_url(req, timeout):
+    """Abre URLs de DPE sin usar proxies heredados del entorno local."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPSHandler(context=ctx),
+    )
+    return opener.open(req, timeout=timeout)
+
 def _extract_establishment_id(transparency_url):
     """Extrae el ID de entidad de la URL del portal DPE.
     
@@ -108,16 +120,11 @@ def _download_file(url, dest_path):
         else:
             full_url = url
         
-        # Crear contexto SSL permisivo para evitar errores de certificado
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
         req = urllib.request.Request(full_url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
         
-        resp = urllib.request.urlopen(req, timeout=60, context=ctx)
+        resp = _open_dpe_url(req, timeout=60)
         data = resp.read()
         
         with open(dest_path, "wb") as f:
@@ -195,14 +202,10 @@ def run_dpe_scraper(university_id, year, month, user_id):
     )
     
     try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
         req = urllib.request.Request(api_url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
-        resp = urllib.request.urlopen(req, timeout=30, context=ctx)
+        resp = _open_dpe_url(req, timeout=30)
         raw = resp.read().decode("utf-8")
         api_data = json.loads(raw)
     except Exception as e:

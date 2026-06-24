@@ -41,7 +41,7 @@ export default function AdminDashboard() {
         </div>
         <div className="page-header-actions">
           <button className="btn btn-secondary">📥 Exportar</button>
-          <button className="btn btn-primary" onClick={() => { setLoading(true); api.stats().then(r => setStats(r.data)).catch(() => {}).finally(() => setLoading(false)); }}>
+          <button className="btn btn-primary" onClick={() => { setLoading(true); api.stats({ force: true }).then(r => setStats(r.data)).catch(() => {}).finally(() => setLoading(false)); }}>
             🔄 Actualizar
           </button>
         </div>

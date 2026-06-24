@@ -67,6 +67,32 @@ const asUniversityPayload = (data = {}) => {
 const universityRequestConfig = (payload) =>
   payload instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
 
+const STATS_CACHE_TTL = 30000;
+let statsCache = null;
+let statsCacheTime = 0;
+let statsRequest = null;
+
+const getCachedStats = () => {
+  const now = Date.now();
+  if (statsCache && now - statsCacheTime < STATS_CACHE_TTL) {
+    return Promise.resolve({ data: statsCache });
+  }
+
+  if (!statsRequest) {
+    statsRequest = client.get('/stats/')
+      .then((res) => {
+        statsCache = res.data;
+        statsCacheTime = Date.now();
+        return res;
+      })
+      .finally(() => {
+        statsRequest = null;
+      });
+  }
+
+  return statsRequest;
+};
+
 // ─── API helpers ────────────────────────────────────────────────
 export const api = {
   auth: {
@@ -82,7 +108,7 @@ export const api = {
     remove: (id)       => client.delete(`/users/${id}/`),
   },
   universities: {
-    list:   ()         => client.get('/universities/'),
+    list:   (params)  => client.get('/universities/', { params }),
     create: (data)     => {
       const payload = asUniversityPayload(data);
       return client.post('/universities/', payload, universityRequestConfig(payload));
@@ -120,7 +146,11 @@ export const api = {
   scraper: {
     espoch: (data) => client.post('/scraper/espoch/', data),
   },
-  stats:  ()    => client.get('/stats/'),
+  stats:  (options = {})    => options.force ? client.get('/stats/').then((res) => {
+    statsCache = res.data;
+    statsCacheTime = Date.now();
+    return res;
+  }) : getCachedStats(),
   roles:  ()    => client.get('/roles/'),
   feedback: {
     submit: (data) => client.post('/feedback/', data),

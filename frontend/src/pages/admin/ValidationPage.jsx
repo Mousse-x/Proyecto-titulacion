@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { validationApi } from '../../api/validation';
+import { useAuth } from '../../context/AuthContext';
 
 /* ── Mapa de estado → badge ───────────────────────────────────────── */
 const STATUS_CONFIG = {
@@ -46,6 +47,8 @@ function TransparencyGauge({ value = 0, label = 'Indice' }) {
 }
 
 export default function ValidationPage({ readOnly = false }) {
+  useAuth();
+  const lockUniversitySelect = false;
   const [universities, setUniversities] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [selectedUniv, setSelectedUniv] = useState('');
@@ -60,6 +63,8 @@ export default function ValidationPage({ readOnly = false }) {
   const [activeTab, setActiveTab] = useState('lotaip');
   const [expandedInternationalFolders, setExpandedInternationalFolders] = useState({});
   const [error, setError] = useState(null);
+  const [documentCount, setDocumentCount] = useState(null);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
 
   const MONTHS = [
     { value: 1, label: 'Enero' },
@@ -78,8 +83,10 @@ export default function ValidationPage({ readOnly = false }) {
 
   // Load universities and periods
   useEffect(() => {
-    api.universities.list().then(r => setUniversities(r.data)).catch(() => {});
-    // Fetch periods from evidences API or a dedicated endpoint
+    api.universities.list().then(r => {
+      setUniversities(r.data || []);
+    }).catch(() => {});
+
     api.evidences.list().then(r => {
       const periodMap = {};
       r.data.forEach(ev => {
@@ -91,6 +98,7 @@ export default function ValidationPage({ readOnly = false }) {
     }).catch(() => {});
   }, []);
 
+
   // Load existing results when university/period/month change
   useEffect(() => {
     if (!selectedUniv || !selectedPeriod) {
@@ -99,6 +107,33 @@ export default function ValidationPage({ readOnly = false }) {
       return;
     }
     loadResults();
+  }, [selectedUniv, selectedPeriod, selectedMonth]);
+
+  useEffect(() => {
+    if (!selectedUniv || !selectedPeriod) {
+      setDocumentCount(null);
+      return;
+    }
+
+    let cancelled = false;
+    setDocumentsLoading(true);
+    const params = { university_id: selectedUniv, periodo_id: selectedPeriod };
+    if (selectedMonth) params.month = selectedMonth;
+
+    api.evidences.list(params)
+      .then((res) => {
+        if (cancelled) return;
+        const payload = res.data;
+        setDocumentCount(Array.isArray(payload) ? payload.length : Number(payload?.count || payload?.results?.length || 0));
+      })
+      .catch(() => {
+        if (!cancelled) setDocumentCount(0);
+      })
+      .finally(() => {
+        if (!cancelled) setDocumentsLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [selectedUniv, selectedPeriod, selectedMonth]);
 
   const loadResults = async () => {
@@ -119,6 +154,10 @@ export default function ValidationPage({ readOnly = false }) {
 
   const handleValidateAll = async () => {
     if (!selectedUniv || !selectedPeriod) return;
+    if (documentCount === 0) {
+      setError('No hay documentos para la universidad, periodo o mes seleccionado. No se puede realizar la evaluacion.');
+      return;
+    }
     setValidating(true);
     setProgress({ pct: 0, msg: 'Iniciando validación...' });
     setError(null);
@@ -229,7 +268,7 @@ export default function ValidationPage({ readOnly = false }) {
         </div>
         <div className="page-header-actions" style={{ display: readOnly ? 'none' : undefined }}>
           <button className="btn btn-primary btn-lg" onClick={handleValidateAll}
-            disabled={!selectedUniv || !selectedPeriod || validating}>
+            disabled={!selectedUniv || !selectedPeriod || validating || documentsLoading || documentCount === 0}>
             {validating ? '⏳ Validando...' : '🚀 Validar documentos'}
           </button>
         </div>
@@ -238,7 +277,7 @@ export default function ValidationPage({ readOnly = false }) {
       {/* Filters */}
       <div className="search-bar">
         <select className="form-input" style={{ maxWidth: 280 }}
-          value={selectedUniv} onChange={e => setSelectedUniv(e.target.value)}>
+          value={selectedUniv} onChange={e => setSelectedUniv(e.target.value)} disabled={lockUniversitySelect}>
           <option value="">Seleccionar universidad...</option>
           {universities.map(u => (
             <option key={u.id} value={u.id}>{u.name} — {u.full_name}</option>
@@ -258,12 +297,24 @@ export default function ValidationPage({ readOnly = false }) {
             <option key={m.value} value={m.value}>{m.label}</option>
           ))}
         </select>
+        {selectedUniv && selectedPeriod && (
+          <span className="tag" style={{ alignSelf: 'center' }}>
+            {documentsLoading ? 'Verificando documentos...' : `${documentCount || 0} documentos disponibles`}
+          </span>
+        )}
         {results.length > 0 && (
           <button className="btn btn-secondary" onClick={loadResults} disabled={loading}>
             🔄 Actualizar
           </button>
         )}
       </div>
+
+
+      {selectedUniv && selectedPeriod && !documentsLoading && documentCount === 0 && (
+        <div className="alert alert-warning" style={{ marginBottom: 24, padding: '12px 16px', borderRadius: 'var(--radius)' }}>
+          No hay documentos para la universidad, periodo o mes seleccionado. No se puede realizar la evaluacion.
+        </div>
+      )}
 
       {/* Error banner */}
       {error && (

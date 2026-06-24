@@ -15,11 +15,11 @@ const STATUS_LABELS = {
 const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) : '-';
 
-export default function FeedbackPage() {
+export default function FeedbackPage({ defaultType = '', lockType = false } = {}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [typeFilter, setTypeFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState(defaultType);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
@@ -29,7 +29,7 @@ export default function FeedbackPage() {
     setError(null);
     try {
       const res = await api.feedback.list({
-        type: typeFilter || undefined,
+        type: lockType ? defaultType : (typeFilter || undefined),
         status: statusFilter || undefined,
       });
       setItems(Array.isArray(res.data) ? res.data : []);
@@ -38,7 +38,7 @@ export default function FeedbackPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, typeFilter]);
+  }, [defaultType, lockType, statusFilter, typeFilter]);
 
   useEffect(() => { fetchFeedback(); }, [fetchFeedback]);
 
@@ -79,8 +79,8 @@ export default function FeedbackPage() {
     <div style={{ animation: 'slideIn 0.3s ease' }}>
       <div className="page-header">
         <div className="page-header-info">
-          <h1>Comentarios del Sistema</h1>
-          <p>Feedback enviado por usuarios para mejorar el sistema y la transparencia.</p>
+          <h1>{lockType ? 'Comentarios de Transparencia' : 'Comentarios del Sistema'}</h1>
+          <p>{lockType ? 'Comentarios enviados sobre informacion y procesos de transparencia.' : 'Feedback enviado por usuarios para mejorar el sistema y la transparencia.'}</p>
         </div>
         <div className="page-header-actions">
           <button className="btn btn-secondary" onClick={fetchFeedback} disabled={loading}>
@@ -94,10 +94,12 @@ export default function FeedbackPage() {
           <div className="card-title">Total comentarios</div>
           <div style={{ fontSize: '2rem', fontWeight: 800 }}>{loading ? '-' : counters.total}</div>
         </div>
-        <div className="card card-sm">
-          <div className="card-title">Sistema</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--info)' }}>{loading ? '-' : counters.system}</div>
-        </div>
+        {!lockType && (
+          <div className="card card-sm">
+            <div className="card-title">Sistema</div>
+            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--info)' }}>{loading ? '-' : counters.system}</div>
+          </div>
+        )}
         <div className="card card-sm">
           <div className="card-title">Transparencia</div>
           <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--success)' }}>{loading ? '-' : counters.transparency}</div>
@@ -115,11 +117,13 @@ export default function FeedbackPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <select className="form-input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-          <option value="">Todos los tipos</option>
-          <option value="system">Sistema</option>
-          <option value="transparency">Transparencia</option>
-        </select>
+        {!lockType && (
+          <select className="form-input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="">Todos los tipos</option>
+            <option value="system">Sistema</option>
+            <option value="transparency">Transparencia</option>
+          </select>
+        )}
         <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="pending">Pendiente</option>

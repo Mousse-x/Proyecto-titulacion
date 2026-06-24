@@ -6,6 +6,10 @@ import { ScoreCard } from '../../components/common/StatCard';
 import { api } from '../../api/client';
 import { getUniversityLogo } from '../../data/universityLogos';
 
+const normalizeUniversityType = (value = 'Pública') => String(value)
+  .replaceAll('PÃºblica', 'Pública')
+  .replaceAll('Publica', 'Pública');
+
 const EMPTY = { name: '', full_name: '', city: '', province: '', type: 'Pública', website: '', dpe_entity_id: '', logo_file: null, logo_url: '', is_active: true };
 
 export default function UniversitiesPage() {
@@ -18,15 +22,16 @@ export default function UniversitiesPage() {
   const [form, setForm]         = useState(EMPTY);
   const [detailView, setDetail] = useState(null);
   const [saving, setSaving]     = useState(false);
+  const [dpeHelpOpen, setDpeHelpOpen] = useState(false);
 
   const fetchUnivs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.universities.list();
+      const res = await api.universities.list({ include_inactive: 1 });
       setUnivs(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar universidades. ¿Está el servidor activo?');
+      setError(err.response?.data?.error || 'Error al cargar universidades. Ã‚Â¿EstÃƒÂ¡ el servidor activo?');
     } finally {
       setLoading(false);
     }
@@ -35,7 +40,12 @@ export default function UniversitiesPage() {
   useEffect(() => { fetchUnivs(); }, [fetchUnivs]);
 
   const openCreate = () => { setSelected(null); setForm(EMPTY); setModal(true); };
-  const openEdit   = (u)  => { setSelected(u); setForm({ name: u.name, full_name: u.full_name, city: u.city || '', province: u.province || '', type: u.type || 'Pública', website: u.website || '', dpe_entity_id: u.dpe_entity_id || '', logo_file: null, logo_url: u.logo_url || '', is_active: u.is_active }); setModal(true); };
+  const openEdit   = (u)  => { setSelected(u); setForm({ name: u.name, full_name: u.full_name, city: u.city || '', province: u.province || '', type: normalizeUniversityType(u.type || 'Pública'), website: u.website || '', dpe_entity_id: u.dpe_entity_id || '', logo_file: null, logo_url: u.logo_url || '', is_active: u.is_active }); setModal(true); };
+
+  const extractDpeId = (value = '') => {
+    const match = String(value).match(/(?:entidades\/)?(\d+)/);
+    return match ? match[1] : String(value).trim();
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -65,7 +75,7 @@ export default function UniversitiesPage() {
   };
 
   const columns = [
-    { key: 'name', label: 'Institución', render: (v, row) => {
+    { key: 'name', label: 'InstituciÃ³n', render: (v, row) => {
       const logo = getUniversityLogo(row);
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -79,8 +89,8 @@ export default function UniversitiesPage() {
         </div>
       );
     }},
-    { key: 'type', label: 'Tipo', render: (v) => <Badge status={v} /> },
-    { key: 'transparency_score', label: 'Índice', sortable: true,
+    { key: 'type', label: 'Tipo', render: (v) => <Badge status={normalizeUniversityType(v)} /> },
+    { key: 'transparency_score', label: 'Ãndice', sortable: true,
       render: (v) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ScoreCard score={v} size={44} />
@@ -169,13 +179,31 @@ export default function UniversitiesPage() {
             ['city', 'Ciudad', 'text'],
             ['province', 'Provincia', 'text'],
             ['website', 'Sitio web', 'url'],
-            ['dpe_entity_id', 'ID DPE Transparencia (ej: 1365)', 'text'],
           ].map(([k, l, t]) => (
             <div className="form-group" key={k}>
               <label className="form-label">{l}</label>
               <input className="form-input" type={t} value={form[k] || ''} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
             </div>
           ))}
+          <div className="form-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <label className="form-label" htmlFor="univ-dpe-id">ID DPE Transparencia</label>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDpeHelpOpen(true)}>
+                Ayuda
+              </button>
+            </div>
+            <input
+              id="univ-dpe-id"
+              className="form-input"
+              type="text"
+              placeholder="Ej: 1365 o https://transparencia.dpe.gob.ec/entidades/1365"
+              value={form.dpe_entity_id || ''}
+              onChange={e => setForm(p => ({ ...p, dpe_entity_id: extractDpeId(e.target.value) }))}
+            />
+            <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-subtle)', lineHeight: 1.4 }}>
+              Puedes pegar el enlace completo del portal DPE; el sistema tomara solo el numero.
+            </div>
+          </div>
           <div className="form-group">
             <label className="form-label">Logo de la universidad</label>
             <input
@@ -213,10 +241,39 @@ export default function UniversitiesPage() {
         </div>
       </Modal>
 
+      <Modal isOpen={dpeHelpOpen} onClose={() => setDpeHelpOpen(false)} title="Como encontrar el ID DPE" size="lg">
+        <div style={{ display: 'grid', gap: 16, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          <p>
+            El ID DPE es el numero que aparece al final de la pagina de transparencia de cada institucion en el portal de la Defensoria del Pueblo.
+          </p>
+          <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
+            <div style={{ fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>Pasos</div>
+            <ol style={{ margin: 0, paddingLeft: 20 }}>
+              <li>Ingresa al portal de transparencia DPE.</li>
+              <li>Busca la universidad o institucion.</li>
+              <li>Abre su ficha de transparencia.</li>
+              <li>Copia el numero que esta despues de <strong>/entidades/</strong> en la URL.</li>
+            </ol>
+          </div>
+          <div style={{ background: 'var(--primary-subtle)', border: '1px solid rgba(99,102,241,0.24)', borderRadius: 8, padding: 14 }}>
+            <div style={{ fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>Ejemplo</div>
+            <div style={{ fontFamily: 'monospace', overflowWrap: 'anywhere', color: 'var(--text)' }}>
+              https://transparencia.dpe.gob.ec/entidades/1365
+            </div>
+            <div style={{ marginTop: 8 }}>
+              En este caso, el ID que debes ingresar es <strong style={{ color: 'var(--primary-light)' }}>1365</strong>.
+            </div>
+          </div>
+          <a className="btn btn-primary" href="https://transparencia.dpe.gob.ec/entidades/" target="_blank" rel="noreferrer" style={{ justifySelf: 'start', textDecoration: 'none' }}>
+            Abrir portal DPE
+          </a>
+        </div>
+      </Modal>
+
       <ConfirmModal
         isOpen={confirm.open} onClose={() => setConfirm({ open: false, id: null })}
         onConfirm={() => handleDelete(confirm.id)}
-        title="Eliminar universidad" message="¿Eliminar esta universidad y todos sus datos?" danger
+        title="Eliminar universidad" message="Â¿Eliminar esta universidad? TambiÃ©n se eliminarÃ¡n todos sus documentos, validaciones y archivos asociados." danger
       />
     </div>
   );

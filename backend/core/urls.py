@@ -24,6 +24,7 @@ from .evidence_views import (
 from .validation_views import (
     validate_document, validate_all_university,
     get_validation_result, get_compliance_summary, get_observations,
+    get_latest_validation_period,
 )
 
 urlpatterns = [
@@ -77,5 +78,6 @@ urlpatterns = [
     path("evaluacion/documentos/<int:ev_id>/resultado/",                    get_validation_result,   name="get_validation_result"),
     path("evaluacion/universidades/<int:univ_id>/validar-todo/",            validate_all_university,  name="validate_all_university"),
     path("evaluacion/universidades/<int:univ_id>/resumen/",                 get_compliance_summary,   name="get_compliance_summary"),
+    path("evaluacion/universidades/<int:univ_id>/ultimo-periodo/",         get_latest_validation_period, name="get_latest_validation_period"),
     path("evaluacion/universidades/<int:univ_id>/observaciones/",           get_observations,         name="get_observations"),
 ]

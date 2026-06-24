@@ -169,9 +169,16 @@ const ADMIN_NAV = [
 const UNIV_NAV = [
   { section: 'General' },
   { label: 'Mi Dashboard', icon: 'DA', to: '/university/dashboard' },
+  { label: 'Universidades', icon: 'UN', to: '/university/universities' },
+  { section: 'Analisis' },
+  { label: 'Indice de Transparencia', icon: 'IT', to: '/university/index' },
+  { label: 'Comparativas', icon: 'CO', to: '/university/comparatives' },
+  { label: 'Rankings', icon: 'RK', to: '/university/rankings' },
+  { label: 'Reportes', icon: 'RP', to: '/university/reports' },
   { section: 'Cumplimiento' },
   { label: 'Documentos', icon: 'DO', to: '/university/documents' },
-  { label: 'Observaciones', icon: 'OB', to: '/university/observations', badge: 2 },
+  { label: 'Evaluacion LOTAIP', icon: 'EV', to: '/university/validation' },
+  { label: 'Comentarios', icon: 'FB', to: '/university/feedback' },
 ];
 
 const AUDITOR_NAV = [

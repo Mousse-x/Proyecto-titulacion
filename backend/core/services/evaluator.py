@@ -384,6 +384,12 @@ def evaluar_universidad(university_id, period_id, month=None):
             period=period,
             defaults={
                 "total_index": Decimal(str(indices["indice_nacional"])),
+                "national_index": Decimal(str(indices["indice_nacional"])),
+                "international_index": Decimal(str(indices["indice_internacional"])),
+                "integrated_index": Decimal(str(indices["indice_nacional_internacional"])),
+                "international_average_score": Decimal(str(indices["puntaje_internacional_promedio"])),
+                "international_max_score": Decimal(str(indices["puntaje_internacional_maximo"])),
+                "evaluated_documents": len(results),
                 "total_indicators": total,
                 "indicators_compliant": counters["CUMPLE"],
                 "indicators_partial": counters["CUMPLE_PARCIALMENTE"],

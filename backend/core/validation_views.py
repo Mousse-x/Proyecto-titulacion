@@ -37,6 +37,10 @@ def _log(user_id, action, description=None):
         pass
 
 
+def _university_access_error(user, univ_id):
+    return None
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  VALIDAR DOCUMENTO INDIVIDUAL
 # ══════════════════════════════════════════════════════════════════════
@@ -45,14 +49,23 @@ def _log(user_id, action, description=None):
 def validate_document(request, ev_id):
     """
     POST /api/evaluacion/documentos/<id>/validar/
-    Ejecuta la validación automática de un documento de evidencia aprobado.
+    Ejecuta la validacion automatica de un documento de evidencia aprobado.
     """
-    _, err = require_role(request, [1, 2, 3])
+    user, err = require_role(request, [1, 2, 3])
     if err:
         return err
 
     if request.method != "POST":
-        return JsonResponse({"error": "Método no permitido"}, status=405)
+        return JsonResponse({"error": "Metodo no permitido"}, status=405)
+
+    try:
+        evidence = Evidence.objects.only("id", "university_id").get(id=ev_id)
+    except Evidence.DoesNotExist:
+        return JsonResponse({"error": "Documento no encontrado"}, status=404)
+
+    access_error = _university_access_error(user, evidence.university_id)
+    if access_error:
+        return access_error
 
     try:
         from .services.evaluator import evaluar_documento
@@ -64,7 +77,7 @@ def validate_document(request, ev_id):
         _log(
             user_id=getattr(request, "_user_id", None),
             action="VALIDATE_DOCUMENT",
-            description=f"Documento {ev_id} validado: {result.get('puntaje_total')}/100 — {result.get('estado_cumplimiento')}",
+            description=f"Documento {ev_id} validado: {result.get('puntaje_total')}/100 - {result.get('estado_cumplimiento')}",
         )
 
         return JsonResponse(result)
@@ -84,7 +97,7 @@ def validate_all_university(request, univ_id):
     Valida todos los documentos aprobados de una universidad en un período.
     Retorna un StreamingHttpResponse con progreso en tiempo real.
     """
-    _, err = require_role(request, [1, 2, 3])
+    user, err = require_role(request, [1, 2, 3])
     if err:
         return err
 
@@ -105,6 +118,10 @@ def validate_all_university(request, univ_id):
     if not period_id:
         return JsonResponse({"error": "Se requiere periodo_id"}, status=400)
 
+    access_error = _university_access_error(user, univ_id)
+    if access_error:
+        return access_error
+
     try:
         University.objects.get(id=univ_id)
         EvaluationPeriod.objects.get(id=period_id)
@@ -119,6 +136,12 @@ def validate_all_university(request, univ_id):
             return JsonResponse({"error": "El mes debe ser un número entre 1 y 12"}, status=400)
         if month_int < 1 or month_int > 12:
             return JsonResponse({"error": "El mes debe estar entre 1 y 12"}, status=400)
+
+    evidences_qs = Evidence.objects.filter(university_id=univ_id, period_id=period_id)
+    if month_int:
+        evidences_qs = evidences_qs.filter(month=month_int)
+    if not evidences_qs.exists():
+        return JsonResponse({"error": "No hay documentos para la universidad, periodo o mes seleccionado. No se puede realizar la evaluacion."}, status=400)
 
     from .services.evaluator import evaluar_universidad
     gen = evaluar_universidad(univ_id, period_id, month=month_int)
@@ -250,18 +273,62 @@ def _summary_from_validations(validations):
 #  RESUMEN DE CUMPLIMIENTO POR UNIVERSIDAD
 # ══════════════════════════════════════════════════════════════════════
 
+
+@csrf_exempt
+def get_latest_validation_period(request, univ_id):
+    """
+    GET /api/evaluacion/universidades/<id>/ultimo-periodo/
+    Devuelve el ultimo periodo con resultados de validacion para una universidad.
+    """
+    user, err = require_auth(request)
+    if err:
+        return err
+
+    if request.method != "GET":
+        return JsonResponse({"error": "Metodo no permitido"}, status=405)
+
+    access_error = _university_access_error(user, univ_id)
+    if access_error:
+        return access_error
+
+    row = (
+        EvidenceValidationResult.objects
+        .filter(evidence__university_id=univ_id, evidence__period_id__isnull=False)
+        .select_related("evidence", "evidence__period")
+        .order_by("-evidence__period__year", "-evidence__month", "-validated_at")
+        .first()
+    )
+
+    if not row or not row.evidence or not row.evidence.period:
+        return JsonResponse({"period": None}, status=404)
+
+    ev = row.evidence
+    return JsonResponse({
+        "period": {
+            "id": ev.period_id,
+            "year": ev.period.year,
+            "month": ev.month,
+            "period_name": ev.period.period_name,
+        }
+    })
+
+
 @csrf_exempt
 def get_compliance_summary(request, univ_id):
     """
     GET /api/evaluacion/universidades/<id>/resumen/?periodo_id=
     Devuelve el resumen de cumplimiento por literal y el índice general.
     """
-    _, err = require_auth(request)
+    user, err = require_auth(request)
     if err:
         return err
 
     if request.method != "GET":
         return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    access_error = _university_access_error(user, univ_id)
+    if access_error:
+        return access_error
 
     period_id = request.GET.get("periodo_id")
     month = request.GET.get("month") or request.GET.get("mes")
@@ -286,6 +353,12 @@ def get_compliance_summary(request, univ_id):
         )
         summary = {
             "total_index": float(summary_obj.total_index),
+            "national_index": float(summary_obj.national_index or summary_obj.total_index),
+            "international_index": float(summary_obj.international_index),
+            "integrated_index": float(summary_obj.integrated_index or summary_obj.total_index),
+            "international_average_score": float(summary_obj.international_average_score),
+            "international_max_score": float(summary_obj.international_max_score),
+            "evaluated_documents": summary_obj.evaluated_documents,
             "total_indicators": summary_obj.total_indicators,
             "indicators_compliant": summary_obj.indicators_compliant,
             "indicators_partial": summary_obj.indicators_partial,
@@ -309,6 +382,7 @@ def get_compliance_summary(request, univ_id):
         "integrated_index": indices["indice_nacional_internacional"],
         "international_average_score": indices["puntaje_internacional_promedio"],
         "international_max_score": indices["puntaje_internacional_maximo"],
+        "evaluated_documents": len(results),
     })
 
     return JsonResponse({
@@ -330,12 +404,16 @@ def get_observations(request, univ_id):
     GET /api/evaluacion/universidades/<id>/observaciones/?periodo_id=
     Devuelve las observaciones automáticas generadas por la validación.
     """
-    _, err = require_auth(request)
+    user, err = require_auth(request)
     if err:
         return err
 
     if request.method != "GET":
         return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    access_error = _university_access_error(user, univ_id)
+    if access_error:
+        return access_error
 
     period_id = request.GET.get("periodo_id")
     month = request.GET.get("month") or request.GET.get("mes")

@@ -100,19 +100,10 @@ export default function TransparencyIndexPage() {
 
     let cancelled = false;
     setEvolutionLoading(true);
-    api.evidences.list({ university_id: selectedId })
+    validationApi.getLatestPeriod(selectedId)
       .then((res) => {
-        const periods = Object.values(
-          (res.data || []).reduce((acc, ev) => {
-            if (ev.period_id && ev.year) {
-              acc[ev.period_id] = { id: ev.period_id, year: ev.year };
-            }
-            return acc;
-          }, {})
-        ).sort((a, b) => b.year - a.year);
-
-        const periodId = periods[0]?.id;
-        if (!periodId) {
+        const period = res.data?.period;
+        if (!period?.id) {
           if (!cancelled) {
             setSelectedPeriod('');
             setEvolutionResults([]);
@@ -120,8 +111,8 @@ export default function TransparencyIndexPage() {
           return null;
         }
 
-        if (!cancelled) setSelectedPeriod(String(periodId));
-        return validationApi.getSummary(selectedId, periodId);
+        if (!cancelled) setSelectedPeriod(String(period.id));
+        return validationApi.getSummary(selectedId, period.id);
       })
       .then((res) => {
         if (!cancelled && res) {

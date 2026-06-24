@@ -62,8 +62,15 @@ export default function App() {
 
           {/* University Admin — roles 2, 3 */}
           <Route path="/university/dashboard"    element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><UnivDashboard /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/universities" element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><UniversitiesPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/index"        element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><TransparencyIndexPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/comparatives" element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><ComparativesPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/rankings"     element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><RankingsPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/reports"      element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><ReportsPage /></WithLayout></ProtectedRoute>} />
           <Route path="/university/documents"    element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><DocumentsPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/feedback"     element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><FeedbackPage defaultType="transparency" lockType /></WithLayout></ProtectedRoute>} />
           <Route path="/university/observations" element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><ObservationsPage /></WithLayout></ProtectedRoute>} />
+          <Route path="/university/validation"   element={<ProtectedRoute allowedRoles={[2,3]}><WithLayout><ValidationPage /></WithLayout></ProtectedRoute>} />
 
           {/* Auditor — role 4 */}
           <Route path="/auditor/dashboard"    element={<ProtectedRoute allowedRoles={[4]}><WithLayout><AuditorDashboard /></WithLayout></ProtectedRoute>} />

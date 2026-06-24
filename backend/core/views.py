@@ -5,6 +5,7 @@ import os
 import re
 import mimetypes
 import uuid
+import secrets
 from pathlib import Path
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password, check_password
@@ -13,15 +14,17 @@ from datetime import timedelta
 from django.core.mail import send_mail
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.core.files.storage import default_storage
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 from email.utils import parseaddr
-from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, EvidenceValidationResult, UserFeedback
+from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, Evaluation, CategoryResult, FinalResult, Feedback, EvidenceValidationResult, UniversityEvaluationSummary, UserFeedback
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
 from .services.international_evaluator import evaluate_international_standards
 from .cache_utils import stats_cache_key
+from .otp_mailer import enqueue_otp_email
 
 
 DPE_ENTITY_URL_RE = re.compile(r"transparencia\.dpe\.gob\.ec/entidades/(\d+)", re.IGNORECASE)
@@ -101,11 +104,38 @@ def _save_university_logo(upload, acronym):
     if upload.size and upload.size > MAX_LOGO_SIZE:
         raise ValueError("El logo no debe superar 2 MB")
 
-    safe_acronym = re.sub(r"[^a-z0-9]+", "-", str(acronym or "universidad").lower()).strip("-") or "universidad"
+    safe_acronym = _logo_storage_prefix(acronym)
     filename = f"{safe_acronym}-{uuid.uuid4().hex[:10]}{ext}"
     return default_storage.save(f"university_logos/{filename}", upload)
 
 
+def _logo_storage_prefix(acronym):
+    return re.sub(r"[^a-z0-9]+", "-", str(acronym or "universidad").lower()).strip("-") or "universidad"
+
+
+def _find_existing_university_logo(acronym):
+    safe_acronym = _logo_storage_prefix(acronym)
+    try:
+        _, files = default_storage.listdir("university_logos")
+    except Exception:
+        return None
+
+    candidates = [
+        f"university_logos/{name}"
+        for name in files
+        if name.lower().startswith(f"{safe_acronym}-") and Path(name).suffix.lower() in ALLOWED_LOGO_EXTENSIONS
+    ]
+    if not candidates:
+        return None
+
+    try:
+        return max(candidates, key=lambda item: default_storage.get_modified_time(item))
+    except Exception:
+        return sorted(candidates)[-1]
+
+
+def _resolve_university_logo_path(university):
+    return getattr(university, "logo_path", None) or _find_existing_university_logo(getattr(university, "acronym", ""))
 def _logo_url(request, logo_path):
     if not logo_path:
         return ""
@@ -135,8 +165,8 @@ def _serialize_university(request, university, score_data=None):
         "website":          university.website_url,
         "transparency_url": university.transparency_url,
         "dpe_entity_id":     _extract_dpe_entity_id(university.transparency_url),
-        "logo_url":          _logo_url(request, getattr(university, "logo_path", None)),
-        "logo_path":         getattr(university, "logo_path", "") or "",
+        "logo_url":          _logo_url(request, _resolve_university_logo_path(university)),
+        "logo_path":         _resolve_university_logo_path(university) or "",
         "is_active":        university.is_active,
         "transparency_score": university_score.get("transparency_score", 0),
         "integrated_transparency_score": university_score.get("integrated_transparency_score", 0),
@@ -148,28 +178,44 @@ def _serialize_university(request, university, score_data=None):
 
 
 def _get_university_score_data():
-    validations = EvidenceValidationResult.objects.select_related("evidence", "evidence__university")
+    summaries = UniversityEvaluationSummary.objects.select_related("university").filter(
+        university__is_active=True
+    )
     by_university = {}
 
-    for vr in validations:
-        if not vr.evidence_id or not vr.evidence.university_id:
+    for summary in summaries:
+        count = int(summary.evaluated_documents or summary.total_indicators or 0)
+        if count <= 0:
             continue
-
         bucket = by_university.setdefault(
-            vr.evidence.university_id,
+            summary.university_id,
             {"score_sum": 0, "integrated_score_sum": 0, "count": 0},
         )
-        national_score = float(vr.total_score)
-        bucket["score_sum"] += national_score
-        international = evaluate_international_standards(
-            vr.evidence,
-            lotaip_result={
-                "puntaje_total": national_score,
-                "puntaje_estructura": float(vr.score_structure),
-            },
-        )
-        bucket["integrated_score_sum"] += international["indice_nacional_internacional"]
-        bucket["count"] += 1
+        bucket["score_sum"] += float(summary.national_index or summary.total_index or 0) * count
+        bucket["integrated_score_sum"] += float(summary.integrated_index or summary.total_index or 0) * count
+        bucket["count"] += count
+
+    if not by_university:
+        validations = EvidenceValidationResult.objects.select_related("evidence", "evidence__university")
+        for vr in validations:
+            if not vr.evidence_id or not vr.evidence.university_id:
+                continue
+
+            bucket = by_university.setdefault(
+                vr.evidence.university_id,
+                {"score_sum": 0, "integrated_score_sum": 0, "count": 0},
+            )
+            national_score = float(vr.total_score)
+            bucket["score_sum"] += national_score
+            international = evaluate_international_standards(
+                vr.evidence,
+                lotaip_result={
+                    "puntaje_total": national_score,
+                    "puntaje_estructura": float(vr.score_structure),
+                },
+            )
+            bucket["integrated_score_sum"] += international["indice_nacional_internacional"]
+            bucket["count"] += 1
 
     ranked = []
     for university_id, item in by_university.items():
@@ -190,7 +236,7 @@ def _get_university_score_data():
     }
 
 
-# ─── Helpers de auditoría ────────────────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers de auditorÃƒÂ­a Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 def _log(user_id, action, table_name=None, record_id=None, description=None):
     """Registra auditoria exitosa; aisla la logica de persistencia"""
@@ -225,7 +271,15 @@ def _log_error(error_message, user_id=None, function_name=None, error_code=None,
         pass
 
 
-# ─── Registro ────────────────────────────────────────────────────────
+
+def _send_otp_email_async(user_id, recipient_email, otp):
+    """Encola el OTP para enviarlo sin bloquear la respuesta del login."""
+    queued = enqueue_otp_email(user_id, recipient_email, otp, error_handler=_log_error)
+    if not queued:
+        print(f"No se pudo encolar OTP para {recipient_email}")
+
+
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Registro Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def register_user(request):
@@ -233,8 +287,8 @@ def register_user(request):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            _log_error("Cuerpo JSON inválido en registro", function_name="register_user", error_code="INVALID_JSON")
-            return JsonResponse({"error": "Cuerpo de la solicitud inválido"}, status=400)
+            _log_error("Cuerpo JSON invÃ¡lido en registro", function_name="register_user", error_code="INVALID_JSON")
+            return JsonResponse({"error": "Cuerpo de la solicitud invÃƒÂ¡lido"}, status=400)
 
         full_name_raw = data.get("fullName", "").strip()
         email_raw = data.get("email", "").strip().lower()
@@ -242,13 +296,13 @@ def register_user(request):
 
         if not full_name_raw or not email_raw or not password:
             _log_error(
-                "Registro fallido: campos obligatorios vacíos",
+                "Registro fallido: campos obligatorios vacÃƒÂ­os",
                 function_name="register_user",
                 error_code="MISSING_FIELDS",
             )
             return JsonResponse({"error": "Todos los campos son obligatorios"}, status=400)
 
-        # ── Sanitización y validación de entradas (HT-08) ────────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ SanitizaciÃƒÂ³n y validaciÃƒÂ³n de entradas (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         try:
             full_name = validate_name(full_name_raw)
             email_raw = validate_email_format(email_raw)
@@ -277,7 +331,7 @@ def register_user(request):
                 function_name="register_user",
                 error_code="DUPLICATE_EMAIL",
             )
-            return JsonResponse({"error": "El email ya está registrado"}, status=400)
+            return JsonResponse({"error": "El email ya estÃƒÂ¡ registrado"}, status=400)
 
         try:
             role = Role.objects.get(id=4)  # id=4 => Auditor
@@ -320,10 +374,10 @@ def register_user(request):
         )
         return JsonResponse({"message": "Usuario creado correctamente"})
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Login ───────────────────────────────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Login Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def login_user(request):
@@ -334,21 +388,21 @@ def login_user(request):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            _log_error("Cuerpo JSON inválido en login", function_name="login_user", error_code="INVALID_JSON")
-            return JsonResponse({"error": "Cuerpo de la solicitud inválido"}, status=400)
+            _log_error("Cuerpo JSON invÃ¡lido en login", function_name="login_user", error_code="INVALID_JSON")
+            return JsonResponse({"error": "Cuerpo de la solicitud invÃƒÂ¡lido"}, status=400)
 
         email_raw = data.get("email", "").strip().lower()
         password  = data.get("password", "")
 
         if not email_raw or not password:
             _log_error(
-                "Login fallido: campos vacíos",
+                "Login fallido: campos vacÃƒÂ­os",
                 function_name="login_user",
                 error_code="MISSING_FIELDS",
             )
-            return JsonResponse({"error": "Email y contraseña son obligatorios"}, status=400)
+            return JsonResponse({"error": "Email y contraseÃƒÂ±a son obligatorios"}, status=400)
 
-        # Buscar por hash determinístico
+        # Buscar por hash determinÃƒÂ­stico
         email_idx = hash_email(email_raw)
         try:
             user = AppUser.objects.select_related("role").get(email_hash=email_idx)
@@ -369,7 +423,7 @@ def login_user(request):
             )
             return JsonResponse({"error": "Cuenta desactivada. Contacte al administrador"}, status=403)
 
-        # ── Verificar si la cuenta está bloqueada ───────────────────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Verificar si la cuenta estÃƒÂ¡ bloqueada Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if user.is_locked:
             _log_error(
                 "Login fallido: cuenta bloqueada",
@@ -382,7 +436,7 @@ def login_user(request):
                 "support_email": SUPPORT_EMAIL,
             }, status=403)
 
-        # ── Verificar contraseña ────────────────────────────────────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Verificar contraseÃƒÂ±a Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if not check_password(password, user.password_hash):
             # Incrementar contador de intentos fallidos
             user.failed_login_attempts += 1
@@ -404,7 +458,7 @@ def login_user(request):
 
             user.save(update_fields=["failed_login_attempts", "updated_at"])
             _log_error(
-                f"Login fallido: contraseña incorrecta (intento {user.failed_login_attempts}/{MAX_ATTEMPTS})",
+                f"Login fallido: contraseÃƒÂ±a incorrecta (intento {user.failed_login_attempts}/{MAX_ATTEMPTS})",
                 user_id=user.id,
                 function_name="login_user",
                 error_code="WRONG_PASSWORD",
@@ -414,7 +468,7 @@ def login_user(request):
                 "remaining": remaining,
             }, status=400)
 
-        #  Login exitoso — reiniciar contador y actualizar last_login
+        #  Login exitoso Ã¢â‚¬â€ reiniciar contador y actualizar last_login
         try:
             user.last_login = timezone.now()
             user.failed_login_attempts = 0
@@ -423,7 +477,7 @@ def login_user(request):
         except Exception:
             pass
 
-        # ── Omitir 2FA para correos de prueba ──
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Omitir 2FA para correos de prueba Ã¢â€â‚¬Ã¢â€â‚¬
         if email_raw in ["admin@gmail.com", "adminuni@gmail.com"]:
             import uuid
             user.session_id = uuid.uuid4()
@@ -466,36 +520,21 @@ def login_user(request):
             description=f"Credenciales validadas, requiere 2FA (rol: {user.role.name})",
         )
 
-        import random
-        import string
-        
         # Generar OTP
-        otp = ''.join(random.choices(string.digits, k=6))
+        otp = f"{secrets.randbelow(1_000_000):06d}"
         user.otp_code = otp
         user.otp_expiry = timezone.now() + timedelta(minutes=5)
         user.save(update_fields=["otp_code", "otp_expiry", "updated_at"])
         
-        # Enviar correo
-        try:
-            send_mail(
-                subject="Código de Verificación - Sistema Transparencia",
-                message=f"Su código de verificación (OTP) es: {otp}\nEste código expirará en 5 minutos.",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[email_raw],
-                fail_silently=False,
-            )
-            print(f"OTP para {email_raw}: {otp}") # Para desarrollo
-        except Exception as e:
-            _log_error(f"Error enviando OTP: {str(e)}", user_id=user.id, function_name="login_user")
-            return JsonResponse({"error": "Error al enviar el código de verificación"}, status=500)
+        _send_otp_email_async(user.id, email_raw, otp)
 
         return JsonResponse({
             "requires_2fa": True,
             "email": email_raw,
-            "message": "Código de verificación enviado al correo"
+            "message": "CÃƒÂ³digo de verificaciÃƒÂ³n enviado al correo"
         })
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
 @csrf_exempt
@@ -504,13 +543,13 @@ def verify_otp(request):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
             
         email_raw = data.get("email", "").strip().lower()
         otp = data.get("otp", "").strip()
         
         if not email_raw or not otp:
-            return JsonResponse({"error": "Email y código son obligatorios"}, status=400)
+            return JsonResponse({"error": "Email y cÃƒÂ³digo son obligatorios"}, status=400)
             
         email_idx = hash_email(email_raw)
         try:
@@ -519,12 +558,12 @@ def verify_otp(request):
             return JsonResponse({"error": "Usuario no encontrado"}, status=400)
             
         if not user.otp_code or user.otp_code != otp:
-            return JsonResponse({"error": "Código de verificación inválido"}, status=400)
+            return JsonResponse({"error": "CÃƒÂ³digo de verificaciÃƒÂ³n invÃƒÂ¡lido"}, status=400)
             
         if not user.otp_expiry or timezone.now() > user.otp_expiry:
-            return JsonResponse({"error": "El código de verificación ha expirado"}, status=400)
+            return JsonResponse({"error": "El cÃƒÂ³digo de verificaciÃƒÂ³n ha expirado"}, status=400)
             
-        # OTP Válido - Generar sesión
+        # OTP VÃƒÂ¡lido - Generar sesiÃƒÂ³n
         import uuid
         user.session_id = uuid.uuid4()
         user.otp_code = None
@@ -558,7 +597,7 @@ def verify_otp(request):
             }
         })
         
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
 @csrf_exempt
@@ -674,7 +713,7 @@ def _serialize_user_feedback(item):
 
 @csrf_exempt
 def list_user_feedback(request):
-    user, err = require_role(request, [1])
+    user, err = require_role(request, [1, 2, 3])
     if err:
         return err
 
@@ -685,8 +724,11 @@ def list_user_feedback(request):
     feedback_type = request.GET.get("type", "").strip().lower()
     status = request.GET.get("status", "").strip().lower()
 
-    if feedback_type in FEEDBACK_TYPES:
+    if user.role_id in (2, 3):
+        queryset = queryset.filter(feedback_type="transparency")
+    elif feedback_type in FEEDBACK_TYPES:
         queryset = queryset.filter(feedback_type=feedback_type)
+
     if status in {"pending", "reviewed"}:
         queryset = queryset.filter(status=status)
 
@@ -696,7 +738,7 @@ def list_user_feedback(request):
 
 @csrf_exempt
 def user_feedback_detail(request, feedback_id):
-    user, err = require_role(request, [1])
+    user, err = require_role(request, [1, 2, 3])
     if err:
         return err
 
@@ -704,6 +746,9 @@ def user_feedback_detail(request, feedback_id):
         item = UserFeedback.objects.get(id=feedback_id)
     except UserFeedback.DoesNotExist:
         return JsonResponse({"error": "Comentario no encontrado"}, status=404)
+
+    if user.role_id in (2, 3) and item.feedback_type != "transparency":
+        return JsonResponse({"error": "No autorizado"}, status=403)
 
     if request.method == "GET":
         return JsonResponse(_serialize_user_feedback(item))
@@ -738,7 +783,7 @@ def refresh_token(request):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
             
         token = data.get("refresh_token")
         if not token:
@@ -752,11 +797,11 @@ def refresh_token(request):
         except jwt.ExpiredSignatureError:
             return JsonResponse({"error": "Refresh token expirado"}, status=401)
         except jwt.InvalidTokenError:
-            return JsonResponse({"error": "Refresh token inválido"}, status=401)
+            return JsonResponse({"error": "Refresh token invÃƒÂ¡lido"}, status=401)
             
         # Verificar tipo de token
         if not payload.get("is_refresh"):
-            return JsonResponse({"error": "Tipo de token inválido"}, status=401)
+            return JsonResponse({"error": "Tipo de token invÃƒÂ¡lido"}, status=401)
             
         try:
             user = AppUser.objects.get(id=payload["user_id"], is_active=True)
@@ -766,7 +811,7 @@ def refresh_token(request):
         # Verificar concurrencia (session_id)
         token_session_id = payload.get("session_id")
         if not token_session_id or str(user.session_id) != token_session_id:
-            return JsonResponse({"error": "La sesión ha expirado o ha sido invalidada. Inicie sesión nuevamente."}, status=401)
+            return JsonResponse({"error": "La sesiÃƒÂ³n ha expirado o ha sido invalidada. Inicie sesiÃƒÂ³n nuevamente."}, status=401)
             
         # Emitir nuevo access_token
         access_token = generate_jwt(user)
@@ -775,13 +820,13 @@ def refresh_token(request):
             "token": access_token
         })
         
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 @csrf_exempt
 def auth_status(request):
     """
     Endpoint ligero para que el frontend haga polling y verifique 
-    si su sesión (token) sigue siendo válida y no ha sido invalidada por concurrencia.
+    si su sesiÃƒÂ³n (token) sigue siendo vÃƒÂ¡lida y no ha sido invalidada por concurrencia.
     """
     from .middleware import require_auth
     user, err = require_auth(request)
@@ -789,13 +834,13 @@ def auth_status(request):
         return err
     return JsonResponse({"status": "active"})
 
-# ─── Listado de usuarios ─────────────────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Listado de usuarios Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 
 @csrf_exempt
 def list_users(request):
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: solo Administrador (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     _, err = require_role(request, [1])
     if err:
         return err
@@ -828,7 +873,7 @@ def list_users(request):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
 
         email_raw  = data.get("email", "").strip().lower()
         full_name  = data.get("full_name", "").strip()
@@ -838,7 +883,7 @@ def list_users(request):
         if not email_raw or not full_name:
             return JsonResponse({"error": "Nombre y email son obligatorios"}, status=400)
 
-        # ── Regla: máximo 2 usuarios con role_id=1 ──────────────────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Regla: mÃƒÂ¡ximo 2 usuarios con role_id=1 Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if int(role_id) == 1:
             admin_count = AppUser.objects.filter(role_id=1).count()
             if admin_count >= 2:
@@ -849,7 +894,7 @@ def list_users(request):
 
         email_idx = hash_email(email_raw)
         if AppUser.objects.filter(email_hash=email_idx).exists():
-            return JsonResponse({"error": "El email ya está registrado"}, status=400)
+            return JsonResponse({"error": "El email ya estÃƒÂ¡ registrado"}, status=400)
 
         try:
             role = Role.objects.get(id=role_id)
@@ -869,10 +914,10 @@ def list_users(request):
         )
         return JsonResponse({"id": user.id, "message": "Usuario creado"}, status=201)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Helper: obtiene el ID del superadmin (role_id=1 con menor id) ───
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helper: obtiene el ID del superadmin (role_id=1 con menor id) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 def _get_superadmin_id():
     """Retorna el id del superadmin: el primer usuario con role_id=1 (menor id)."""
     first = AppUser.objects.filter(role_id=1).order_by("id").first()
@@ -881,7 +926,7 @@ def _get_superadmin_id():
 
 @csrf_exempt
 def user_detail(request, user_id):
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: solo Administrador (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     _, err = require_role(request, [1])
     if err:
         return err
@@ -895,19 +940,19 @@ def user_detail(request, user_id):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
 
-        requester_id = data.get("_requester_id")  # ID del admin que realiza la acción
+        requester_id = data.get("_requester_id")  # ID del admin que realiza la acciÃƒÂ³n
         superadmin_id = _get_superadmin_id()
 
-        # ── Regla 1: un admin no puede modificar su propia cuenta ────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Regla 1: un admin no puede modificar su propia cuenta Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if requester_id and int(requester_id) == user_id:
             return JsonResponse(
                 {"error": "No puedes modificar tu propia cuenta desde este panel."},
                 status=403,
             )
 
-        # ── Regla 2: el superadmin no puede ser desactivado por nadie ────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Regla 2: el superadmin no puede ser desactivado por nadie Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if user_id == superadmin_id:
             if "is_active" in data and not data["is_active"]:
                 return JsonResponse(
@@ -920,7 +965,7 @@ def user_detail(request, user_id):
                     status=403,
                 )
 
-        # ── Regla 3: máximo 2 usuarios con role_id=1 ────────────────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Regla 3: mÃƒÂ¡ximo 2 usuarios con role_id=1 Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if "role_id" in data and int(data["role_id"]) == 1 and user.role_id != 1:
             admin_count = AppUser.objects.filter(role_id=1).count()
             if admin_count >= 2:
@@ -949,7 +994,7 @@ def user_detail(request, user_id):
     if request.method == "DELETE":
         superadmin_id = _get_superadmin_id()
 
-        # ── Regla: no se puede eliminar al superadmin ────────────────────
+        # Ã¢â€â‚¬Ã¢â€â‚¬ Regla: no se puede eliminar al superadmin Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if user_id == superadmin_id:
             return JsonResponse(
                 {"error": "El superadministrador no puede ser eliminado."},
@@ -959,16 +1004,16 @@ def user_detail(request, user_id):
         user.delete()
         return JsonResponse({"message": "Usuario eliminado"})
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Listado de universidades ─────────────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Listado de universidades Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def list_universities(request):
-    # ── Control de acceso: GET=todos autenticados, POST=solo Admin (HT-08) ──
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: GET=todos autenticados, POST=solo Admin (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬
     if request.method == "POST":
-        _, err = require_role(request, [1])
+        _, err = require_role(request, [1, 2, 3])
         if err:
             return err
     else:
@@ -978,7 +1023,9 @@ def list_universities(request):
 
     if request.method == "GET":
         try:
-            univs = University.objects.filter(is_active=True).order_by("name")
+            include_inactive = request.GET.get("include_inactive") in {"1", "true", "True", "yes"}
+            univs = University.objects.all() if include_inactive else University.objects.filter(is_active=True)
+            univs = univs.order_by("is_active", "name") if include_inactive else univs.order_by("name")
             score_data = _get_university_score_data()
             data = [_serialize_university(request, u, score_data) for u in univs]
             return JsonResponse(data, safe=False)
@@ -1000,7 +1047,7 @@ def list_universities(request):
             acronym = _get_value(data, "name", "").strip().upper()
 
             try:
-                logo_path = _save_university_logo(files.get("logo"), acronym)
+                logo_path = _save_university_logo(files.get("logo"), acronym) or _find_existing_university_logo(acronym)
                 now = timezone.now()
                 univ = University.objects.create(
                     name             = _get_value(data, "full_name", "").strip(),
@@ -1010,7 +1057,7 @@ def list_universities(request):
                     website_url      = _get_value(data, "website", ""),
                     transparency_url = _normalize_dpe_transparency_url(transparency_input),
                     logo_path        = logo_path,
-                    institution_type = _get_value(data, "type", "Pública"),
+                    institution_type = _get_value(data, "type", "PÃºblica"),
                     is_active        = _get_bool(data, "is_active", True),
                     created_at       = now,
                     updated_at       = now,
@@ -1024,7 +1071,7 @@ def list_universities(request):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
 
         transparency_input = (
             data.get("dpe_entity_id")
@@ -1035,14 +1082,17 @@ def list_universities(request):
 
         now = timezone.now()
         try:
+            acronym = data.get("name", "").strip().upper()
+            logo_path = _find_existing_university_logo(acronym)
             univ = University.objects.create(
                 name             = data.get("full_name", "").strip(),
-                acronym          = data.get("name", "").strip().upper(),
+                acronym          = acronym,
                 province         = data.get("province", ""),
                 city             = data.get("city", ""),
                 website_url      = data.get("website", ""),
                 transparency_url = _normalize_dpe_transparency_url(transparency_input),
-                institution_type = data.get("type", "Pública"),
+                logo_path        = logo_path,
+                institution_type = data.get("type", "PÃºblica"),
                 is_active        = data.get("is_active", True),
                 created_at       = now,
                 updated_at       = now,
@@ -1051,13 +1101,13 @@ def list_universities(request):
         except Exception as exc:
             return JsonResponse({"error": f"Error al crear universidad: {str(exc)}"}, status=500)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
 @csrf_exempt
 def university_detail(request, univ_id):
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
-    _, err = require_role(request, [1])
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: solo Administrador (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    _, err = require_role(request, [1, 2, 3])
     if err:
         return err
 
@@ -1094,6 +1144,8 @@ def university_detail(request, univ_id):
                     univ.logo_path = _save_university_logo(files.get("logo"), univ.acronym)
                 except ValueError as exc:
                     return JsonResponse({"error": str(exc)}, status=400)
+            elif not getattr(univ, "logo_path", None):
+                univ.logo_path = _find_existing_university_logo(univ.acronym)
             univ.updated_at = timezone.now()
             univ.save()
             return JsonResponse({"message": "Universidad actualizada", "logo_url": _logo_url(request, getattr(univ, "logo_path", None))})
@@ -1101,7 +1153,7 @@ def university_detail(request, univ_id):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+            return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
 
         if "full_name" in data: univ.name = data["full_name"]
         if "name" in data:      univ.acronym = data["name"].upper()
@@ -1118,22 +1170,58 @@ def university_detail(request, univ_id):
             univ.transparency_url = _normalize_dpe_transparency_url(transparency_input)
         if "type" in data:      univ.institution_type = data["type"]
         if "is_active" in data: univ.is_active = data["is_active"]
+        if not getattr(univ, "logo_path", None):
+            univ.logo_path = _find_existing_university_logo(univ.acronym)
         univ.updated_at = timezone.now()
         univ.save()
         return JsonResponse({"message": "Universidad actualizada"})
 
+
     if request.method == "DELETE":
-        univ.delete()
-        return JsonResponse({"message": "Universidad eliminada"})
+        evidence_rows = list(Evidence.objects.filter(university=univ).only("id", "file_path"))
+        evidence_ids = [ev.id for ev in evidence_rows]
+        deleted_files = 0
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+        with transaction.atomic():
+            if evidence_ids:
+                EvidenceValidationResult.objects.filter(evidence_id__in=evidence_ids).delete()
+                Evidence.objects.filter(id__in=evidence_ids).delete()
 
+            UniversityEvaluationSummary.objects.filter(university=univ).delete()
+            Evaluation.objects.filter(university=univ).delete()
+            CategoryResult.objects.filter(university=univ).delete()
+            FinalResult.objects.filter(university=univ).delete()
+            Feedback.objects.filter(university=univ).delete()
+            AppUser.objects.filter(university=univ).update(university=None)
+            univ.delete()
 
-# ─── Listado de indicadores ───────────────────────────────────────────
+        for ev in evidence_rows:
+            if ev.file_path:
+                try:
+                    if default_storage.exists(ev.file_path):
+                        default_storage.delete(ev.file_path)
+                        deleted_files += 1
+                except Exception as exc:
+                    _log_error(
+                        f"No se pudo eliminar archivo de evidencia '{ev.file_path}': {str(exc)}",
+                        function_name="university_detail",
+                        error_code="EVIDENCE_FILE_DELETE_ERROR",
+                        exc=exc,
+                    )
+
+        cache.clear()
+        return JsonResponse({
+            "message": "Universidad eliminada",
+            "deleted_evidences": len(evidence_rows),
+            "deleted_files": deleted_files,
+        })
+
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Listado de indicadores Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def list_indicators(request):
-    # ── Control de acceso: todos los autenticados (HT-08) ────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: todos los autenticados (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     _, err = require_auth(request)
     if err:
         return err
@@ -1193,7 +1281,7 @@ def list_indicators(request):
         except Exception as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 @csrf_exempt
 def indicator_detail(request, ind_id):
@@ -1226,7 +1314,7 @@ def indicator_detail(request, ind_id):
         indicator.delete()
         return JsonResponse({"message": "Eliminado"})
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
 @csrf_exempt
@@ -1244,7 +1332,7 @@ def indicator_template_view(request, ind_id):
     if request.method == "POST":
         file_obj = request.FILES.get("file")
         if not file_obj:
-            return JsonResponse({"error": "No se proporcionó ningún archivo"}, status=400)
+            return JsonResponse({"error": "No se proporcionÃƒÂ³ ningÃƒÂºn archivo"}, status=400)
             
         from .models import IndicatorTemplate
         
@@ -1258,7 +1346,7 @@ def indicator_template_view(request, ind_id):
             file_path=file_obj,
             file_name=file_obj.name
         )
-        return JsonResponse({"message": "Plantilla subida con éxito", "url": template.file_path.url, "name": template.file_name})
+        return JsonResponse({"message": "Plantilla subida con ÃƒÂ©xito", "url": template.file_path.url, "name": template.file_name})
 
     if request.method == "DELETE":
         if hasattr(indicator, 'template') and indicator.template:
@@ -1267,10 +1355,10 @@ def indicator_template_view(request, ind_id):
             return JsonResponse({"message": "Plantilla eliminada"})
         return JsonResponse({"error": "No hay plantilla asignada"}, status=400)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Stats del sistema ────────────────────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Stats del sistema Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def system_stats(request):
@@ -1298,56 +1386,110 @@ def system_stats(request):
                 evidences = evidences.filter(month=month)
                 validations = validations.filter(evidence__month=month)
 
-            validation_rows = list(validations)
-            validation_count = len(validation_rows)
+            ranking = []
             national_sum = 0
             integrated_sum = 0
-            observations_open = 0
-            ranking = []
-            by_university = {}
+            validation_count = 0
 
-            for vr in validation_rows:
-                national_score = float(vr.total_score)
-                international = evaluate_international_standards(
-                    vr.evidence,
-                    lotaip_result={
-                        "puntaje_total": national_score,
-                        "puntaje_estructura": float(vr.score_structure),
-                    },
+            if not month:
+                summaries = UniversityEvaluationSummary.objects.select_related("university").filter(
+                    university__is_active=True
                 )
-                integrated_score = international["indice_nacional_internacional"]
-                national_sum += national_score
-                integrated_sum += integrated_score
-                if vr.observations:
-                    observations_open += 1
+                if period_id:
+                    summaries = summaries.filter(period_id=period_id)
 
-                univ = vr.evidence.university
-                if not univ:
-                    continue
-                bucket = by_university.setdefault(univ.id, {
-                    "id": univ.id,
-                    "name": univ.acronym,
-                    "full_name": univ.name,
-                    "score_sum": 0,
-                    "integrated_score_sum": 0,
-                    "count": 0,
-                })
-                bucket["score_sum"] += national_score
-                bucket["integrated_score_sum"] += integrated_score
-                bucket["count"] += 1
+                by_university = {}
+                for summary in summaries:
+                    count = int(summary.evaluated_documents or summary.total_indicators or 0)
+                    if count <= 0:
+                        continue
+                    national_score = float(summary.national_index or summary.total_index or 0)
+                    integrated_score = float(summary.integrated_index or summary.total_index or 0)
+                    national_sum += national_score * count
+                    integrated_sum += integrated_score * count
+                    validation_count += count
+
+                    bucket = by_university.setdefault(summary.university_id, {
+                        "id": summary.university_id,
+                        "name": summary.university.acronym,
+                        "full_name": summary.university.name,
+                        "logo_url": _logo_url(request, _resolve_university_logo_path(summary.university)),
+                        "logo_path": _resolve_university_logo_path(summary.university) or "",
+                        "logo_initials": summary.university.acronym[:4] if summary.university.acronym else "UNIV",
+                        "score_sum": 0,
+                        "integrated_score_sum": 0,
+                        "count": 0,
+                    })
+                    bucket["score_sum"] += national_score * count
+                    bucket["integrated_score_sum"] += integrated_score * count
+                    bucket["count"] += count
+
+                for item in by_university.values():
+                    ranking.append({
+                        "id": item["id"],
+                        "name": item["name"],
+                        "full_name": item["full_name"],
+                        "logo_url": item["logo_url"],
+                        "logo_path": item["logo_path"],
+                        "logo_initials": item["logo_initials"],
+                        "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
+                        "integrated_transparency_score": round(item["integrated_score_sum"] / item["count"], 2) if item["count"] else 0,
+                        "evaluated_documents": item["count"],
+                    })
+
+            if not ranking:
+                validation_rows = list(validations)
+                validation_count = len(validation_rows)
+                national_sum = 0
+                integrated_sum = 0
+                by_university = {}
+
+                for vr in validation_rows:
+                    national_score = float(vr.total_score)
+                    international = evaluate_international_standards(
+                        vr.evidence,
+                        lotaip_result={
+                            "puntaje_total": national_score,
+                            "puntaje_estructura": float(vr.score_structure),
+                        },
+                    )
+                    integrated_score = international["indice_nacional_internacional"]
+                    national_sum += national_score
+                    integrated_sum += integrated_score
+
+                    univ = vr.evidence.university
+                    if not univ:
+                        continue
+                    bucket = by_university.setdefault(univ.id, {
+                        "id": univ.id,
+                        "name": univ.acronym,
+                        "full_name": univ.name,
+                        "logo_url": _logo_url(request, _resolve_university_logo_path(univ)),
+                        "logo_path": _resolve_university_logo_path(univ) or "",
+                        "logo_initials": univ.acronym[:4] if univ.acronym else "UNIV",
+                        "score_sum": 0,
+                        "integrated_score_sum": 0,
+                        "count": 0,
+                    })
+                    bucket["score_sum"] += national_score
+                    bucket["integrated_score_sum"] += integrated_score
+                    bucket["count"] += 1
+
+                for item in by_university.values():
+                    ranking.append({
+                        "id": item["id"],
+                        "name": item["name"],
+                        "full_name": item["full_name"],
+                        "logo_url": item["logo_url"],
+                        "logo_path": item["logo_path"],
+                        "logo_initials": item["logo_initials"],
+                        "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
+                        "integrated_transparency_score": round(item["integrated_score_sum"] / item["count"], 2) if item["count"] else 0,
+                        "evaluated_documents": item["count"],
+                    })
 
             avg_transparency = round(national_sum / validation_count, 2) if validation_count else 0
             avg_transparency_integrated = round(integrated_sum / validation_count, 2) if validation_count else 0
-
-            for item in by_university.values():
-                ranking.append({
-                    "id": item["id"],
-                    "name": item["name"],
-                    "full_name": item["full_name"],
-                    "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
-                    "integrated_transparency_score": round(item.get("integrated_score_sum", 0) / item["count"], 2) if item["count"] else 0,
-                    "evaluated_documents": item["count"],
-                })
             ranking.sort(key=lambda item: item["transparency_score"], reverse=True)
 
             recent_documents = [
@@ -1371,7 +1513,7 @@ def system_stats(request):
                 "avg_transparency":   avg_transparency,
                 "avg_transparency_integrated": avg_transparency_integrated,
                 "active_users":       AppUser.objects.filter(is_active=True).count(),
-                "observations_open":  observations_open,
+                "observations_open":  validations.exclude(observations=[]).count(),
                 "indicators_active":  Indicator.objects.filter(is_active=True).count(),
                 "evaluated_documents": validation_count,
                 "ranking": ranking[:10],
@@ -1380,16 +1522,14 @@ def system_stats(request):
             cache.set(cache_key, data, 60)
             return JsonResponse(data)
         except Exception as exc:
-            return JsonResponse({"error": f"Error al obtener estadísticas: {str(exc)}"}, status=500)
+            return JsonResponse({"error": f"Error al obtener estadisticas: {str(exc)}"}, status=500)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "Metodo no permitido"}, status=405)
 
-
-# ─── Listado de roles ─────────────────────────────────────────────────
 
 @csrf_exempt
 def list_roles(request):
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: solo Administrador (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     _, err = require_role(request, [1])
     if err:
         return err
@@ -1401,10 +1541,10 @@ def list_roles(request):
             return JsonResponse(data, safe=False)
         except Exception as exc:
             return JsonResponse({"error": f"Error al obtener roles: {str(exc)}"}, status=500)
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Errores de auditoría (descifrados) ───────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Errores de auditorÃƒÂ­a (descifrados) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def list_audit_errors(request):
@@ -1413,7 +1553,7 @@ def list_audit_errors(request):
     Devuelve los errores del sistema con error_message y stack_trace descifrados.
     Solo accesible para administradores (role_id=1).
     """
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: solo Administrador (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     _, err = require_role(request, [1])
     if err:
         return err
@@ -1438,10 +1578,10 @@ def list_audit_errors(request):
         except Exception as exc:
             return JsonResponse({"error": f"Error al obtener errores: {str(exc)}"}, status=500)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Logs de auditoría (acciones exitosas) ────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Logs de auditorÃƒÂ­a (acciones exitosas) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def list_audit_logs(request):
@@ -1449,7 +1589,7 @@ def list_audit_logs(request):
     GET /api/audit/logs/
     Devuelve el historial de acciones exitosas del sistema.
     """
-    # ── Control de acceso: solo Administrador (HT-08) ────────────
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Control de acceso: solo Administrador (HT-08) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     _, err = require_role(request, [1])
     if err:
         return err
@@ -1474,33 +1614,33 @@ def list_audit_logs(request):
         except Exception as exc:
             return JsonResponse({"error": f"Error al obtener logs: {str(exc)}"}, status=500)
 
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
 
-# ─── Recuperar contraseña — solicitud ────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Recuperar contraseÃƒÂ±a Ã¢â‚¬â€ solicitud Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def request_password_reset(request):
     """
     POST /api/auth/password-reset/request/
     Body: { "email": "usuario@ejemplo.com" }
-    Genera un token y envía un correo con el link de restablecimiento.
+    Genera un token y envÃƒÂ­a un correo con el link de restablecimiento.
     Siempre devuelve 200 para no revelar si el email existe o no.
     """
     if request.method != "POST":
-        return JsonResponse({"error": "Método no permitido"}, status=405)
+        return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
-        return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+        return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
 
     email_raw = data.get("email", "").strip().lower()
     if not email_raw:
         return JsonResponse({"error": "El correo es obligatorio"}, status=400)
 
-    # Respuesta genérica: no revelamos si el correo existe o no (seguridad)
-    GENERIC_MSG = "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."
+    # Respuesta genÃƒÂ©rica: no revelamos si el correo existe o no (seguridad)
+    GENERIC_MSG = "Si el correo estÃƒÂ¡ registrado, recibirÃƒÂ¡s un enlace para restablecer tu contraseÃƒÂ±a."
 
     email_idx = hash_email(email_raw)
     try:
@@ -1511,15 +1651,15 @@ def request_password_reset(request):
             function_name="request_password_reset",
             error_code="USER_NOT_FOUND",
         )
-        return JsonResponse({"error": "El correo ingresado no está registrado en el sistema."}, status=404)
+        return JsonResponse({"error": "El correo ingresado no estÃƒÂ¡ registrado en el sistema."}, status=404)
 
     if not user.is_active:
-        return JsonResponse({"error": "Esta cuenta está desactivada. Contacta al administrador."}, status=403)
+        return JsonResponse({"error": "Esta cuenta estÃƒÂ¡ desactivada. Contacta al administrador."}, status=403)
 
     # Invalida tokens anteriores sin usar
     PasswordResetToken.objects.filter(user=user, used=False).update(used=True)
 
-    # Crea token nuevo con expiración configurada
+    # Crea token nuevo con expiraciÃƒÂ³n configurada
     expiry_minutes = getattr(settings, "PASSWORD_RESET_EXPIRY_MINUTES", 30)
     expires_at = timezone.now() + timedelta(minutes=expiry_minutes)
     reset_token = PasswordResetToken.objects.create(user=user, expires_at=expires_at)
@@ -1527,17 +1667,17 @@ def request_password_reset(request):
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
     reset_link = f"{frontend_url}/reset-password/{reset_token.token}"
 
-    subject = "Restablecer contraseña — SisTransp"
+    subject = "Restablecer contraseÃƒÂ±a Ã¢â‚¬â€ SisTransp"
     message = (
         f"Hola {user.full_name},\n\n"
-        f"Recibimos una solicitud para restablecer la contraseña de tu cuenta.\n\n"
-        f"Haz clic en el siguiente enlace (válido por {expiry_minutes} minutos):\n"
+        f"Recibimos una solicitud para restablecer la contraseÃƒÂ±a de tu cuenta.\n\n"
+        f"Haz clic en el siguiente enlace (vÃƒÂ¡lido por {expiry_minutes} minutos):\n"
         f"{reset_link}\n\n"
         f"Si no solicitaste este cambio, ignora este correo.\n\n"
-        f"— Equipo SisTransp"
+        f"Ã¢â‚¬â€ Equipo SisTransp"
     )
 
-    # ── Modo desarrollo: muestra el link en consola y en la respuesta ──
+    # Ã¢â€â‚¬Ã¢â€â‚¬ Modo desarrollo: muestra el link en consola y en la respuesta Ã¢â€â‚¬Ã¢â€â‚¬
     debug_mode = getattr(settings, "DEBUG_RESET_LINK", False)
 
     try:
@@ -1551,8 +1691,8 @@ def request_password_reset(request):
                 error_code="EMAIL_SEND_ERROR",
                 exc=exc,
             )
-            return JsonResponse({"error": "No se pudo enviar el correo. Intente más tarde."}, status=500)
-        # En modo debug: el correo falló pero continuamos de todas formas
+            return JsonResponse({"error": "No se pudo enviar el correo. Intente mÃƒÂ¡s tarde."}, status=500)
+        # En modo debug: el correo fallÃƒÂ³ pero continuamos de todas formas
         print(f"\n{'='*60}")
         print(f"[DEV] Email de reset NO enviado (sin SMTP). Link de prueba:")
         print(f"  {reset_link}")
@@ -1576,22 +1716,22 @@ def request_password_reset(request):
 
 
 
-# ─── Recuperar contraseña — confirmación ────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Recuperar contraseÃƒÂ±a Ã¢â‚¬â€ confirmaciÃƒÂ³n Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 @csrf_exempt
 def confirm_password_reset(request, token):
     """
     POST /api/auth/password-reset/confirm/<token>/
-    Body: { "password": "nuevaContraseña", "confirm": "nuevaContraseña" }
-    Valida el token y actualiza la contraseña del usuario.
+    Body: { "password": "nuevaContraseÃƒÂ±a", "confirm": "nuevaContraseÃƒÂ±a" }
+    Valida el token y actualiza la contraseÃƒÂ±a del usuario.
     """
     if request.method != "POST":
-        return JsonResponse({"error": "Método no permitido"}, status=405)
+        return JsonResponse({"error": "MÃƒÂ©todo no permitido"}, status=405)
 
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
-        return JsonResponse({"error": "Cuerpo JSON inválido"}, status=400)
+        return JsonResponse({"error": "Cuerpo JSON invÃ¡lido"}, status=400)
 
     password = data.get("password", "")
     confirm  = data.get("confirm", "")
@@ -1599,14 +1739,16 @@ def confirm_password_reset(request, token):
     if not password or not confirm:
         return JsonResponse({"error": "Todos los campos son obligatorios"}, status=400)
     if password != confirm:
-        return JsonResponse({"error": "Las contraseñas no coinciden"}, status=400)
-    if len(password) < 6:
-        return JsonResponse({"error": "La contraseña debe tener al menos 6 caracteres"}, status=400)
+        return JsonResponse({"error": "Las contrasenas no coinciden"}, status=400)
+    try:
+        password = validate_password(password)
+    except ValueError as ve:
+        return JsonResponse({"error": str(ve)}, status=400)
 
     try:
         reset_token = PasswordResetToken.objects.select_related("user").get(token=token)
     except PasswordResetToken.DoesNotExist:
-        return JsonResponse({"error": "El enlace no es válido"}, status=400)
+        return JsonResponse({"error": "El enlace no es vÃƒÂ¡lido"}, status=400)
 
     if reset_token.used:
         return JsonResponse({"error": "Este enlace ya fue utilizado"}, status=400)
@@ -1616,9 +1758,9 @@ def confirm_password_reset(request, token):
 
     user = reset_token.user
     if not user.is_active:
-        return JsonResponse({"error": "Esta cuenta está desactivada"}, status=403)
+        return JsonResponse({"error": "Esta cuenta estÃƒÂ¡ desactivada"}, status=403)
 
-    # Actualiza la contraseña y desbloquea la cuenta
+    # Actualiza la contraseÃƒÂ±a y desbloquea la cuenta
     user.password_hash          = make_password(password)
     user.updated_at             = timezone.now()
     user.failed_login_attempts  = 0
@@ -1637,6 +1779,6 @@ def confirm_password_reset(request, token):
         action="PASSWORD_RESET_CONFIRMED",
         table_name="core.users",
         record_id=user.id,
-        description="Contraseña restablecida exitosamente via token",
+        description="ContraseÃƒÂ±a restablecida exitosamente via token",
     )
-    return JsonResponse({"message": "Contraseña actualizada correctamente. Ya puedes iniciar sesión."})
+    return JsonResponse({"message": "ContraseÃƒÂ±a actualizada correctamente. Ya puedes iniciar sesiÃƒÂ³n."})

@@ -68,6 +68,10 @@ export const validationApi = {
       params: { periodo_id: periodId, ...(month ? { month } : {}) },
     }),
 
+  /** Get latest validated period for a university */
+  getLatestPeriod: (universityId) =>
+    client.get(`/evaluacion/universidades/${universityId}/ultimo-periodo/`),
+
   /** Get observations for a university in a period */
   getObservations: (universityId, periodId, month) =>
     client.get(`/evaluacion/universidades/${universityId}/observaciones/`, {
