@@ -297,3 +297,8 @@ INTERNATIONAL_MAX_PDF_PAGES = int(os.environ.get('INTERNATIONAL_MAX_PDF_PAGES', 
 # Internet Archive más cercana al 31 de diciembre de ese año.
 INTERNATIONAL_WAYBACK_ENABLED = os.environ.get('INTERNATIONAL_WAYBACK_ENABLED', '1').lower() not in {'0', 'false', 'no'}
 INTERNATIONAL_WAYBACK_MAX_DAYS = int(os.environ.get('INTERNATIONAL_WAYBACK_MAX_DAYS', '183'))
+# Caracteres del informe de rendición de cuentas (documento ancla) enviados al modelo,
+# armados con sus páginas más pertinentes para cada criterio.
+INTERNATIONAL_ANCHOR_EXCERPT_CHARS = int(os.environ.get('INTERNATIONAL_ANCHOR_EXCERPT_CHARS', '6000'))
+# Evidencia publicada hace más de estos años respecto del corte: acredita como máximo PARCIAL.
+INTERNATIONAL_MAX_EVIDENCE_AGE_YEARS = int(os.environ.get('INTERNATIONAL_MAX_EVIDENCE_AGE_YEARS', '3'))

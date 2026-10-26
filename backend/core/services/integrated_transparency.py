@@ -39,6 +39,7 @@ from ..lotaip_engine.freellm import (
 from .lotaip_automatic import fetch_public, readable_text
 from .lotaip_rubric import indicator_number, summarize_rubrics
 from .transparency_catalog import (
+    ANCHOR_DOCUMENT_FAMILIES,
     EVALUATION_ELEMENTS,
     EVALUATION_NOTES,
     NORMATIVE_EVIDENCE_FAMILIES,
@@ -69,7 +70,7 @@ TRACKING_QUERY_KEYS = {
     'fbclid', 'gclid', 'dclid', 'msclkid', 'mc_cid', 'mc_eid',
     '_ga', '_gl', 'campaign', 'campaignid',
 }
-SEARCH_STRATEGY_VERSION = 'web-evidence-criteria-v13'
+SEARCH_STRATEGY_VERSION = 'web-evidence-criteria-v17'
 
 # LOTAIP se evalúa por mes; los complementos mixtos e internacionales (Dyntra,
 # Fundación Haz, OGP, WCAG, Open Data Charter) se evalúan una vez por año. Sus
@@ -176,6 +177,33 @@ def _safe_base_url():
     if (parsed.scheme != 'https' and not local) or parsed.username or parsed.password or parsed.query or parsed.fragment:
         return None, None
     return base, key
+
+
+class AIProviderUnavailable(RuntimeError):
+    """El modelo que juzga la evidencia no responde: no se debe evaluar ni sobrescribir nada."""
+
+
+def _ensure_ai_available():
+    """Comprueba que FreeLLMAPI responda antes de evaluar.
+
+    Sin esta comprobación, cada indicador terminaba en ERROR_TECNICO y reemplazaba
+    un resultado válido anterior. Cualquier respuesta HTTP basta (incluso 401 o
+    404): solo importa que el servicio esté escuchando.
+    """
+    base, key = _safe_base_url()
+    if not base:
+        raise AIProviderUnavailable('FreeLLMAPI no está configurado (FREELLMAPI_BASE_URL y FREELLMAPI_API_KEY).')
+    request = urllib.request.Request(base + '/models', headers={'Authorization': 'Bearer ' + key})
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=10):
+            pass
+    except urllib.error.HTTPError:
+        return
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AIProviderUnavailable(
+            f'FreeLLMAPI no responde en {base}. Ábralo y vuelva a evaluar; '
+            'los resultados guardados no se modificaron.',
+        ) from exc
 
 
 def serialize_model():
@@ -832,13 +860,43 @@ def _archived_document(row, university, url, url_key, archive_date):
     return _evidence_document(cache, row, university, False) if text else None
 
 
-def _cached_document(row, university, archive_date=None):
+def _navigation_only(text):
+    """Texto extraído que es casi solo el menú del sitio (enlaces sin contenido propio)."""
+    links = re.findall(r'!?\[[^\]]*\]\([^)]*\)', text)
+    body = re.sub(r'!?\[[^\]]*\]\([^)]*\)|\[[A-ZÁÉÍÓÚÑ ]+:[^\]]*\]', ' ', text)
+    words = re.findall(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}', body)
+    return len(links) >= 10 and len(words) < 60
+
+
+def _cached_document(row, university, archive_date=None, snapshot_date=None):
     """Descarga una URL una vez y conserva el texto localizado para otros indicadores.
 
     Con ``archive_date`` (año cerrado), las páginas HTML del portal oficial se leen
     desde la copia archivada más cercana a esa fecha; la versión actual podría
-    mostrar contenido que no existía en el año evaluado.
+    mostrar contenido que no existía en el año evaluado. Con ``snapshot_date``, una
+    página oficial que solo devolvió el menú del sitio (portal bloqueado y extracción
+    equivocada) se reemplaza por su copia archivada más reciente a esa fecha.
     """
+    document, cache_hit = _cached_document_text(row, university, archive_date)
+    if (
+        document is not None and snapshot_date and not archive_date
+        # Solo cuando la descarga propia falló y el texto lo extrajo un tercero: una
+        # página que sí se leyó y es una lista de enlaces (un archivo) es contenido real.
+        and document.get('is_official_source') and document.get('retrieval_mode') == 'provider_extract'
+        and not urlsplit(document['url']).path.lower().endswith('.pdf')
+        and _navigation_only(document.get('full_text', ''))
+    ):
+        url = _canonicalize_url(row['url'])
+        try:
+            archived = _archived_document(row, university, url, _canonical_url_key(url), snapshot_date)
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+            archived = None
+        if archived is not None:
+            return archived, archived['evidence_cache_hit']
+    return document, cache_hit
+
+
+def _cached_document_text(row, university, archive_date=None):
     url = _canonicalize_url(row['url'])
     url_key = _canonical_url_key(url)
     if not url or not url_key:
@@ -903,7 +961,7 @@ def _cached_document(row, university, archive_date=None):
     return _evidence_document(cache, row, university, False, response.get('status')), False
 
 
-def _load_documents(results, university, limit=None, archive_date=None):
+def _load_documents(results, university, limit=None, archive_date=None, snapshot_date=None):
     documents = []
     cache_hits = 0
     seen = set()
@@ -912,7 +970,7 @@ def _load_documents(results, university, limit=None, archive_date=None):
         if not key or key in seen:
             continue
         seen.add(key)
-        document, cache_hit = _cached_document(row, university, archive_date)
+        document, cache_hit = _cached_document(row, university, archive_date, snapshot_date)
         if document is None or not _document_mentions_university(document, university):
             continue
         documents.append(document)
@@ -1026,6 +1084,14 @@ def _document_publication_date(document):
     return _parse_publication_date(marker.group(1)) if marker else None
 
 
+def _is_outdated(document, period_context):
+    """Publicado hace más de INTERNATIONAL_MAX_EVIDENCE_AGE_YEARS años respecto del corte."""
+    cutoff = _parse_publication_date((period_context or {}).get('cutoff_date'))
+    published = _parse_publication_date(document.get('publication_date')) or _document_publication_date(document)
+    years = int(getattr(settings, 'INTERNATIONAL_MAX_EVIDENCE_AGE_YEARS', 3))
+    return bool(cutoff and published and (cutoff - published).days > 365 * years)
+
+
 def _filter_documents_by_period(documents, period_context):
     cutoff = _parse_publication_date((period_context or {}).get('cutoff_date'))
     accepted = []
@@ -1069,6 +1135,39 @@ def _document_quality(document, indicator, excerpt):
     return quality, relevance, title_relevance
 
 
+def _relevant_pages_excerpt(text, indicator, budget=None):
+    """Páginas de un PDF largo que más tratan el criterio, en su orden original.
+
+    Se puntúa cada [PÁGINA N] por los términos del criterio y la presencia de cifras;
+    los índices (líneas de puntos) no cuentan. Se devuelven páginas completas hasta
+    ``budget`` caracteres, con su marcador para poder citarlas.
+    """
+    budget = budget or int(getattr(settings, 'INTERNATIONAL_ANCHOR_EXCERPT_CHARS', 6000))
+    parts = re.split(r'(?=\[PÁGINA \d+\])', text)
+    terms = {_stem(word) for word in _indicator_terms(indicator)} | {
+        _stem(word) for element in _required_elements(indicator) for word in _element_terms(element)
+    }
+    scored = []
+    for position, page in enumerate(parts):
+        if not page.startswith('[PÁGINA ') or page.count('....') >= 5:
+            continue
+        words = [_stem(word) for word in _normalize(page).split()]
+        hits = sum(word in terms for word in words)
+        figures = len(re.findall(r'\d[\d.,]*\s*%?', page))
+        if hits:
+            scored.append((hits + .2 * min(figures, 20), position, page.strip()))
+    selected, used = [], 0
+    for _, position, page in sorted(scored, reverse=True):
+        page = page[:budget]
+        if used + len(page) > budget and selected:
+            continue
+        selected.append((position, page))
+        used += len(page)
+        if used >= budget:
+            break
+    return '\n\n'.join(page for _, page in sorted(selected))
+
+
 def _documents_for_indicator(documents, indicator, limit=3, require_relevance=True):
     """Elige los documentos que verá el modelo.
 
@@ -1087,7 +1186,11 @@ def _documents_for_indicator(documents, indicator, limit=3, require_relevance=Tr
             excerpt_chars,
         )
         site_match = bool(document.get('site_path_match'))
-        if site_match and len(excerpt) < excerpt_chars // 2:
+        if document.get('anchor_document'):
+            # El informe de rendición de cuentas es extenso: se envían sus páginas más
+            # pertinentes completas en lugar de un único recorte.
+            excerpt = _relevant_pages_excerpt(text, indicator) or excerpt
+        elif site_match and len(excerpt) < excerpt_chars // 2:
             # En una sección propia del criterio el contenido suele estar bajo un
             # encabezado sin repetir el vocabulario (el párrafo de la misión no
             # dice "misión"): se envía la página desde el inicio.
@@ -1115,6 +1218,10 @@ def _documents_for_indicator(documents, indicator, limit=3, require_relevance=Tr
         item for item in candidates[limit:]
         if item[1].get('site_path_match') and not item[1]['non_institutional_kind']
     ][:max(0, reserved_slots - sum(bool(item[1].get('site_path_match')) for item in selected))]
+    # El informe de rendición de cuentas vigente también tiene su lugar: concentra
+    # las cifras de personal, admisión, investigación o presupuesto.
+    if not any(item[1].get('anchor_document') for item in selected + reserved):
+        reserved += [item for item in candidates[limit:] if item[1].get('anchor_document')][:1]
     return [document for _, document in sorted(selected + reserved, key=lambda item: item[0], reverse=True)]
 
 
@@ -1170,10 +1277,14 @@ def _merge_documents(*groups):
         for document in group:
             key = _canonical_url_key(document.get('url'))
             if key:
-                # Una página del mapa del sitio que reaparece en una búsqueda
-                # conserva su coincidencia de ruta.
-                site_match = bool(merged.get(key, {}).get('site_path_match'))
-                merged[key] = {**document, 'site_path_match': site_match or bool(document.get('site_path_match'))}
+                # Una página del mapa del sitio o el informe ancla que reaparece en
+                # una búsqueda conserva su marca.
+                previous = merged.get(key, {})
+                merged[key] = {
+                    **document,
+                    'site_path_match': bool(previous.get('site_path_match') or document.get('site_path_match')),
+                    'anchor_document': bool(previous.get('anchor_document') or document.get('anchor_document')),
+                }
     return list(merged.values())
 
 
@@ -1280,6 +1391,97 @@ def _site_map_rows(university, period_id):
         },
     )
     return compact
+
+
+# ---------------------------------------------------------------------------
+# Documento ancla: informe de rendición de cuentas vigente
+# ---------------------------------------------------------------------------
+
+ANCHOR_SCOPE = 'anchor-documents'
+ANCHOR_EXCLUDED = re.compile(
+    r'preliminar|certificado|acta|conformacion|cronograma|invitacion|lista|equipo|anexo|presentacion|'
+    r'formulario|disposicion|respaldo|fase|propuesta',
+)
+
+
+def _page_links(text):
+    """Enlaces (texto, URL) de HTML o de markdown extraído por un proveedor."""
+    links = [
+        (re.sub(r'<[^>]+>', ' ', label), href)
+        for href, label in re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', text, re.I | re.S)
+    ]
+    links += [(label, href) for label, href in re.findall(r'\[([^\]]{0,200})\]\((https?://[^)\s]+)\)', text)]
+    return links
+
+
+def _accountability_report_candidates(links, cutoff):
+    """Informes finales de rendición de cuentas publicados hasta el corte, del más reciente al más antiguo."""
+    candidates = {}
+    for label, href in links:
+        url = _canonicalize_url(href)
+        if not url or not urlsplit(url).path.lower().endswith('.pdf'):
+            continue
+        words = _normalize(f'{label} {urllib.parse.unquote(urlsplit(url).path)}')
+        if ANCHOR_EXCLUDED.search(words) or not re.search(r'informe|rendicion|rdc', words):
+            continue
+        published = _document_publication_date({'url': url})
+        if cutoff and published and published > cutoff:
+            continue
+        score = 3 * ('final' in words) + 2 * ('informe' in words) + ('rendicion' in words or 'rdc' in words)
+        key = _canonical_url_key(url)
+        if key not in candidates or candidates[key][1] < score:
+            candidates[key] = (published or date.min, score, {'url': url, 'title': ' '.join(label.split()) or url})
+    ranked = sorted(candidates.values(), key=lambda item: (item[0], item[1]), reverse=True)
+    return [row for _, _, row in ranked]
+
+
+def _anchor_document_rows(university, period_id, period_context, archive_date=None):
+    """Informes de rendición de cuentas vigentes, localizados desde la sección del portal.
+
+    Se busca la página de rendición de cuentas en el mapa del sitio y se toman sus
+    enlaces del HTML en vivo, del texto ya extraído o de su copia archivada.
+    """
+    now = timezone.now()
+    cached = IntegratedSearchCache.objects.filter(
+        university=university, period_id=period_id, month=ANNUAL_RESULT_MONTH, scope=ANCHOR_SCOPE,
+        expires_at__gt=now,
+    ).first()
+    if cached is not None:
+        return list(cached.results or [])
+    cutoff = _parse_publication_date(period_context.get('cutoff_date'))
+    pages = sorted(
+        (row['url'] for row in _site_map_rows(university, period_id)
+         if any(_normalize(part).startswith('rendicion de cuentas')
+                for part in urlsplit(row['url']).path.split('/') if part)),
+        key=lambda url: (not _same_university_domain(url, university.website_url) or 'webhistorico' in url, len(url)),
+    )
+    rows = []
+    for page in pages[:2]:
+        links = []
+        response = fetch_public(page) if not archive_date else {}
+        if response.get('status') == 200 and not response.get('error'):
+            links = _page_links(response.get('body', b'').decode('utf-8', errors='replace'))
+        if not links:
+            document, _ = _cached_document({'url': page, 'title': 'Rendición de cuentas'}, university, archive_date)
+            links = _page_links((document or {}).get('full_text', ''))
+        if not links:
+            snapshot = _wayback_snapshot(page, archive_date or cutoff or timezone.localdate())
+            archived = fetch_public(snapshot[1]) if snapshot else {}
+            if archived.get('status') == 200:
+                links = _page_links(archived.get('body', b'').decode('utf-8', errors='replace'))
+        rows = _accountability_report_candidates(links, cutoff)[:2]
+        if rows:
+            break
+    rows = [{**row, 'search_engine': 'rendicion-de-cuentas', 'anchor_document': True} for row in rows]
+    IntegratedSearchCache.objects.update_or_create(
+        university=university, period_id=period_id, month=ANNUAL_RESULT_MONTH, scope=ANCHOR_SCOPE,
+        defaults={
+            'query': _database_text(f'anchor:{pages[0] if pages else ""}'),
+            'results': _database_value(rows),
+            'expires_at': now + timedelta(hours=max(1, getattr(settings, 'INTERNATIONAL_SEARCH_CACHE_HOURS', 168))),
+        },
+    )
+    return rows
 
 
 def _url_words(url):
@@ -1410,6 +1612,8 @@ def _judge(indicator, university, documents, period_context=None):
         'CUMPLE, PARCIAL y NO_CUMPLE requieren URL, ubicación y cita literal presente en el contenido. '
         'La cita debe contener el dato que acredita el elemento: un encabezado, una portada, un título o el nombre '
         'de una unidad no acreditan contenido. Si existe evaluation_note, aplícala. '
+        'Un documento con outdated=true fue publicado hace varios años: acredita como máximo PARCIAL, y no '
+        'lo descartes como SIN_EVIDENCIA solo por su antigüedad. '
         'Usa NO_CUMPLE solo cuando una fuente oficial o gubernamental demuestre explícitamente una deficiencia; '
         'si los documentos no acreditan el requisito o son insuficientes, responde SIN_EVIDENCIA y score null. '
         'No conviertas la ausencia de resultados de búsqueda en incumplimiento. '
@@ -1440,6 +1644,8 @@ def _judge(indicator, university, documents, period_context=None):
             'source_kind': row.get('source_kind', 'externa'),
             'source_domain': row.get('source_domain', ''),
             'retrieval_mode': row.get('retrieval_mode', 'direct'),
+            'publication_date': row.get('publication_date', ''),
+            'outdated': _is_outdated(row, period_context),
             'search_engine': row.get('search_engine', ''),
         } for row in documents],
     }
@@ -1466,10 +1672,10 @@ def _judge(indicator, university, documents, period_context=None):
     result = decode_answer(envelope)
     if isinstance(result, dict):
         result['_ai_metadata'] = _provider_metadata(envelope)
-    return _validate_judgment(indicator, documents, result)
+    return _validate_judgment(indicator, documents, result, period_context)
 
 
-def _validate_judgment(indicator, documents, result):
+def _validate_judgment(indicator, documents, result, period_context=None):
     if not isinstance(result, dict):
         raise InvalidProviderResponse('La IA no devolvió un objeto de evaluación internacional.')
     status = str(result.get('status') or '').upper()
@@ -1521,16 +1727,21 @@ def _validate_judgment(indicator, documents, result):
                 'Un fragmento indexado o un texto extraído por terceros no permite demostrar '
                 'ausencia o incumplimiento en la página completa.',
             )
-        verified_quote = _exact_literal_quote(document['full_text'], quote)
-        if not verified_quote and status != 'NO_CUMPLE':
-            verified_quote = _best_literal_quote(document['full_text'], indicator)
+        if status == 'NO_CUMPLE':
+            verified_quote = _exact_literal_quote(document['full_text'], quote)
+        else:
+            verified_quote = _supporting_quote(
+                document['full_text'], indicator, quote,
+                str(result.get('justification') or ''), covered_elements,
+            )
         if not verified_quote:
             if status == 'NO_CUMPLE':
                 return no_evidence(
                     'La respuesta negativa no incluyó una cita literal que demuestre incumplimiento.',
                 )
             raise InvalidProviderResponse('La IA no devolvió una cita literal verificable de la fuente seleccionada.')
-        result['evidence_excerpt'] = verified_quote
+        # La ubicación se calcula sobre la cita literal; al usuario se le muestra sin URL ni sintaxis de enlaces.
+        result['evidence_excerpt'] = _display_quote(verified_quote)
         if not str(result.get('source_location') or '').strip():
             if status == 'NO_CUMPLE':
                 return no_evidence(
@@ -1550,6 +1761,13 @@ def _validate_judgment(indicator, documents, result):
         )
         result['source_url'] = document['url']
         result['source_title'] = document['title']
+        if status == 'CUMPLE' and _is_outdated(document, period_context):
+            # Publicado pero desactualizado: no acredita el cumplimiento pleno del período.
+            status, score = 'PARCIAL', .5
+            result['justification'] = _database_text(
+                f"{result.get('justification') or ''} La fuente principal tiene más de "
+                f"{int(getattr(settings, 'INTERNATIONAL_MAX_EVIDENCE_AGE_YEARS', 3))} años: se califica como PARCIAL."
+            ).strip()
         supporting_sources = []
         candidates = result.get('supporting_sources')
         if isinstance(candidates, list):
@@ -1582,7 +1800,7 @@ def _validate_judgment(indicator, documents, result):
                         candidate_document.get('full_text', ''), candidate_quote,
                         proposed_location, candidate_document['url'],
                     ),
-                    'evidence_excerpt': candidate_quote,
+                    'evidence_excerpt': _display_quote(candidate_quote),
                     'source_kind': candidate_document.get('source_kind', 'externa'),
                 })
         primary_key = _canonical_url_key(result['source_url'])
@@ -1621,6 +1839,8 @@ def _judge_batch(university, prepared_items):
         'CUMPLE, PARCIAL y NO_CUMPLE requieren una URL suministrada, ubicación exacta y cita literal. '
         'La cita debe contener el dato que acredita el elemento: un encabezado, una portada, un título o el nombre '
         'de una unidad no acreditan contenido. Si un indicador trae evaluation_note, aplícala. '
+        'Un documento con outdated=true fue publicado hace varios años: acredita como máximo PARCIAL, y no '
+        'lo descartes como SIN_EVIDENCIA solo por su antigüedad. '
         'NO_CUMPLE solo procede cuando una fuente oficial o gubernamental demuestra explícitamente la deficiencia. '
         'Si las fuentes no acreditan el requisito o son insuficientes, usa SIN_EVIDENCIA con score null; '
         'no conviertas una búsqueda fallida en incumplimiento. No infieras por el título.'
@@ -1650,6 +1870,8 @@ def _judge_batch(university, prepared_items):
                 'source_kind': row.get('source_kind', 'externa'),
                 'source_domain': row.get('source_domain', ''),
                 'retrieval_mode': row.get('retrieval_mode', 'direct'),
+                'publication_date': row.get('publication_date', ''),
+                'outdated': _is_outdated(row, prepared.get('period_context')),
                 'search_engine': row.get('search_engine', ''),
             } for row in prepared['documents']],
         })
@@ -1690,7 +1912,7 @@ def _judge_batch(university, prepared_items):
         try:
             by_code[indicator.code]['_ai_metadata'] = ai_metadata
             judged[indicator.code] = _validate_judgment(
-                indicator, prepared['documents'], by_code[indicator.code],
+                indicator, prepared['documents'], by_code[indicator.code], prepared.get('period_context'),
             )
         except InvalidProviderResponse:
             continue
@@ -1746,6 +1968,227 @@ def _best_literal_quote(text, indicator, max_words=40):
     return text[spans[start][1]:spans[end - 1][2]].strip()
 
 
+QUOTE_NOISE = re.compile(r'\.{4,}|FECHA PUBLICACI[ÓO]N|PÁGINAS LEÍDAS|\[PÁGINA|\[SECCI[ÓO]N|EXTRAÍDO POR', re.I)
+URL_PATTERN = re.compile(r'\(?https?://[^\s)\]]+\)?|www\.[^\s)\]]+')
+NUMBER_PATTERN = re.compile(r'\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s?%|\d{2,}')
+
+
+def _substantive_quote(quote):
+    """Una cita útil: frase con contenido, no un índice, un encabezado técnico ni una lista de enlaces."""
+    url_chars = sum(len(match) for match in URL_PATTERN.findall(quote))
+    return (
+        len(re.findall(r'\w+', quote)) >= 6 and not QUOTE_NOISE.search(quote)
+        and url_chars <= .4 * len(quote)
+    )
+
+
+def _fuzzy_literal_quote(text, proposed, min_overlap=.6):
+    """Pasaje literal que reproduce la mayoría de las palabras de la cita propuesta.
+
+    El modelo a veces une líneas, omite una palabra o corrige la ortografía de un
+    PDF; en lugar de descartar su cita, se busca el tramo que más se le parece.
+    """
+    requested = [token for token, _, _ in _word_spans(proposed)]
+    source = _word_spans(text)
+    if len(requested) < 6 or len(source) < len(requested):
+        return ''
+    wanted = set(requested)
+    # Holgura para las palabras que el modelo omitió al citar.
+    size = min(len(source), len(requested) + max(3, len(requested) // 4))
+    best = (0, 0)
+    for start in range(0, len(source) - size + 1):
+        window = {token for token, _, _ in source[start:start + size]}
+        overlap = len(wanted & window) / len(wanted)
+        if overlap > best[0]:
+            best = (overlap, start)
+    if best[0] < min_overlap:
+        return ''
+    # Se recorta la ventana a la primera y la última palabra de la cita propuesta.
+    window = source[best[1]:best[1] + size]
+    inside = [index for index, (token, _, _) in enumerate(window) if token in wanted]
+    first, last = window[inside[0]], window[inside[-1]]
+    return text[first[1]:last[2]].strip()
+
+
+def _quote_terms(indicator, justification, covered_elements):
+    """Cifras y términos con los que una cita debe coincidir para respaldar el veredicto."""
+    numbers = {_normalize(value) for value in NUMBER_PATTERN.findall(justification or '')}
+    # Los años sueltos ("2024", "2025") aparecen en casi cualquier párrafo: no anclan la cita.
+    numbers = {
+        value for value in numbers
+        if len(value.replace(' ', '')) >= 3 and not re.fullmatch(r'(19|20)\d{2}', value)
+    }
+    # Solo lo que el veredicto afirma (elementos acreditados y justificación); el
+    # vocabulario de búsqueda del indicador ("rendición de cuentas") premiaría encabezados.
+    elements = covered_elements or _required_elements(indicator)
+    terms = {
+        _stem(word) for element in elements for word in _element_terms(element)
+    } | {
+        _stem(word) for word in _normalize(justification).split()
+        if len(word) >= 6 and word not in GENERIC_INDICATOR_TERMS
+    }
+    return numbers, terms
+
+
+def _quote_supports(quote, numbers, terms):
+    normalized = _normalize(quote)
+    return any(value in normalized for value in numbers) or len(
+        terms & {_stem(word) for word in normalized.split()}
+    ) >= 2
+
+
+SECTION_MARKER = re.compile(r'\[(PÁGINA|SECCIÓN|FECHA PUBLICACIÓN|PÁGINAS LEÍDAS|EXTRAÍDO POR)(?::)?\s*([^\]]*)\]')
+GENERIC_LINK_LABELS = {'mas informacion', 'read more', 'ver mas', 'leer mas', 'clic aqui', 'aqui', 'descargar', ''}
+MARKDOWN_LINK = re.compile(r'(?<!!)\[([^\]]*)\]\(([^)\s]+)\)')
+
+
+def _sections(text):
+    """(encabezado, inicio, fin) de cada tramo entre marcadores de página o sección."""
+    sections, heading, start = [], '', 0
+    for marker in SECTION_MARKER.finditer(text):
+        sections.append((heading, start, marker.start()))
+        if marker.group(1) == 'SECCIÓN':
+            heading = marker.group(2).strip()
+        elif marker.group(1) == 'PÁGINA':
+            heading = ''
+        start = marker.end()
+    sections.append((heading, start, len(text)))
+    return sections
+
+
+def _heading_at(text, quote):
+    position = text.find(quote)
+    return next((heading for heading, start, end in _sections(text) if start <= position < end), '')
+
+
+def _quote_score(passage, heading, numbers, terms, elements=()):
+    """Cifras de la justificación (peso 5), términos acreditados y sección con el nombre del elemento.
+
+    Un pasaje bajo [SECCIÓN: MISIÓN] respalda el elemento "misión" aunque no lo repita.
+    """
+    normalized = _normalize(passage)
+    words = {_stem(word) for word in f'{normalized} {_normalize(heading)}'.split()}
+    named = any(_normalize(element) and _normalize(element) in _normalize(heading) for element in elements)
+    return 5 * sum(value in normalized for value in numbers) + len(terms & words) + 3 * named
+
+
+def _justified_literal_quote(text, indicator, justification, covered_elements, max_words=40):
+    """(puntaje, pasaje) que contiene lo que la justificación afirma: sus cifras y sus términos.
+
+    Si la justificación dice "USD 900.286,92", la cita debe ser la frase con ese
+    monto, no la línea del índice que más repite el vocabulario del indicador. El
+    pasaje se busca dentro de cada sección y hereda su encabezado: el párrafo de la
+    misión no dice "misión", pero está bajo [SECCIÓN: MISIÓN].
+    """
+    numbers, terms = _quote_terms(indicator, justification, covered_elements)
+    best = None
+    for heading, section_start, section_end in _sections(text):
+        section = text[section_start:section_end]
+        spans = _word_spans(section)
+        if len(spans) < 6:
+            continue
+        for start in range(0, max(1, len(spans) - max_words + 1), 4):
+            end = min(len(spans), start + max_words)
+            passage = section[spans[start][1]:spans[end - 1][2]].strip()
+            if not _substantive_quote(passage):
+                continue
+            score = _quote_score(passage, heading, numbers, terms, covered_elements)
+            if best is None or score > best[0]:
+                best = (score, passage)
+    return best if best and best[0] >= 2 else None
+
+
+def _link_label(label, url):
+    text = ' '.join(re.sub(r'[*_`#]', ' ', label).split())
+    if _normalize(text) in GENERIC_LINK_LABELS:
+        slug = urllib.parse.unquote(urlsplit(url).path.rstrip('/').rsplit('/', 1)[-1])
+        text = re.sub(r'\.[a-z0-9]{2,4}$', '', slug).replace('-', ' ').replace('_', ' ').strip()
+        text = text[:1].upper() + text[1:]
+    return text
+
+
+def _link_list_quote(text, numbers, terms):
+    """Para una sección que es solo una lista de enlaces, sus destinos visibles.
+
+    Una página como /oferta-de-grado lista las carreras como imágenes con enlaces
+    "Más Información": la evidencia son esos enlaces, así que la cita nombra la
+    sección y sus destinos ("Ingeniería civil; Ingeniería ambiental; ...").
+    """
+    best = None
+    for heading, start, end in _sections(text):
+        links = []
+        for label, url in MARKDOWN_LINK.findall(text[start:end]):
+            if re.search(r'\.(png|jpe?g|gif|svg|webp)$', urlsplit(url).path, re.I) or url.startswith('data:'):
+                continue
+            name = _link_label(label, url)
+            if name and len(name) > 2 and not URL_PATTERN.fullmatch(name) and name not in links:
+                links.append(name)
+        if len(links) < 3:
+            continue
+        score = _quote_score(' '.join(links), heading, numbers, terms)
+        if best is None or score > best[0]:
+            best = (score, heading, links)
+    # Los destinos (nombres de carreras, por ejemplo) rara vez repiten el vocabulario
+    # del criterio: basta con que la sección o sus enlaces lo traten.
+    if not best or best[0] < 1:
+        return ''
+    _, heading, links = best
+    prefix = f'Enlaces de la sección «{heading}»' if heading else 'Enlaces de la página'
+    return f'{prefix}: ' + '; '.join(links[:15])
+
+
+def _display_quote(quote):
+    """Cita tal como la ve un lector: sin URL, imágenes ni sintaxis de enlaces."""
+    shown = re.sub(r'!\[[^\]]*\]\([^)]*\)', ' ', quote)
+    shown = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', shown)
+    # Imágenes o enlaces que quedaron cortados en el borde de la cita.
+    shown = re.sub(r'!?\[?!?\[[^\]]*\]\([^)]*$|data:image\S*', ' ', shown)
+    shown = URL_PATTERN.sub(' ', shown)
+    shown = re.sub(r'[*_`]{2,}|\[\s*\]|(?<!\w)[\[\]](?!\w)', ' ', shown)
+    return ' '.join(shown.split())
+
+
+def _supporting_quote(text, indicator, proposed, justification='', covered_elements=()):
+    """Cita literal que respalda el veredicto, en orden de preferencia.
+
+    1. La cita del modelo tal cual (ignorando tildes y puntuación).
+    2. El tramo que reproduce la mayoría de sus palabras.
+    3. El pasaje con las cifras y términos que menciona la justificación.
+    4. El pasaje más cercano al vocabulario del indicador, sin índices ni encabezados.
+    """
+    numbers, terms = _quote_terms(indicator, justification, covered_elements)
+    justified = _justified_literal_quote(text, indicator, justification, covered_elements)
+    listing = _link_list_quote(text, numbers, terms)
+    listing_score = _quote_score(listing, '', numbers, terms, covered_elements) if listing else 0
+    exact = _exact_literal_quote(text, proposed)
+    # La cita literal del modelo se conserva si tiene contenido, contiene las cifras
+    # que afirma la justificación y ningún otro pasaje está claramente mejor respaldado.
+    if exact and _substantive_quote(exact) and (
+        not numbers or any(value in _normalize(exact) for value in numbers)
+    ):
+        exact_score = _quote_score(exact, _heading_at(text, exact), numbers, terms, covered_elements)
+        margin = 3
+        if justified and justified[0] >= exact_score + margin:
+            return justified[1]
+        if listing and listing_score >= exact_score + margin:
+            return listing
+        # Una cita que no comparte nada con el veredicto (un pie de página) no se conserva.
+        if exact_score:
+            return exact
+    # Un tramo aproximado debe además tratar lo que el veredicto afirma.
+    fuzzy = _fuzzy_literal_quote(text, proposed)
+    if fuzzy and _substantive_quote(fuzzy) and _quote_supports(fuzzy, numbers, terms):
+        return fuzzy
+    if justified and justified[0] >= listing_score:
+        return justified[1]
+    # Página que es una lista de enlaces: se citan sus destinos visibles.
+    if listing:
+        return listing
+    # Sin frases útiles: se conserva la cita literal disponible antes que rechazar
+    # un veredicto verificable.
+    return exact or _best_literal_quote(text, indicator)
+
+
 def _quote_demonstrates_deficiency(quote):
     normalized = _normalize(quote)
     return bool(re.search(
@@ -1756,6 +2199,9 @@ def _quote_demonstrates_deficiency(quote):
 
 
 def _verified_source_location(text, quote, proposed, url):
+    listing = re.match(r'Enlaces de la sección «([^»]+)»', quote)
+    if listing:
+        return f'SECCIÓN: {listing.group(1)} · {url}'
     lowered = text.casefold()
     position = lowered.find(quote.casefold())
     if position < 0:
@@ -1784,6 +2230,7 @@ def _prepare_web_indicator(
     period_context = _annual_period_context(period_id)
     month = ANNUAL_RESULT_MONTH
     archive_date = _archive_date(period_context)
+    snapshot_date = _parse_publication_date(period_context['cutoff_date'])
     query = _indicator_query(university, indicator)
     host = _university_host(university)
     max_results = max(5, int(getattr(settings, 'INTERNATIONAL_INDICATOR_MAX_RESULTS', 8)))
@@ -1804,7 +2251,15 @@ def _prepare_web_indicator(
     )
     site_raw, site_evidence_hits = _load_documents(
         site_candidates, university, limit=max_downloads, archive_date=archive_date,
+        snapshot_date=snapshot_date,
     )
+    anchor_raw, anchor_evidence_hits = [], 0
+    if indicator.family_code in ANCHOR_DOCUMENT_FAMILIES:
+        anchor_raw, anchor_evidence_hits = _load_documents(
+            _anchor_document_rows(university, period_id, period_context, archive_date),
+            university, limit=2, archive_date=archive_date,
+        )
+        site_raw = _merge_documents(site_raw, anchor_raw)
     site_documents, _ = select(site_raw)
     site_sufficient = bool(site_documents) and not _weak_evidence_set(site_documents, indicator)
 
@@ -1819,6 +2274,7 @@ def _prepare_web_indicator(
         ranked_targeted_results = _rank_search_results(targeted_results, university, indicator)
         targeted_raw, targeted_evidence_hits = _load_documents(
             ranked_targeted_results, university, limit=max_downloads, archive_date=archive_date,
+            snapshot_date=snapshot_date,
         )
         raw_documents = _merge_documents(raw_documents, targeted_raw)
     documents, future_documents = select(raw_documents)
@@ -1840,6 +2296,7 @@ def _prepare_web_indicator(
         ranked_refined_results = _rank_search_results(refined_results, university, indicator)
         refined_raw, refined_evidence_hits = _load_documents(
             ranked_refined_results, university, limit=max_downloads, archive_date=archive_date,
+            snapshot_date=snapshot_date,
         )
         raw_documents = _merge_documents(raw_documents, refined_raw)
         documents, future_documents = select(raw_documents)
@@ -1864,6 +2321,7 @@ def _prepare_web_indicator(
         ranked_deep_results = _rank_search_results(deep_results, university, indicator)
         deep_raw, deep_evidence_hits = _load_documents(
             ranked_deep_results, university, limit=max_downloads, archive_date=archive_date,
+            snapshot_date=snapshot_date,
         )
         raw_documents = _merge_documents(raw_documents, deep_raw)
         documents, future_documents = select(raw_documents)
@@ -1909,6 +2367,7 @@ def _prepare_web_indicator(
             'document_quality_scores': [row.get('quality_score') for row in documents],
             'site_path_documents': sum(bool(row.get('site_path_match')) for row in documents),
             'archive_date': archive_date.isoformat() if archive_date else '',
+            'anchor_documents': [row['url'] for row in anchor_raw],
             'archived_documents': sum(row.get('retrieval_mode') == 'wayback' for row in documents),
             'non_institutional_documents': sum(
                 bool(row.get('non_institutional_kind')) for row in documents
@@ -1916,7 +2375,7 @@ def _prepare_web_indicator(
             'required_elements': _required_elements(indicator),
             'missing_elements_before_judgment': missing_elements,
             'evidence_cache_hits': (
-                group_evidence_cache_hits + site_evidence_hits + targeted_evidence_hits
+                group_evidence_cache_hits + site_evidence_hits + anchor_evidence_hits + targeted_evidence_hits
                 + refined_evidence_hits + deep_evidence_hits
             ),
             'search_engines': engines,
@@ -2076,6 +2535,8 @@ def evaluate_integrated_transparency(
         'dimension',
     ).order_by('dimension__display_order', 'display_order'))
     if force:
+        # Antes de borrar resultados y cachés, el modelo debe estar disponible.
+        _ensure_ai_available()
         _clear_international_run_cache(
             university, period_id, ANNUAL_RESULT_MONTH, web_indicators, invalidate_results=True,
         )
@@ -2111,6 +2572,9 @@ def evaluate_integrated_transparency(
             'detail': f'{skipped} indicadores definitivos siguen vigentes; no se repetirán.',
             'stage_pct': round(skipped / max(1, len(web_indicators)) * 100),
         })
+
+    if any(indicator.family_code not in digital_indicators.TECHNICAL_FAMILIES for indicator in pending):
+        _ensure_ai_available()
 
     pending_by_dimension = {}
     for indicator in pending:
@@ -2458,6 +2922,8 @@ def reevaluate_integrated_indicator(university_id, period_id, indicator_code, mo
         f'indicator:{indicator.code}', f'indicator-refined:{indicator.code}',
         f'dimension:{indicator.dimension.code}',
     ]
+    if indicator.family_code not in digital_indicators.TECHNICAL_FAMILIES:
+        _ensure_ai_available()
     _clear_international_run_cache(
         university, period_id, int(month or 0), [indicator], scopes=scopes,
         invalidate_results=True,

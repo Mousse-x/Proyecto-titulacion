@@ -1,4 +1,6 @@
 import json
+import re
+import urllib.error
 from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -32,6 +34,14 @@ from .services.integrated_transparency import (
     _non_institutional_kind,
     _site_map_candidates,
     _site_map_rows,
+    _accountability_report_candidates,
+    AIProviderUnavailable,
+    _is_outdated,
+    _navigation_only,
+    _page_links,
+    _relevant_pages_excerpt,
+    _supporting_quote,
+    _display_quote,
     _annual_period_context,
     _archive_date,
     _is_truncated_legacy_pdf,
@@ -625,6 +635,138 @@ class IntegratedTransparencyTests(TestCase):
         self.assertEqual(_non_institutional_kind(thesis, IntegratedIndicator.objects.get(code='IND-41')), '')
         self.assertEqual(_non_institutional_kind(scholarship_rules, IntegratedIndicator.objects.get(code='IND-27')), '')
 
+    def test_latest_final_accountability_report_is_the_anchor(self):
+        links = _page_links(
+            '[Informe preliminar Rendición de Cuentas Gestión 2025](https://example.edu.ec/wp-content/uploads/2026/04/informe_narrativo_final.pdf)'
+            '[Informe final](https://example.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025.pdf)'
+            '[Certificado EPN-RDC-2025](https://example.edu.ec/wp-content/uploads/2026/06/certificado.pdf)'
+            '<a href="https://example.edu.ec/wp-content/uploads/2025/12/Informe-rendicion_cuentas_2024.pdf">Informe final</a>'
+            '[Informe final](https://example.edu.ec/wp-content/uploads/2027/05/informe-2026.pdf)'
+            '[Noticias](https://example.edu.ec/noticias)'
+        )
+        rows = _accountability_report_candidates(links, date(2026, 10, 25))
+        self.assertEqual([row['url'] for row in rows], [
+            'https://example.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025.pdf',
+            'https://example.edu.ec/wp-content/uploads/2025/12/Informe-rendicion_cuentas_2024.pdf',
+        ])
+
+    def test_anchor_report_keeps_a_slot_among_the_documents(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-26')
+        vocabulary = 'admisiones matrículas cupos ofertados aspirantes solicitudes plazas ' * 30
+        pages = [{
+            'url': f'https://example.edu.ec/admision-{number}', 'title': f'Admisión {number}: cupos y matrículas',
+            'full_text': vocabulary, 'source_kind': 'oficial',
+        } for number in range(4)]
+        report = {
+            'url': 'https://example.edu.ec/wp-content/uploads/2026/05/informe-final.pdf',
+            'title': 'Informe final', 'source_kind': 'oficial', 'anchor_document': True,
+            'full_text': '[PÁGINA 22]\nEn 2025 se ofertaron 4.435 cupos para admisión.',
+        }
+        documents = _documents_for_indicator([*pages, report], indicator, limit=3)
+        self.assertIn(report['url'], [row['url'] for row in documents])
+
+    def test_anchor_excerpt_keeps_the_most_relevant_pages_in_order(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-26')
+        text = '\n'.join([
+            '[PÁGINA 2]\nÍndice: Cupos ofertados ........ 22\nMatrícula ........ 24\nAdmisiones ........ 23\n'
+            'Postulantes ........ 25\nPlazas ........ 26',
+            '[PÁGINA 10]\nLa universidad inauguró un laboratorio de materiales.',
+            '[PÁGINA 22]\nEn 2025 se ofertaron 4.435 cupos; 9.120 aspirantes postularon y hubo 2.364 admisiones.',
+            '[PÁGINA 24]\nSe registraron 7.596 matrículas en 2025-A y 7.723 en 2025-B.',
+            '[PÁGINA 40]\nInforme de investigación: 120 artículos publicados.',
+        ])
+        excerpt = _relevant_pages_excerpt(text, indicator, budget=400)
+        self.assertEqual(re.findall(r'\[PÁGINA (\d+)\]', excerpt), ['22', '24'])
+        self.assertNotIn('Índice', excerpt)
+
+    def test_quote_follows_the_figures_of_the_justification(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-45')
+        text = (
+            '[PÁGINA 5]\nGráfico 5 Recursos para proyectos de investigación ............ 28\n\n'
+            '[PÁGINA 42]\nSe aprobaron 37 proyectos de investigación de la Convocatoria 2024, '
+            'asignándose un presupuesto total de USD 900.286,92 para su ejecución durante el año.'
+        )
+        quote = _supporting_quote(
+            text, indicator, 'Gráfico 5 Recursos para proyectos de investigación ............ 28',
+            'Se destinan USD 900.286,92 a proyectos de investigación de la convocatoria.', [],
+        )
+        self.assertIn('900.286,92', quote)
+        self.assertNotIn('....', quote)
+
+    def test_paraphrased_quote_is_matched_to_the_literal_passage(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-28')
+        text = 'El tutor académico es el profesor encargado de brindar orientación y acompañamiento a los estudiantes.'
+        quote = _supporting_quote(
+            text, indicator, 'El tutor académico es el profesor encargado de brindar orientación a los estudiantes',
+            'Se publica la tutoría académica.', ['tutoría'],
+        )
+        self.assertEqual(quote, text.rstrip('.'))
+
+    def test_report_header_is_not_kept_as_quote(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-13')
+        text = (
+            '[FECHA PUBLICACIÓN: 2026-05-29]\n[PÁGINA 1]\nINFORME DE RENDICIÓN DE CUENTAS No 19738 PERIODO 2025\n\n'
+            '[PÁGINA 9]\nSe aprobó el Plan de Igualdad 2024-2026 con acciones de igualdad de género y sostenibilidad ambiental.'
+        )
+        quote = _supporting_quote(
+            text, indicator, 'FECHA PUBLICACIÓN: 2026-05-29] [PÁGINA 1] INFORME DE RENDICIÓN DE CUENTAS',
+            'El informe incluye políticas de igualdad y sostenibilidad.', ['igualdad', 'sostenibilidad'],
+        )
+        self.assertIn('Plan de Igualdad', quote)
+
+    def test_section_named_like_the_element_supplies_the_quote(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-02')
+        text = (
+            '[SECCIÓN: Nuestros Principios]\nLa universidad asume la rendición de cuentas sustentada en su misión '
+            'y sus planes institucionales.\n\n[SECCIÓN: MISIÓN]\nSomos una institución de educación superior '
+            'pública que forma profesionales e investigadores para el desarrollo del país.'
+        )
+        quote = _supporting_quote(
+            text, indicator, 'La universidad asume la rendición de cuentas sustentada en su misión y sus planes institucionales',
+            'Se publica la misión en la sección nosotros.', ['misión'],
+        )
+        self.assertTrue(quote.startswith('Somos una institución'))
+        self.assertEqual(_verified_source_location(text, quote, '', 'https://u.edu.ec/nosotros'),
+                         'SECCIÓN: MISIÓN · https://u.edu.ec/nosotros')
+
+    def test_link_listing_is_quoted_by_its_destinations(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-25')
+        text = '[SECCIÓN: CARRERAS DE GRADO]\n' + ' '.join(
+            f'[![](https://u.edu.ec/img/{slug}-1024x1024.png)](https://u.edu.ec/{slug}/) '
+            f'[Más Información](https://u.edu.ec/{slug}/)'
+            for slug in ('ingenieria-civil', 'fisica', 'matematica', 'economia')
+        ) + '\n\n[SECCIÓN: ACCESOS]\nLlámanos: (+593) 2 2976 300 Correo: info@u.edu.ec Dirección del campus principal'
+        quote = _supporting_quote(
+            text, indicator, 'Llámanos: (+593) 2 2976 300 Correo: info@u.edu.ec Dirección del campus principal',
+            'Publica su oferta de carreras de grado.', ['oferta académica vigente'],
+        )
+        self.assertEqual(
+            quote, 'Enlaces de la sección «CARRERAS DE GRADO»: Ingenieria civil; Fisica; Matematica; Economia',
+        )
+
+    def test_displayed_quote_has_no_links_or_images(self):
+        shown = _display_quote(
+            'Elecciones ante el Consejo. [Read More](https://u.edu.ec/r-5/) [![](data:image/svg+xml,%3Csvg%20x'
+        )
+        self.assertEqual(shown, 'Elecciones ante el Consejo. Read More')
+
+    def test_years_do_not_anchor_the_quote(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-37')
+        text = (
+            'El año 2025 registró la mayor ejecución, devengando $62.785.117,20 que corresponde al 88,14 % '
+            'del presupuesto codificado.\n\nDurante 2025, en comparación con 2024, aumentaron los cambios de carrera.'
+        )
+        quote = _supporting_quote(
+            text, indicator, 'El año 2025 registró la mayor ejecución, devengando $62.785.117,20 que corresponde al 88,14 %',
+            'Se publica la ejecución presupuestaria de 2024 y 2025.', ['ejecución presupuestaria'],
+        )
+        self.assertIn('62.785.117,20', quote)
+
+    def test_navigation_only_text_is_detected(self):
+        menu = ' '.join(f'* [Sección {n}](https://example.edu.ec/s{n})' for n in range(15))
+        self.assertTrue(_navigation_only(menu))
+        self.assertFalse(_navigation_only(menu + ' ' + 'El buzón recibe sugerencias y se responde en diez días. ' * 12))
+
     def test_theses_are_not_sent_to_the_model_as_evidence(self):
         indicator = IntegratedIndicator.objects.get(code='IND-57')
         thesis = {
@@ -768,6 +910,34 @@ class IntegratedTransparencyTests(TestCase):
         self.assertEqual(result['status'], 'PARCIAL')
         self.assertEqual(result['score'], .5)
 
+    def test_outdated_main_source_cannot_prove_full_compliance(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-44')
+        url = 'https://example.edu.ec/wp-content/uploads/2015/08/encuesta-graduados.pdf'
+        quote = 'El 83 % de los graduados consiguió empleo antes de los seis meses.'
+        judgment = {
+            'status': 'CUMPLE', 'score': 1, 'source_url': url,
+            'source_location': 'página 1', 'evidence_excerpt': quote,
+            'covered_elements': EVALUATION_ELEMENTS['CI-34'], 'missing_elements': [],
+            'justification': 'Se publican resultados de empleabilidad.',
+        }
+        document = {
+            'url': url, 'title': 'Encuesta a graduados', 'full_text': quote,
+            'source_kind': 'oficial', 'retrieval_mode': 'direct', 'publication_date': '2015-08-01',
+        }
+        result = _validate_judgment(indicator, [document], dict(judgment), {'cutoff_date': '2026-10-25'})
+        self.assertEqual((result['status'], result['score']), ('PARCIAL', .5))
+        self.assertIn('más de 3 años', result['justification'])
+        recent = _validate_judgment(
+            indicator, [{**document, 'publication_date': '2025-06-01'}], dict(judgment), {'cutoff_date': '2026-10-25'},
+        )
+        self.assertEqual(recent['status'], 'CUMPLE')
+
+    def test_outdated_flag_uses_the_annual_cutoff(self):
+        context = {'cutoff_date': '2026-10-25'}
+        self.assertTrue(_is_outdated({'publication_date': '2014-03-01'}, context))
+        self.assertFalse(_is_outdated({'publication_date': '2024-03-01'}, context))
+        self.assertFalse(_is_outdated({'url': 'https://example.edu.ec/nosotros'}, context))
+
     def test_complete_claim_without_element_audit_becomes_partial(self):
         indicator = IntegratedIndicator.objects.get(code='IND-05')
         url = 'https://example.edu.ec/resoluciones'
@@ -888,6 +1058,23 @@ class IntegratedTransparencyTests(TestCase):
         # La interoperabilidad depende de los meses LOTAIP descargados: se mide siempre.
         self.assertEqual([call.args[2].code for call in technical.call_args_list], ['IND-57'])
 
+    def test_unavailable_model_stops_before_overwriting_results(self):
+        indicator = IntegratedIndicator.objects.get(code='IND-02')
+        saved = IntegratedIndicatorResult.objects.create(
+            university=self.university, period=self.period, month=ANNUAL_RESULT_MONTH, indicator=indicator,
+            score=Decimal('1'), status=IntegratedIndicatorResult.Status.COMPLIANT,
+            metadata={'search_strategy_version': 'versión anterior'},
+        )
+        with patch('core.services.integrated_transparency.urllib.request.OpenerDirector.open',
+                   side_effect=urllib.error.URLError('connection refused')):
+            with self.assertRaises(AIProviderUnavailable):
+                evaluate_integrated_transparency(self.university.id, self.period.id, 1)
+            with self.assertRaises(AIProviderUnavailable):
+                evaluate_integrated_transparency(self.university.id, self.period.id, 1, force=True)
+        saved.refresh_from_db()
+        self.assertEqual(saved.status, IntegratedIndicatorResult.Status.COMPLIANT)
+        self.assertEqual(saved.score, Decimal('1'))
+
     @patch('core.services.integrated_transparency.evaluate_technical_indicator')
     def test_lotaip_evaluation_refreshes_interoperability_and_index(self, technical):
         self._create_complete_month(1)
@@ -896,6 +1083,7 @@ class IntegratedTransparencyTests(TestCase):
         self.assertEqual(result.month, 1)
         self.assertEqual(result.index_percent, Decimal('100.00'))
 
+    @patch('core.services.integrated_transparency._ensure_ai_available')
     @patch('core.services.integrated_transparency.evaluate_technical_indicator')
     @patch('core.services.integrated_transparency.sync_national_results')
     @patch('core.services.integrated_transparency._save_prepared_result')
@@ -903,7 +1091,7 @@ class IntegratedTransparencyTests(TestCase):
     @patch('core.services.integrated_transparency._load_documents', return_value=([], 0))
     @patch('core.services.integrated_transparency._cached_search', return_value=([], True))
     def test_pending_indicators_do_not_use_broad_dimension_searches(
-        self, search, load_documents, prepare, save, sync, technical,
+        self, search, load_documents, prepare, save, sync, technical, ai_check,
     ):
         prepare.side_effect = lambda university, period_id, indicator, *args, **kwargs: {
             'indicator': indicator, 'documents': [], 'query': 'q', 'metadata': {},
@@ -917,6 +1105,7 @@ class IntegratedTransparencyTests(TestCase):
             sorted(call.args[2].code for call in technical.call_args_list), ['IND-55', 'IND-57', 'IND-58'],
         )
 
+    @patch('core.services.integrated_transparency._ensure_ai_available')
     @patch('core.services.integrated_transparency.evaluate_technical_indicator')
     @patch('core.services.integrated_transparency.sync_national_results')
     @patch('core.services.integrated_transparency._judge')
@@ -926,7 +1115,7 @@ class IntegratedTransparencyTests(TestCase):
     @patch('core.services.integrated_transparency._load_documents', return_value=([], 0))
     @patch('core.services.integrated_transparency._cached_search', return_value=([], True))
     def test_ai_judgments_are_grouped_in_batches(
-        self, search, load_documents, prepare, save, judge_batch, judge, sync, technical,
+        self, search, load_documents, prepare, save, judge_batch, judge, sync, technical, ai_check,
     ):
         prepare.side_effect = lambda university, period_id, indicator, *args, **kwargs: {
             'indicator': indicator,

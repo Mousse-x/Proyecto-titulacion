@@ -299,6 +299,16 @@ EVALUATION_NOTES = {
 }
 
 
+# Criterios de datos institucionales que el informe de rendición de cuentas ante el
+# CPCCS suele concentrar (personal, admisión, rendimiento, graduados, investigación,
+# presupuesto, igualdad, diálogo). Toda institución pública ecuatoriana debe
+# publicarlo, así que se ofrece siempre como evidencia candidata en lugar de
+# depender de que la búsqueda lo encuentre.
+ANCHOR_DOCUMENT_FAMILIES = {
+    "CI-11", "CI-13", "CI-18", "CI-23", "CI-31", "CI-32", "CI-33", "CI-34", "CI-35", "CI-39",
+}
+
+
 # Familias en las que una norma o un trabajo académico es, en sí mismo, la
 # evidencia esperada. En las demás, leyes, reglamentos y tesis solo mencionan
 # el tema y no acreditan que la universidad publique la información.
