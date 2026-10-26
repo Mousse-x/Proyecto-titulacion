@@ -12,7 +12,7 @@ import AdminDashboard     from './pages/admin/AdminDashboard';
 import UsersPage          from './pages/admin/UsersPage';
 import UniversitiesPage   from './pages/admin/UniversitiesPage';
 import IndicatorsPage     from './pages/admin/IndicatorsPage';
-import WeightingsPage     from './pages/admin/WeightingsPage';
+import WeightingsPage     from './pages/admin/IntegratedWeightingsPage';
 import RankingsPage       from './pages/admin/RankingsPage';
 import ReportsPage        from './pages/admin/ReportsPage';
 import AuditPage          from './pages/admin/AuditPage';

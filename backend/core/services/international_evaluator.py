@@ -29,8 +29,9 @@ def evaluate_international_standards(evidence, processed_data=None, template=Non
     max_score = ogp["puntaje_maximo"] + ocde["puntaje_maximo"] + ods["puntaje_maximo"]
     percent = round((total_score / max_score) * 100, 2) if max_score else 0
 
-    national_score = float(lotaip_result.get("puntaje_total", 0) or 0)
-    integrated_percent = round(((national_score + total_score) / (100 + max_score)) * 100, 2)
+    national_score = lotaip_result.get("puntaje_total")
+    integrated_percent = (round(((float(national_score) + total_score) / (100 + max_score)) * 100, 2)
+                          if national_score is not None else None)
 
     return {
         "ogp": ogp,
@@ -39,12 +40,14 @@ def evaluate_international_standards(evidence, processed_data=None, template=Non
         "puntaje_total": total_score,
         "puntaje_maximo": max_score,
         "indice_internacional": percent,
-        "indice_nacional": round(national_score, 2),
+        "indice_nacional": round(float(national_score), 2) if national_score is not None else None,
         "indice_nacional_internacional": integrated_percent,
     }
 
 
 def summarize_indices(results):
+    results = [result for result in results
+               if detect_lotaip_document_type(result.get("documento", "")) != "Diccionario"]
     total = len(results)
     if not total:
         return {
@@ -55,7 +58,10 @@ def summarize_indices(results):
             "puntaje_internacional_maximo": 45,
         }
 
-    national = sum(float(r.get("puntaje_total", 0) or 0) for r in results) / total
+    from .lotaip_rubric import summarize_rubrics
+    sita = summarize_rubrics([r.get("rubrica_lotaip") for r in results])
+    # No mezclar resultados de la rúbrica anterior con SITA.
+    national = sita["puntaje"] if all(r.get("rubrica_lotaip") for r in results) else None
     international_raw = sum(
         float((r.get("evaluacion_internacional") or {}).get("puntaje_total", 0) or 0)
         for r in results
@@ -63,9 +69,10 @@ def summarize_indices(results):
     international_max = 45
 
     return {
-        "indice_nacional": round(national, 2),
+        "indice_nacional": national,
+        "sita": sita,
         "indice_internacional": round((international_raw / international_max) * 100, 2),
-        "indice_nacional_internacional": round(((national + international_raw) / (100 + international_max)) * 100, 2),
+        "indice_nacional_internacional": round(((national + international_raw) / (100 + international_max)) * 100, 2) if national is not None else None,
         "puntaje_internacional_promedio": round(international_raw, 2),
         "puntaje_internacional_maximo": international_max,
     }

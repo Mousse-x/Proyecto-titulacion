@@ -199,16 +199,17 @@ def is_password_protected(file_path):
 # ──────────────────────────────────────────────────────────────────────
 
 def extract_text_pdf(file_path):
-    """Extrae texto de un archivo PDF usando pdfplumber."""
-    text = ""
+    """Extrae texto con OCR condicional y conserva las tablas digitales."""
+    from core.lotaip_engine.document_text import extract_document
+    extracted = extract_document({'body': Path(file_path).read_bytes(), 'content_type': 'application/pdf'})
+    text = extracted['text']
+    if extracted.get('error'):
+        logger.warning(extracted['error'])
     tables = []
     try:
         import pdfplumber
         with pdfplumber.open(str(file_path)) as pdf:
             for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
                 # Extraer tablas
                 page_tables = page.extract_tables()
                 for t in page_tables:

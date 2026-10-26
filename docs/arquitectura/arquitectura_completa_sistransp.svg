@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1500" viewBox="0 0 2400 1500" role="img" aria-labelledby="title desc">
+  <title id="title">Arquitectura completa del sistema SisTransp</title>
+  <desc id="desc">Diagrama por capas del frontend React, backend Django REST, PostgreSQL, servicios externos y controles transversales de SisTransp.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .title { font: 700 44px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 20px Inter, Arial, sans-serif; fill: #475569; }
+      .section-title { font: 700 22px Inter, Arial, sans-serif; fill: #0f172a; letter-spacing: .7px; }
+      .layer-title { font: 700 18px Inter, Arial, sans-serif; fill: #0f172a; }
+      .node-title { font: 700 17px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 15px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 13px Inter, Arial, sans-serif; fill: #475569; }
+      .tiny { font: 600 12px Inter, Arial, sans-serif; fill: #64748b; letter-spacing: .35px; }
+      .white-title { font: 700 18px Inter, Arial, sans-serif; fill: #ffffff; }
+      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 22; filter: url(#shadow); }
+      .front { fill: #eff6ff; stroke: #93c5fd; stroke-width: 2; rx: 16; }
+      .back { fill: #ecfdf5; stroke: #86efac; stroke-width: 2; rx: 16; }
+      .process { fill: #fff7ed; stroke: #fdba74; stroke-width: 2; rx: 16; }
+      .data { fill: #faf5ff; stroke: #d8b4fe; stroke-width: 2; rx: 16; }
+      .external { fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 16; }
+      .dark-front { fill: #1d4ed8; rx: 14; }
+      .dark-back { fill: #047857; rx: 14; }
+      .dark-data { fill: #7e22ce; rx: 14; }
+      .line { fill: none; stroke: #334155; stroke-width: 3; marker-end: url(#arrow); }
+      .line-both { fill: none; stroke: #2563eb; stroke-width: 4; marker-start: url(#arrow-blue); marker-end: url(#arrow-blue); }
+      .line-dashed { fill: none; stroke: #64748b; stroke-width: 3; stroke-dasharray: 10 8; marker-end: url(#arrow); }
+      .divider { stroke: #cbd5e1; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="2400" height="1500" fill="url(#bg)"/>
+  <text x="70" y="72" class="title">Arquitectura completa — SisTransp</text>
+  <text x="70" y="108" class="subtitle">Sistema de evaluación de transparencia universitaria: LOTAIP + OGP + OCDE + ODS 16</text>
+  <g transform="translate(1960 45)">
+    <rect width="370" height="62" rx="31" fill="#0f172a"/>
+    <text x="185" y="27" class="white-title" text-anchor="middle">DISEÑO LÓGICO · 3 CAPAS</text>
+    <text x="185" y="48" font-family="Inter,Arial,sans-serif" font-size="13" fill="#cbd5e1" text-anchor="middle">React · Django REST · PostgreSQL</text>
+  </g>
+
+  <!-- Main layer containers -->
+  <rect x="40" y="150" width="500" height="1120" class="panel"/>
+  <rect x="580" y="150" width="850" height="1120" class="panel"/>
+  <rect x="1470" y="150" width="890" height="750" class="panel"/>
+  <rect x="1470" y="940" width="890" height="330" class="panel"/>
+
+  <g>
+    <rect x="40" y="150" width="500" height="64" class="dark-front"/>
+    <text x="290" y="190" class="white-title" text-anchor="middle">FRONTEND · REACT</text>
+    <rect x="580" y="150" width="850" height="64" class="dark-back"/>
+    <text x="1005" y="190" class="white-title" text-anchor="middle">BACKEND · DJANGO REST API</text>
+    <rect x="1470" y="150" width="890" height="64" class="dark-data"/>
+    <text x="1915" y="190" class="white-title" text-anchor="middle">CAPA DE DATOS · POSTGRESQL</text>
+    <rect x="1470" y="940" width="890" height="64" fill="#334155" rx="14"/>
+    <text x="1915" y="980" class="white-title" text-anchor="middle">SERVICIOS EXTERNOS E INTEGRACIONES</text>
+  </g>
+
+  <!-- Global connectors behind nodes -->
+  <path d="M 470 1118 C 540 1118, 545 270, 630 270" class="line-both"/>
+  <rect x="520" y="598" width="124" height="52" rx="12" fill="#ffffff" stroke="#bfdbfe"/>
+  <text x="582" y="620" class="tiny" text-anchor="middle">HTTPS / REST</text>
+  <text x="582" y="640" class="tiny" text-anchor="middle">JSON + JWT</text>
+
+  <path d="M 1005 322 L 1005 352" class="line"/>
+  <path d="M 1005 515 L 1005 548" class="line"/>
+  <path d="M 1005 808 L 1005 842" class="line"/>
+  <path d="M 1005 1030 L 1005 1110" class="line"/>
+  <path d="M 1340 1168 C 1435 1168, 1415 520, 1510 520" class="line-both"/>
+  <rect x="1374" y="786" width="132" height="48" rx="12" fill="#ffffff" stroke="#ddd6fe"/>
+  <text x="1440" y="807" class="tiny" text-anchor="middle">DJANGO ORM</text>
+  <text x="1440" y="826" class="tiny" text-anchor="middle">SQL / TRANSAC.</text>
+
+  <path d="M 720 676 C 720 1060, 1580 1050, 1580 1090" class="line-dashed"/>
+  <path d="M 712 444 C 712 1018, 1770 1018, 1770 1090" class="line-dashed"/>
+  <path d="M 916 676 C 916 1085, 1970 1035, 1970 1090" class="line-dashed"/>
+  <path d="M 1260 676 C 1260 1070, 2170 1045, 2170 1090" class="line-dashed"/>
+
+  <!-- Frontend -->
+  <text x="70" y="246" class="layer-title">Usuarios del sistema</text>
+  <g>
+    <rect x="70" y="264" width="135" height="70" class="front"/>
+    <circle cx="92" cy="287" r="8" fill="#2563eb"/>
+    <text x="112" y="292" class="node-title">Administrador</text>
+    <text x="88" y="316" class="small">Rol 1 · sistema</text>
+    <rect x="220" y="264" width="135" height="70" class="front"/>
+    <circle cx="242" cy="287" r="8" fill="#2563eb"/>
+    <text x="262" y="292" class="node-title">Universidad</text>
+    <text x="238" y="316" class="small">Roles 2 y 3</text>
+    <rect x="370" y="264" width="135" height="70" class="front"/>
+    <circle cx="392" cy="287" r="8" fill="#2563eb"/>
+    <text x="412" y="292" class="node-title">Auditor</text>
+    <text x="388" y="316" class="small">Rol 4 · lectura</text>
+  </g>
+
+  <rect x="70" y="360" width="435" height="82" class="front"/>
+  <text x="92" y="390" class="node-title">Acceso y recuperación</text>
+  <text x="92" y="416" class="body">Inicio de sesión · verificación 2FA · restablecer clave</text>
+
+  <rect x="70" y="462" width="435" height="78" class="front"/>
+  <text x="92" y="492" class="node-title">Sesión y autorización</text>
+  <text x="92" y="518" class="body">AuthContext · ProtectedRoute · RBAC por rol</text>
+
+  <text x="70" y="576" class="layer-title">Vistas por rol</text>
+  <g>
+    <rect x="70" y="594" width="135" height="238" class="front"/>
+    <text x="137" y="626" class="node-title" text-anchor="middle">Administrador</text>
+    <line x1="88" y1="642" x2="187" y2="642" class="divider"/>
+    <text x="88" y="672" class="body">• Usuarios</text>
+    <text x="88" y="699" class="body">• Universidades</text>
+    <text x="88" y="726" class="body">• Indicadores</text>
+    <text x="88" y="753" class="body">• Ponderaciones</text>
+    <text x="88" y="780" class="body">• Auditoría</text>
+    <text x="88" y="807" class="body">• Validación</text>
+
+    <rect x="220" y="594" width="135" height="238" class="front"/>
+    <text x="287" y="626" class="node-title" text-anchor="middle">Universidad</text>
+    <line x1="238" y1="642" x2="337" y2="642" class="divider"/>
+    <text x="238" y="672" class="body">• Evidencias</text>
+    <text x="238" y="699" class="body">• Índice</text>
+    <text x="238" y="726" class="body">• Comparativas</text>
+    <text x="238" y="753" class="body">• Reportes</text>
+    <text x="238" y="780" class="body">• Observaciones</text>
+    <text x="238" y="807" class="body">• Validación</text>
+
+    <rect x="370" y="594" width="135" height="238" class="front"/>
+    <text x="437" y="626" class="node-title" text-anchor="middle">Auditor</text>
+    <line x1="388" y1="642" x2="487" y2="642" class="divider"/>
+    <text x="388" y="672" class="body">• Dashboard</text>
+    <text x="388" y="699" class="body">• Documentos</text>
+    <text x="388" y="726" class="body">• Revisión</text>
+    <text x="388" y="753" class="body">• Rankings</text>
+    <text x="388" y="780" class="body">• Comparativas</text>
+    <text x="388" y="807" class="body">• Reportes</text>
+  </g>
+
+  <rect x="70" y="858" width="435" height="155" class="front"/>
+  <text x="92" y="890" class="node-title">Componentes compartidos</text>
+  <text x="92" y="921" class="body">DashboardLayout · navegación · formularios</text>
+  <text x="92" y="950" class="body">Tablas · filtros · modales · gráficos · descarga</text>
+  <text x="92" y="979" class="body">Progreso de evaluación y cola de revisión</text>
+
+  <rect x="110" y="1074" width="360" height="84" class="dark-front"/>
+  <text x="290" y="1108" class="white-title" text-anchor="middle">CLIENTE API</text>
+  <text x="290" y="1136" font-family="Inter,Arial,sans-serif" font-size="15" fill="#dbeafe" text-anchor="middle">Axios · JSON · multipart · NDJSON</text>
+
+  <rect x="90" y="1190" width="400" height="48" rx="12" fill="#dbeafe"/>
+  <text x="290" y="1220" class="small" text-anchor="middle">Navegador web · diseño responsive</text>
+
+  <!-- Backend -->
+  <rect x="630" y="238" width="750" height="84" class="dark-back"/>
+  <text x="1005" y="271" class="white-title" text-anchor="middle">ENDPOINTS REST / ENRUTAMIENTO</text>
+  <text x="1005" y="299" font-family="Inter,Arial,sans-serif" font-size="15" fill="#d1fae5" text-anchor="middle">auth · users · universities · evidences · evaluacion · auditoría · reportes</text>
+
+  <text x="630" y="378" class="layer-title">Servicios de dominio</text>
+  <g>
+    <rect x="630" y="396" width="240" height="119" class="back"/>
+    <text x="652" y="428" class="node-title">Autenticación y seguridad</text>
+    <text x="652" y="457" class="body">JWT · refresh · 2FA</text>
+    <text x="652" y="484" class="body">reset token · RBAC</text>
+
+    <rect x="885" y="396" width="240" height="119" class="back"/>
+    <text x="907" y="428" class="node-title">Administración</text>
+    <text x="907" y="457" class="body">usuarios · roles · IES</text>
+    <text x="907" y="484" class="body">catálogos · periodos</text>
+
+    <rect x="1140" y="396" width="240" height="119" class="back"/>
+    <text x="1162" y="428" class="node-title">Evidencias</text>
+    <text x="1162" y="457" class="body">carga · URL · descarga</text>
+    <text x="1162" y="484" class="body">CRUD · importación DPE</text>
+  </g>
+
+  <text x="630" y="574" class="layer-title">Pipeline de procesamiento y evaluación</text>
+  <g>
+    <rect x="630" y="594" width="177" height="214" class="process"/>
+    <text x="718" y="626" class="node-title" text-anchor="middle">Ingesta DPE</text>
+    <line x1="650" y1="643" x2="787" y2="643" class="divider"/>
+    <text x="650" y="674" class="body">API pública</text>
+    <text x="650" y="701" class="body">Scraping</text>
+    <text x="650" y="728" class="body">Descarga segura</text>
+    <text x="650" y="755" class="body">Mapeo numeral</text>
+    <text x="650" y="782" class="body">Trazabilidad</text>
+
+    <rect x="822" y="594" width="200" height="214" class="process"/>
+    <text x="922" y="626" class="node-title" text-anchor="middle">Procesador</text>
+    <line x1="842" y1="643" x2="1002" y2="643" class="divider"/>
+    <text x="842" y="674" class="body">CSV / XLSX / ODS</text>
+    <text x="842" y="701" class="body">PDF / DOCX / TXT</text>
+    <text x="842" y="728" class="body">OCR y metadatos</text>
+    <text x="842" y="755" class="body">Validar enlaces</text>
+    <text x="842" y="782" class="body">Extraer contenido</text>
+
+    <rect x="1037" y="594" width="177" height="214" class="process"/>
+    <text x="1125" y="626" class="node-title" text-anchor="middle">Motor LOTAIP</text>
+    <line x1="1057" y1="643" x2="1194" y2="643" class="divider"/>
+    <text x="1057" y="674" class="body">24 numerales</text>
+    <text x="1057" y="701" class="body">25 formatos</text>
+    <text x="1057" y="728" class="body">CTA · ETA · RP</text>
+    <text x="1057" y="755" class="body">CI · SITA</text>
+    <text x="1057" y="782" class="body">Rúbrica versionada</text>
+
+    <rect x="1229" y="594" width="151" height="214" class="process"/>
+    <text x="1304" y="626" class="node-title" text-anchor="middle">Internacional</text>
+    <line x1="1249" y1="643" x2="1360" y2="643" class="divider"/>
+    <text x="1249" y="674" class="body">OGP · 15</text>
+    <text x="1249" y="701" class="body">OCDE · 20</text>
+    <text x="1249" y="728" class="body">ODS 16 · 10</text>
+    <text x="1249" y="755" class="body">Índice integrado</text>
+    <text x="1249" y="782" class="body">Nacional + int.</text>
+  </g>
+
+  <text x="630" y="867" class="layer-title">Orquestación, resultados y control</text>
+  <g>
+    <rect x="630" y="886" width="177" height="144" class="back"/>
+    <text x="718" y="918" class="node-title" text-anchor="middle">Ejecuciones</text>
+    <text x="650" y="950" class="body">validar uno / todo</text>
+    <text x="650" y="977" class="body">progreso · cancelar</text>
+    <text x="650" y="1004" class="body">reintento · estado</text>
+
+    <rect x="822" y="886" width="177" height="144" class="back"/>
+    <text x="910" y="918" class="node-title" text-anchor="middle">Revisión humana</text>
+    <text x="842" y="950" class="body">cola de enlaces</text>
+    <text x="842" y="977" class="body">decisión manual</text>
+    <text x="842" y="1004" class="body">observaciones</text>
+
+    <rect x="1014" y="886" width="177" height="144" class="back"/>
+    <text x="1102" y="918" class="node-title" text-anchor="middle">Analítica</text>
+    <text x="1034" y="950" class="body">resúmenes</text>
+    <text x="1034" y="977" class="body">comparativas</text>
+    <text x="1034" y="1004" class="body">rankings · índice</text>
+
+    <rect x="1206" y="886" width="174" height="144" class="back"/>
+    <text x="1293" y="918" class="node-title" text-anchor="middle">Gobernanza</text>
+    <text x="1226" y="950" class="body">reportes</text>
+    <text x="1226" y="977" class="body">feedback</text>
+    <text x="1226" y="1004" class="body">logs y errores</text>
+  </g>
+
+  <rect x="680" y="1110" width="660" height="116" class="dark-back"/>
+  <text x="1010" y="1149" class="white-title" text-anchor="middle">CAPA DE ACCESO A DATOS</text>
+  <text x="1010" y="1181" font-family="Inter,Arial,sans-serif" font-size="16" fill="#d1fae5" text-anchor="middle">Django ORM · validación · transacciones · persistencia de archivos</text>
+  <text x="1010" y="1207" font-family="Inter,Arial,sans-serif" font-size="14" fill="#a7f3d0" text-anchor="middle">Servicios, modelos y reglas de negocio desacopladas</text>
+
+  <!-- Data layer -->
+  <rect x="1510" y="238" width="810" height="68" class="data"/>
+  <text x="1915" y="268" class="node-title" text-anchor="middle">Base relacional PostgreSQL</text>
+  <text x="1915" y="292" class="small" text-anchor="middle">Integridad referencial · historización · consultas analíticas</text>
+
+  <g>
+    <rect x="1510" y="330" width="250" height="146" class="data"/>
+    <text x="1635" y="362" class="node-title" text-anchor="middle">Esquema core</text>
+    <text x="1532" y="394" class="body">roles · users</text>
+    <text x="1532" y="421" class="body">password_reset_tokens</text>
+    <text x="1532" y="448" class="body">indicator_templates</text>
+
+    <rect x="1778" y="330" width="250" height="146" class="data"/>
+    <text x="1903" y="362" class="node-title" text-anchor="middle">Universities</text>
+    <text x="1800" y="394" class="body">universities</text>
+    <text x="1800" y="421" class="body">identidad DPE</text>
+    <text x="1800" y="448" class="body">portal de transparencia</text>
+
+    <rect x="2046" y="330" width="274" height="146" class="data"/>
+    <text x="2183" y="362" class="node-title" text-anchor="middle">Esquema catalogs</text>
+    <text x="2068" y="394" class="body">international_standards</text>
+    <text x="2068" y="421" class="body">indicator_standard_links</text>
+    <text x="2068" y="448" class="body">OGP · OCDE · ODS 16</text>
+
+    <rect x="1510" y="494" width="250" height="156" class="data"/>
+    <text x="1635" y="526" class="node-title" text-anchor="middle">Transparency</text>
+    <text x="1532" y="558" class="body">categories</text>
+    <text x="1532" y="585" class="body">lotaip_items</text>
+    <text x="1532" y="612" class="body">indicators</text>
+
+    <rect x="1778" y="494" width="250" height="156" class="data"/>
+    <text x="1903" y="526" class="node-title" text-anchor="middle">Evidence</text>
+    <text x="1800" y="558" class="body">evidences</text>
+    <text x="1800" y="585" class="body">archivo / URL / hash</text>
+    <text x="1800" y="612" class="body">origen y metadatos</text>
+
+    <rect x="2046" y="494" width="274" height="300" class="data"/>
+    <text x="2183" y="526" class="node-title" text-anchor="middle">Esquema evaluation</text>
+    <text x="2068" y="558" class="body">evaluation_periods</text>
+    <text x="2068" y="585" class="body">evaluations</text>
+    <text x="2068" y="612" class="body">category / final_results</text>
+    <text x="2068" y="639" class="body">validation_results</text>
+    <text x="2068" y="666" class="body">lotaip_runs</text>
+    <text x="2068" y="693" class="body">manual / link_reviews</text>
+    <text x="2068" y="720" class="body">university_summaries</text>
+    <text x="2068" y="747" class="body">feedback</text>
+
+    <rect x="1510" y="668" width="250" height="126" class="data"/>
+    <text x="1635" y="700" class="node-title" text-anchor="middle">Esquema audit</text>
+    <text x="1532" y="734" class="body">logs · errors</text>
+    <text x="1532" y="761" class="body">actor · acción · fecha</text>
+
+    <rect x="1778" y="668" width="250" height="126" class="data"/>
+    <text x="1903" y="700" class="node-title" text-anchor="middle">Almacenamiento media</text>
+    <text x="1800" y="734" class="body">documentos originales</text>
+    <text x="1800" y="761" class="body">copias DPE y reportes</text>
+  </g>
+
+  <rect x="1510" y="822" width="810" height="48" rx="12" fill="#f3e8ff"/>
+  <text x="1915" y="852" class="small" text-anchor="middle">Separación lógica por dominios para seguridad, mantenimiento y trazabilidad</text>
+
+  <!-- External services -->
+  <g>
+    <rect x="1510" y="1032" width="190" height="170" class="external"/>
+    <text x="1605" y="1065" class="node-title" text-anchor="middle">Portal DPE</text>
+    <line x1="1530" y1="1082" x2="1680" y2="1082" class="divider"/>
+    <text x="1530" y="1113" class="body">API pública</text>
+    <text x="1530" y="1140" class="body">Transparencia activa</text>
+    <text x="1530" y="1167" class="body">Descarga documental</text>
+
+    <rect x="1720" y="1032" width="190" height="170" class="external"/>
+    <text x="1815" y="1065" class="node-title" text-anchor="middle">Correo SMTP</text>
+    <line x1="1740" y1="1082" x2="1890" y2="1082" class="divider"/>
+    <text x="1740" y="1113" class="body">Brevo / SMTP</text>
+    <text x="1740" y="1140" class="body">OTP de acceso</text>
+    <text x="1740" y="1167" class="body">Recuperar clave</text>
+
+    <rect x="1930" y="1032" width="190" height="170" class="external"/>
+    <text x="2025" y="1065" class="node-title" text-anchor="middle">OCR local</text>
+    <line x1="1950" y1="1082" x2="2100" y2="1082" class="divider"/>
+    <text x="1950" y="1113" class="body">Tesseract</text>
+    <text x="1950" y="1140" class="body">PDF escaneado</text>
+    <text x="1950" y="1167" class="body">Idioma español</text>
+
+    <rect x="2140" y="1032" width="190" height="170" class="external"/>
+    <text x="2235" y="1065" class="node-title" text-anchor="middle">Verificación IA</text>
+    <line x1="2160" y1="1082" x2="2310" y2="1082" class="divider"/>
+    <text x="2160" y="1113" class="body">FreeLLMAPI</text>
+    <text x="2160" y="1140" class="body">Criterios semánticos</text>
+    <text x="2160" y="1167" class="body">Caché y reintentos</text>
+  </g>
+
+  <!-- Cross-cutting controls -->
+  <rect x="40" y="1310" width="2320" height="140" rx="22" fill="#0f172a"/>
+  <text x="75" y="1350" class="white-title">CONTROLES TRANSVERSALES</text>
+  <g font-family="Inter,Arial,sans-serif" font-size="15" fill="#e2e8f0">
+    <text x="75" y="1390">● HTTPS, JWT, 2FA y autorización RBAC</text>
+    <text x="525" y="1390">● Validación de archivos, URLs y protección SSRF</text>
+    <text x="1110" y="1390">● Auditoría de acciones, errores y decisiones manuales</text>
+    <text x="1745" y="1390">● Rúbrica, esquema y motor versionados</text>
+    <text x="75" y="1423">● Integridad referencial y transacciones</text>
+    <text x="525" y="1423">● Procesamiento reproducible y resultados trazables</text>
+    <text x="1110" y="1423">● Pruebas unitarias y validación controlada del motor</text>
+    <text x="1745" y="1423">● Diseño responsive y accesible</text>
+  </g>
+</svg>

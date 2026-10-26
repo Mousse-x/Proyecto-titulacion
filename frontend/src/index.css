@@ -685,6 +685,85 @@ select.form-input option { background: var(--bg-secondary); color: var(--text); 
 .progress-fill.yellow { background: var(--warning); }
 .progress-fill.red    { background: var(--danger); }
 
+.evaluation-progress-card {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+.evaluation-progress-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.evaluation-progress-spinner {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-width: 3px;
+}
+.evaluation-progress-phase {
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.evaluation-progress-message {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+.evaluation-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 9px;
+  color: var(--text-subtle);
+  font-size: 0.75rem;
+}
+.evaluation-progress-meta strong {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+.evaluation-activity {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.evaluation-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-subtle);
+  font-size: 0.75rem;
+}
+.evaluation-activity-item > div {
+  display: grid;
+  gap: 2px;
+}
+.evaluation-activity-item strong {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.evaluation-activity-item span:last-child {
+  line-height: 1.35;
+}
+.evaluation-activity-item.active strong {
+  color: var(--primary);
+}
+.evaluation-activity-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.evaluation-activity-dot.active {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
 /* ═══ SCORE RING ══════════════════════════════════ */
 .score-wrapper {
   display: flex;

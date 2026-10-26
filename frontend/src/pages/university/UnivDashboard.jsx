@@ -135,7 +135,7 @@ export default function UnivDashboard() {
                       <div className="auditor-ranking-bar" />
                     </div>
                     <div className="auditor-ranking-index-label secondary">
-                      <span>Nacional + internacional</span>
+                      <span>Índice final ITI</span>
                       <strong>{integratedScore.toFixed(2)}%</strong>
                     </div>
                     <div className="auditor-ranking-percent auditor-ranking-percent-secondary" style={{ '--score': `${Math.max(integratedScore, 6)}%`, '--score-color': integratedColor }}>

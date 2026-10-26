@@ -10,7 +10,9 @@ Funciones principales:
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.utils import timezone
+from django.db import close_old_connections, transaction
 
 from ..models import (
     Evidence, IndicatorTemplate, Indicator,
@@ -18,14 +20,38 @@ from ..models import (
     EvaluationPeriod,
 )
 from ..cache_utils import invalidate_dashboard_cache
-from .document_processor import detect_lotaip_document_type, process_document
-from .comparison_engine import (
-    evaluate_existence, evaluate_format, evaluate_period,
-    evaluate_structure, evaluate_content, evaluate_accessibility,
+from .document_processor import process_document
+from .document_processor import detect_lotaip_document_type
+from .comparison_engine import evaluate_structure
+from .integrated_transparency import (
+    evaluate_integrated_transparency,
+    refresh_lotaip_derived_indicators,
+    serialize_integrated_result,
+    sync_national_results,
 )
-from .international_evaluator import evaluate_international_standards, summarize_indices
+from .international_evaluator import evaluate_international_standards  # compatibilidad; no se invoca en el flujo vigente
+from .lotaip_rubric import summarize_rubrics
+from ..lotaip_engine import evaluate_format
+from ..lotaip_engine.rules import CONTENT_POLICY_VERSION, ENGINE_VERSION
 
 logger = logging.getLogger(__name__)
+
+
+class EvaluationCancelled(Exception):
+    """La ejecución masiva fue cancelada por el usuario."""
+
+
+def _raise_if_cancelled(should_cancel):
+    if should_cancel and should_cancel():
+        raise EvaluationCancelled('Evaluación detenida por solicitud del usuario.')
+
+
+def is_lotaip_dictionary(evidence):
+    """El diccionario describe variables del paquete; no es una unidad evaluable."""
+    return any(
+        detect_lotaip_document_type(value) == "Diccionario"
+        for value in (getattr(evidence, "title", ""), getattr(evidence, "file_path", ""))
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -50,14 +76,15 @@ def classify_compliance(total_score):
 # VALIDAR DOCUMENTO INDIVIDUAL
 # ──────────────────────────────────────────────────────────────────────
 
-def evaluar_documento(evidence_id):
+def evaluar_documento(evidence_id, network_cache=None, retry_pending=False, reevaluate=False,
+                      should_cancel=None, progress_callback=None, ai_budget=None):
     """
     Valida un documento de evidencia individual.
 
     Flujo:
     1. Buscar Evidence y su IndicatorTemplate asociada
     2. Procesar el documento (extraer metadatos, texto, columnas)
-    3. Ejecutar los 6 evaluadores
+    3. Preparar los seis criterios oficiales y los diagnósticos del paquete
     4. Calcular puntaje total y clasificar
     5. Guardar EvidenceValidationResult
     6. Retornar dict con resultado
@@ -68,6 +95,11 @@ def evaluar_documento(evidence_id):
     Returns:
         dict con el resultado de la validación
     """
+    def report(phase, detail, stage_pct):
+        if progress_callback:
+            progress_callback({"phase": phase, "detail": detail, "stage_pct": stage_pct})
+
+    report("Preparando evaluación", "Cargando la evidencia y su configuración normativa.", 5)
     try:
         evidence = Evidence.objects.select_related(
             "university", "indicator", "period"
@@ -85,6 +117,16 @@ def evaluar_documento(evidence_id):
             "message": f"Solo se pueden validar documentos aprobados o pendientes. Estado actual: {evidence.validation_status}",
         }
 
+    if is_lotaip_dictionary(evidence):
+        return {
+            "error": False,
+            "excluded_from_evaluation": True,
+            "evidence_id": evidence.id,
+            "documento": evidence.title,
+            "message": ("El diccionario de datos no se evalúa como documento independiente; "
+                        "se usa únicamente para interpretar las variables y sus notas aclaratorias."),
+        }
+
     # Buscar plantilla base del indicador
     template = None
     try:
@@ -93,101 +135,93 @@ def evaluar_documento(evidence_id):
     except IndicatorTemplate.DoesNotExist:
         pass  # Sin plantilla, evaluación parcial
 
+    # Consultar/abrir no recalcula resultados persistidos. El POST con
+    # retry_pending permite completar sólo paquetes que todavía tienen pendientes.
+    saved = EvidenceValidationResult.objects.filter(
+        evidence__university_id=evidence.university_id, evidence__period_id=evidence.period_id,
+        evidence__indicator_id=evidence.indicator_id, evidence__month=evidence.month,
+    ).select_related('evidence', 'evidence__university', 'evidence__indicator', 'evidence__period').order_by('-validated_at').first()
+    saved_uses_current_content_policy = bool(
+        saved and saved.lotaip_rubric
+        and saved.lotaip_rubric.get("content_policy_version") == CONTENT_POLICY_VERSION
+    )
+    if saved_uses_current_content_policy and not reevaluate:
+        pending = any(c.get('aplica') and c.get('calificacion') is None for c in saved.lotaip_rubric.get('criterios', []))
+        if not (retry_pending and pending):
+            from core.validation_views import _validation_result_to_dict
+            cached = _validation_result_to_dict(saved)
+            cached.update(evidence_id=evidence.id, documento=evidence.title, resultado_guardado=True)
+            if saved.evidence_id != evidence.id and not EvidenceValidationResult.objects.filter(evidence_id=evidence.id).exists():
+                _save_validation_result(evidence, cached, sync_package=False)
+            report("Resultado disponible", "Se reutilizó una evaluación vigente guardada.", 100)
+            return cached
+
     try:
+        _raise_if_cancelled(should_cancel)
         # 1. Procesar documento
+        report("Procesando documento", "Leyendo el archivo y extrayendo su estructura local.", 12)
         processed_data = process_document(evidence)
+        _raise_if_cancelled(should_cancel)
 
-        # 2. Ejecutar evaluadores
-        all_observations = []
-
-        score_existence, obs = evaluate_existence(processed_data)
-        all_observations.extend(obs)
-
-        package_score, package_obs = _evaluate_lotaip_document_package(evidence)
-        if package_obs:
-            all_observations.extend(package_obs)
-            score_existence = min(score_existence, package_score)
-
-        # Si no existe, puntaje directo = 0
-        if score_existence == 0:
-            result_data = _build_result(
-                evidence, template,
-                score_existence=0, score_format=0, score_update=0,
-                score_structure=0, score_content=0, score_accessibility=0,
-                total_score=0,
-                status=EvidenceValidationResult.ComplianceStatus.NO_PRESENTADO,
-                observations=all_observations,
-            )
-            result_data["evaluacion_internacional"] = evaluate_international_standards(
-                evidence,
-                processed_data=processed_data,
-                template=template,
-                lotaip_result=result_data,
-            )
-            _save_validation_result(evidence, result_data)
-            return result_data
-
-        score_format, obs = evaluate_format(processed_data)
-        all_observations.extend(obs)
-
-        score_update, obs = evaluate_period(evidence, processed_data)
-        all_observations.extend(obs)
-
-        score_structure, obs = evaluate_structure(processed_data, template)
-        all_observations.extend(obs)
-
-        score_content, obs = evaluate_content(processed_data, template)
-        all_observations.extend(obs)
-
-        score_accessibility, obs = evaluate_accessibility(processed_data)
-        all_observations.extend(obs)
-
-        # 3. Calcular total
-        total_score = (
-            score_existence + score_format + score_update +
-            score_structure + score_content + score_accessibility
+        # El paquete se evalúa con la rúbrica oficial; las comprobaciones locales
+        # son sugerencias hasta verificar publicación y condiciones en el PNT.
+        siblings = list(Evidence.objects.filter(
+            university_id=evidence.university_id, period_id=evidence.period_id,
+            indicator_id=evidence.indicator_id, month=evidence.month,
+            validation_status__in=["aprobado", "pendiente"],
+        ).order_by("id"))
+        report("Preparando paquete", f"Se encontraron {len(siblings)} archivo(s) asociados al literal.", 18)
+        from .lotaip_automatic import fetch_public
+        cache = network_cache if network_cache is not None else {}
+        def fetch(url):
+            _raise_if_cancelled(should_cancel)
+            if url not in cache:
+                if len(cache) >= 32:
+                    cache.pop(next(iter(cache)))
+                cache[url] = fetch_public(url)
+            _raise_if_cancelled(should_cancel)
+            return cache[url]
+        _raise_if_cancelled(should_cancel)
+        rubric = evaluate_format(
+            evidence, siblings, template=template, check_online=True, fetch=fetch,
+            previous=(saved.lotaip_rubric
+                      if saved_uses_current_content_policy and retry_pending and not reevaluate
+                      else None),
+            progress_callback=progress_callback,
+            ai_budget=(ai_budget if ai_budget is not None else {
+                "limit": getattr(settings, "FREELLMAPI_MAX_TOKENS_PER_RUN", 200000),
+                "used": 0,
+            }),
         )
-
-        # 4. Clasificar
-        status = classify_compliance(total_score)
-
-        # 5. Construir resultado
+        _raise_if_cancelled(should_cancel)
+        score = summarize_rubrics([rubric])["puntaje_formato"]
         result_data = _build_result(
-            evidence, template,
-            score_existence=score_existence,
-            score_format=score_format,
-            score_update=score_update,
-            score_structure=score_structure,
-            score_content=score_content,
-            score_accessibility=score_accessibility,
-            total_score=total_score,
-            status=status,
-            observations=all_observations,
+            evidence, template, total_score=score,
+            status=classify_compliance(score) if score is not None else "PENDIENTE_REVISION",
+            observations=[f"{c['criterio']}: {c['observacion']}" for c in rubric["criterios"]],
         )
-        result_data["evaluacion_internacional"] = evaluate_international_standards(
-            evidence,
-            processed_data=processed_data,
-            template=template,
-            lotaip_result=result_data,
-        )
+        result_data["rubrica_lotaip"] = rubric
+        result_data["sita"] = summarize_rubrics([rubric])
+        # Diagnóstico técnico conservado para la revisión del formato nacional.
+        result_data["puntaje_estructura"] = evaluate_structure(processed_data, template)[0]
 
         # 6. Guardar en BD
+        _raise_if_cancelled(should_cancel)
+        report("Guardando resultados", "Persistiendo la rúbrica y sincronizando los archivos del paquete.", 95)
         _save_validation_result(evidence, result_data)
+        report("Literal completado", "La evaluación del literal terminó correctamente.", 100)
 
         return result_data
 
+    except EvaluationCancelled:
+        raise
     except Exception as e:
         logger.error(f"Error validando documento {evidence_id}: {e}", exc_info=True)
         error_result = _build_result(
             evidence, template,
-            total_score=0,
+            total_score=None,
             status=EvidenceValidationResult.ComplianceStatus.ERROR_PROCESAMIENTO,
             observations=[f"❌ Error durante el procesamiento: {str(e)}"],
-        )
-        error_result["evaluacion_internacional"] = evaluate_international_standards(
-            evidence,
-            template=template,
-            lotaip_result=error_result,
         )
         _save_validation_result(evidence, error_result)
         return error_result
@@ -232,35 +266,8 @@ def _month_name(month_num):
     return months.get(month_num, "")
 
 
-def _evaluate_lotaip_document_package(evidence):
-    """Verifica que el literal tenga sus 3 CSV LOTAIP aprobados."""
-    current_type = detect_lotaip_document_type(f"{evidence.title} {evidence.file_path or ''}")
-    if not current_type:
-        return 20, []
-
-    required = {"Metadatos", "Diccionario", "Conjunto de datos"}
-    siblings = Evidence.objects.filter(
-        university_id=evidence.university_id,
-        period_id=evidence.period_id,
-        indicator_id=evidence.indicator_id,
-        month=evidence.month,
-        validation_status__in=["aprobado", "pendiente"],
-    )
-
-    found = set()
-    for sibling in siblings:
-        doc_type = detect_lotaip_document_type(f"{sibling.title} {sibling.file_path or ''}")
-        if doc_type:
-            found.add(doc_type)
-
-    missing = sorted(required - found)
-    if not missing:
-        return 20, ["Paquete LOTAIP completo: Metadatos, Diccionario y Conjunto de datos."]
-
-    return 10, [f"Paquete LOTAIP incompleto. Faltan: {', '.join(missing)}."]
-
-
-def _save_validation_result(evidence, result_data):
+@transaction.atomic
+def _save_validation_result(evidence, result_data, sync_package=True):
     """Crea o actualiza el EvidenceValidationResult en la BD."""
     try:
         obj, created = EvidenceValidationResult.objects.update_or_create(
@@ -272,22 +279,56 @@ def _save_validation_result(evidence, result_data):
                 "score_structure":     Decimal(str(result_data.get("puntaje_estructura", 0))),
                 "score_content":       Decimal(str(result_data.get("puntaje_contenido", 0))),
                 "score_accessibility": Decimal(str(result_data.get("puntaje_accesibilidad", 0))),
-                "total_score":         Decimal(str(result_data.get("puntaje_total", 0))),
+                "total_score":         Decimal(str(result_data.get("puntaje_total") or 0)),
                 "compliance_status":   result_data.get("estado_cumplimiento", "NO_PRESENTADO"),
                 "observations":        result_data.get("observaciones", []),
+                "lotaip_rubric": result_data.get("rubrica_lotaip", {}),
+                "engine_version": result_data.get("rubrica_lotaip", {}).get("engine_version", ENGINE_VERSION),
+                "automatic_result": result_data.get("rubrica_lotaip", {}),
+                "manual_override": {},
+                "requires_review": bool(result_data.get("rubrica_lotaip", {}).get("requiere_revision")),
             },
         )
         logger.info(f"Resultado de validación {'creado' if created else 'actualizado'} para evidencia {evidence.id}")
+        if result_data.get("rubrica_lotaip") and sync_package:
+            # Todos los archivos comparten el resultado del paquete, incluso
+            # cuando se inició la evaluación desde uno solo de ellos.
+            siblings = list(Evidence.objects.filter(
+                university_id=evidence.university_id, period_id=evidence.period_id,
+                month=evidence.month, indicator_id=evidence.indicator_id,
+            ).exclude(id=evidence.id))
+            siblings = [sibling for sibling in siblings if not is_lotaip_dictionary(sibling)]
+            for sibling in siblings:
+                EvidenceValidationResult.objects.get_or_create(
+                    evidence=sibling,
+                    defaults={"total_score": result_data.get("puntaje_total") or 0,
+                              "compliance_status": result_data["estado_cumplimiento"]},
+                )
+            EvidenceValidationResult.objects.filter(
+                evidence_id__in=[sibling.id for sibling in siblings],
+            ).update(
+                lotaip_rubric=result_data["rubrica_lotaip"], total_score=result_data.get("puntaje_total") or 0,
+                compliance_status=result_data["estado_cumplimiento"],
+                observations=result_data["observaciones"], validated_at=timezone.now(),
+                engine_version=result_data["rubrica_lotaip"].get("engine_version", ENGINE_VERSION),
+                automatic_result=result_data["rubrica_lotaip"], manual_override={},
+                requires_review=bool(result_data["rubrica_lotaip"].get("requiere_revision")),
+            )
+        UniversityEvaluationSummary.objects.filter(
+            university_id=evidence.university_id, period_id=evidence.period_id,
+        ).delete()
         invalidate_dashboard_cache()
     except Exception as e:
         logger.error(f"Error guardando resultado de validación: {e}")
+        raise
 
 
 # ──────────────────────────────────────────────────────────────────────
 # VALIDAR TODOS LOS DOCUMENTOS DE UNA UNIVERSIDAD
 # ──────────────────────────────────────────────────────────────────────
 
-def evaluar_universidad(university_id, period_id, month=None):
+def evaluar_universidad(university_id, period_id, month=None, reevaluate=False,
+                        should_cancel=None, scope='all'):
     """
     Valida todos los documentos aprobados de una universidad en un período.
     Genera el resumen de evaluación (UniversityEvaluationSummary).
@@ -302,6 +343,11 @@ def evaluar_universidad(university_id, period_id, month=None):
         dict con resultado de cada documento validado y resumen final
     """
     import json
+    import queue
+    from concurrent.futures import ThreadPoolExecutor
+
+    if scope not in {'all', 'lotaip', 'international'}:
+        raise ValueError('El alcance debe ser all, lotaip o international.')
 
     filters = {
         "university_id": university_id,
@@ -311,13 +357,25 @@ def evaluar_universidad(university_id, period_id, month=None):
     if month:
         filters["month"] = month
 
-    evidences = Evidence.objects.filter(**filters).select_related(
+    evidences = list(Evidence.objects.filter(**filters).select_related(
         "university", "indicator", "period"
-    ).order_by("indicator__code")
+    ).order_by("indicator__code"))
+    evidences = [evidence for evidence in evidences if not is_lotaip_dictionary(evidence)]
+    # La rúbrica se calcula por paquete (literal/mes), no por cada copia de
+    # conjunto de datos y metadatos. _save_validation_result sincroniza el
+    # resultado con los documentos hermanos sin repetir red, OCR ni IA.
+    packages = {}
+    for evidence in evidences:
+        key = (evidence.university_id, evidence.period_id, evidence.indicator_id, evidence.month)
+        packages.setdefault(key, evidence)
+    evidences = list(packages.values())
 
-    total = evidences.count()
+    if scope == 'international':
+        evidences = []
 
-    if total == 0:
+    total = len(evidences)
+
+    if total == 0 and scope != 'international':
         yield json.dumps({
             "status": "done",
             "message": "No hay documentos aprobados o pendientes para validar en este período.",
@@ -328,7 +386,12 @@ def evaluar_universidad(university_id, period_id, month=None):
 
     yield json.dumps({
         "status": "progress",
-        "msg": f"Iniciando validación de {total} documentos...",
+        "msg": (f"Iniciando validación de {total} documentos LOTAIP..."
+                if scope != 'international' else "Iniciando evaluación de indicadores internacionales..."),
+        "phase": ("Preparando evaluación LOTAIP"
+                  if scope != 'international' else "Preparando búsqueda web"),
+        "detail": ("Organizando los documentos nacionales seleccionados."
+                   if scope != 'international' else "Agrupando los 34 aportes web por dimensión."),
         "pct": 0,
     }) + "\n"
 
@@ -340,28 +403,176 @@ def evaluar_universidad(university_id, period_id, month=None):
         "NO_CUMPLE": 0,
         "NO_PRESENTADO": 0,
         "ERROR_PROCESAMIENTO": 0,
+        "PENDIENTE_REVISION": 0,
+        "NO_VERIFICABLE": 0,
     }
 
+    network_cache = {}
+    ai_budget = {
+        "limit": max(0, getattr(settings, "FREELLMAPI_MAX_TOKENS_PER_RUN", 200000)),
+        "used": 0,
+    }
     for idx, ev in enumerate(evidences):
-        pct = int(((idx + 1) / total) * 90) + 5
+        if should_cancel and should_cancel():
+            yield json.dumps({"status": "cancelled", "msg": "Evaluación detenida por el usuario."}) + "\n"
+            return
+        start_pct = 5 + (idx / total) * 90
+        end_pct = 5 + ((idx + 1) / total) * 90
+        literal = ev.indicator.code if ev.indicator else 'N/A'
 
         yield json.dumps({
             "status": "progress",
-            "msg": f"Validando {idx+1}/{total}: {ev.indicator.code if ev.indicator else 'N/A'} — {ev.title[:50]}",
-            "pct": pct,
+            "msg": f"Validando {idx+1}/{total}: {literal} — {ev.title[:50]}",
+            "phase": "Preparando literal",
+            "detail": "Organizando los archivos y criterios que se comprobarán.",
+            "document_index": idx + 1,
+            "document_total": total,
+            "pct": round(start_pct),
         }) + "\n"
 
-        result = evaluar_documento(ev.id)
+        progress_events = queue.Queue()
+        def on_progress(event):
+            progress_events.put(event)
+
+        def evaluate_current_document():
+            close_old_connections()
+            try:
+                return evaluar_documento(
+                    ev.id,
+                    network_cache=network_cache,
+                    reevaluate=reevaluate,
+                    should_cancel=should_cancel,
+                    progress_callback=on_progress,
+                    ai_budget=ai_budget,
+                )
+            finally:
+                close_old_connections()
+
+        try:
+            with ThreadPoolExecutor(max_workers=1, thread_name_prefix="lotaip-document") as executor:
+                future = executor.submit(evaluate_current_document)
+                while not future.done():
+                    try:
+                        event = progress_events.get(timeout=0.5)
+                    except queue.Empty:
+                        continue
+                    stage_pct = max(0, min(100, float(event.get("stage_pct", 0))))
+                    overall_pct = start_pct + (end_pct - start_pct) * stage_pct / 100
+                    yield json.dumps({
+                        "status": "progress",
+                        "msg": f"Validando {idx+1}/{total}: {literal} — {ev.title[:50]}",
+                        "phase": event.get("phase", "Procesando literal"),
+                        "detail": event.get("detail", "La evaluación continúa en segundo plano."),
+                        "document_index": idx + 1,
+                        "document_total": total,
+                        "pct": round(overall_pct),
+                    }) + "\n"
+                while not progress_events.empty():
+                    event = progress_events.get_nowait()
+                    stage_pct = max(0, min(100, float(event.get("stage_pct", 0))))
+                    overall_pct = start_pct + (end_pct - start_pct) * stage_pct / 100
+                    yield json.dumps({
+                        "status": "progress",
+                        "msg": f"Validando {idx+1}/{total}: {literal} — {ev.title[:50]}",
+                        "phase": event.get("phase", "Procesando literal"),
+                        "detail": event.get("detail", "La evaluación continúa en segundo plano."),
+                        "document_index": idx + 1,
+                        "document_total": total,
+                        "pct": round(overall_pct),
+                    }) + "\n"
+                result = future.result()
+        except EvaluationCancelled:
+            yield json.dumps({"status": "cancelled", "msg": "Evaluación detenida por el usuario."}) + "\n"
+            return
         results.append(result)
 
         status = result.get("estado_cumplimiento", "NO_PRESENTADO")
         if status in counters:
             counters[status] += 1
 
-    # Calcular índice general
-    total_score_sum = sum(r.get("puntaje_total", 0) for r in results)
-    total_index = round(total_score_sum / len(results), 2) if results else 0
-    indices = summarize_indices(results)
+    if should_cancel and should_cancel():
+        yield json.dumps({"status": "cancelled", "msg": "Evaluación detenida por el usuario."}) + "\n"
+        return
+
+    integrated_result = None
+    if scope in {'all', 'international'}:
+        yield json.dumps({
+            "status": "progress",
+            "msg": "Evaluando los complementos internacionales...",
+            "phase": "Preparando búsqueda web",
+            "detail": ("La evaluación LOTAIP terminó; se comprobarán los 34 aportes internacionales."
+                       if scope == 'all' else "Se comprobarán los 22 complementos mixtos y 12 indicadores internacionales."),
+            "document_index": total,
+            "document_total": total,
+            "pct": 95 if scope == 'all' else 1,
+        }) + "\n"
+
+        international_events = queue.Queue()
+        def on_international_progress(event):
+            international_events.put(event)
+
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="integrated-transparency") as executor:
+            future = executor.submit(
+                evaluate_integrated_transparency,
+                university_id, period_id, month,
+                should_cancel, on_international_progress, reevaluate,
+            )
+            while not future.done():
+                try:
+                    event = international_events.get(timeout=.5)
+                except queue.Empty:
+                    continue
+                stage_pct = float(event.get("stage_pct", 0))
+                yield json.dumps({
+                    "status": "progress",
+                    "msg": event.get("phase", "Evaluando indicadores internacionales"),
+                    "phase": event.get("phase", "Evaluando indicadores internacionales"),
+                    "detail": event.get("detail", "Buscando y verificando evidencia pública."),
+                    "document_index": total,
+                    "document_total": total,
+                    "pct": (95 + round(stage_pct * .04)) if scope == 'all' else round(stage_pct * .98),
+                }) + "\n"
+            integrated_result = future.result()
+    else:
+        sync_national_results(university_id, period_id, month)
+        # La interoperabilidad (IND-57) se mide sobre los paquetes LOTAIP recién evaluados.
+        integrated_result = refresh_lotaip_derived_indicators(university_id, period_id, month)
+
+    if integrated_result is None:
+        yield json.dumps({"status": "cancelled", "msg": "Evaluación detenida por el usuario."}) + "\n"
+        return
+
+    yield json.dumps({
+        "status": "progress",
+        "msg": ("Consolidando la evaluación nacional..." if scope == 'lotaip'
+                else "Consolidando la evaluación institucional..."),
+        "phase": ("Calculando la calificación LOTAIP" if scope == 'lotaip' else "Calculando el ITI"),
+        "detail": ("Actualizando los 24 indicadores nacionales sin ejecutar búsquedas web."
+                   if scope == 'lotaip' else "Aplicando los pesos configurados a los 58 indicadores y ocho dimensiones."),
+        "document_index": total,
+        "document_total": total,
+        "pct": 99,
+    }) + "\n"
+
+    # Calcular el componente nacional y consolidarlo con el modelo integrado.
+    from core.lotaip_engine.evaluator import summarize_evaluations
+    persisted_qs = EvidenceValidationResult.objects.select_related('evidence').filter(
+        evidence__university_id=university_id,
+        evidence__period_id=period_id,
+    ).exclude(lotaip_rubric={})
+    if month:
+        persisted_qs = persisted_qs.filter(evidence__month=month)
+    packages = {}
+    for validation in persisted_qs:
+        if is_lotaip_dictionary(validation.evidence):
+            continue
+        rubric = validation.lotaip_rubric or {}
+        unit = rubric.get('unidad')
+        if unit:
+            packages[unit] = rubric
+    persisted_summary = summarize_evaluations(list(packages.values()))
+    national_index = persisted_summary.get("SITA")
+    integrated = serialize_integrated_result(university_id, period_id, month)
 
     # Generar observaciones generales
     general_obs = []
@@ -376,46 +587,31 @@ def evaluar_universidad(university_id, period_id, month=None):
     if counters["NO_PRESENTADO"] > 0:
         general_obs.append(f"🔲 {counters['NO_PRESENTADO']} literales no fueron presentados.")
 
-    # Guardar resumen
-    try:
-        period = EvaluationPeriod.objects.get(id=period_id)
-        summary, _ = UniversityEvaluationSummary.objects.update_or_create(
-            university_id=university_id,
-            period=period,
-            defaults={
-                "total_index": Decimal(str(indices["indice_nacional"])),
-                "national_index": Decimal(str(indices["indice_nacional"])),
-                "international_index": Decimal(str(indices["indice_internacional"])),
-                "integrated_index": Decimal(str(indices["indice_nacional_internacional"])),
-                "international_average_score": Decimal(str(indices["puntaje_internacional_promedio"])),
-                "international_max_score": Decimal(str(indices["puntaje_internacional_maximo"])),
-                "evaluated_documents": len(results),
-                "total_indicators": total,
-                "indicators_compliant": counters["CUMPLE"],
-                "indicators_partial": counters["CUMPLE_PARCIALMENTE"],
-                "indicators_incomplete": counters["INCOMPLETO"],
-                "indicators_non_compliant": counters["NO_CUMPLE"],
-                "indicators_not_presented": counters["NO_PRESENTADO"],
-                "general_observations": general_obs,
-            },
-        )
-        invalidate_dashboard_cache()
-    except Exception as e:
-        logger.error(f"Error guardando resumen de evaluación: {e}")
+    general_obs.append("Evaluación LOTAIP automática: cada criterio aplicable termina con una calificación; si no se acredita el cumplimiento después de los reintentos, se asigna NO/0.")
+
+    # Los índices se obtienen de las rúbricas persistidas en la consulta de
+    # resumen. No almacenar cero para una evaluación todavía pendiente.
+    invalidate_dashboard_cache()
 
     yield json.dumps({
         "status": "done",
-        "msg": f"Validación completada. Índice nacional: {indices['indice_nacional']}% | Nacional + internacional: {indices['indice_nacional_internacional']}%",
+        "msg": ("Evaluación LOTAIP completada."
+                if scope == 'lotaip' else "Evaluación internacional completada."
+                if scope == 'international' else "Diagnósticos completados."),
         "pct": 100,
         "summary": {
-            "total_index": indices["indice_nacional"],
-            "national_index": indices["indice_nacional"],
-            "international_index": indices["indice_internacional"],
-            "integrated_index": indices["indice_nacional_internacional"],
-            "international_average_score": indices["puntaje_internacional_promedio"],
-            "international_max_score": indices["puntaje_internacional_maximo"],
-            "total_indicators": total,
+            **persisted_summary,
+            "ai_tokens_used": ai_budget["used"],
+            "ai_token_limit": ai_budget["limit"],
+            "total_index": national_index,
+            "national_index": national_index,
+            "integrated_index": integrated["index_percent"],
+            "integrated": integrated,
+            "total_indicators": (integrated.get('component_scores', {}).get('international', {}).get('total', 34)
+                                 if scope == 'international' else total),
             "counters": counters,
+            "sita": persisted_summary,
             "general_observations": general_obs,
+            "scope": scope,
         },
     }) + "\n"

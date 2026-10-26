@@ -11,9 +11,38 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
+import shutil
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_env_file(path):
+    """Carga backend/.env sin dependencias externas.
+
+    Las variables ya definidas en el sistema tienen prioridad. El archivo está
+    excluido de Git: allí se guardan las claves de los buscadores.
+    """
+    try:
+        lines = path.read_text(encoding='utf-8-sig').splitlines()
+    except FileNotFoundError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        name, value = line.split('=', 1)
+        name = name.strip().removeprefix('export ').strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        if name:
+            os.environ.setdefault(name, value)
+
+
+_load_env_file(BASE_DIR / '.env')
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -93,6 +122,10 @@ DATABASES = {
         },
     }
 }
+
+# Crea los esquemas PostgreSQL antes de migrar la base de pruebas. El runner
+# rechaza cualquier nombre que no empiece por ``test_``.
+TEST_RUNNER = "config.test_runner.SchemaAwareTestRunner"
 
 
 # Password validation
@@ -185,3 +218,82 @@ SECURE_SSL_REDIRECT = False         # → True en producción
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
 
+# OCR instalado por el usuario y FreeLLMAPI: secretos únicamente en el servidor.
+TESSERACT_CMD = os.environ.get('TESSERACT_CMD', '') or shutil.which('tesseract') or next(
+    (str(candidate) for folder in ('ProgramFiles', 'ProgramFiles(x86)')
+     if os.environ.get(folder)
+     for candidate in [Path(os.environ[folder]) / 'Tesseract-OCR' / 'tesseract.exe']
+     if candidate.is_file()), '')
+LOTAIP_OCR_LANGUAGE = os.environ.get('LOTAIP_OCR_LANGUAGE', 'spa')
+LOTAIP_OCR_TIMEOUT = int(os.environ.get('LOTAIP_OCR_TIMEOUT', '45'))
+LOTAIP_MAX_DOCUMENT_PAGES = int(os.environ.get('LOTAIP_MAX_DOCUMENT_PAGES', '100'))
+LOTAIP_SEMANTIC_SAMPLE_PAGES = int(os.environ.get('LOTAIP_SEMANTIC_SAMPLE_PAGES', '10'))
+LOTAIP_MAX_DOCUMENT_CHARS = int(os.environ.get('LOTAIP_MAX_DOCUMENT_CHARS', '100000'))
+# Una matriz normativa puede superar 140 verificables. Diez minutos dejaban
+# sin intentar todas las filas posteriores aunque la descarga, el OCR y la IA
+# estuvieran funcionando correctamente. Este valor es un techo, no una espera:
+# los paquetes pequeños terminan en cuanto concluye su comprobación.
+LOTAIP_PACKAGE_TIMEOUT = int(os.environ.get('LOTAIP_PACKAGE_TIMEOUT', '1800'))
+LOTAIP_RUN_STALE_SECONDS = int(os.environ.get('LOTAIP_RUN_STALE_SECONDS', '7200'))
+LOTAIP_MAX_DOWNLOAD_BYTES = int(os.environ.get('LOTAIP_MAX_DOWNLOAD_BYTES', str(32 * 1024 * 1024)))
+FREELLMAPI_BASE_URL = os.environ.get('FREELLMAPI_BASE_URL', 'http://127.0.0.1:31415/v1')
+FREELLMAPI_API_KEY = os.environ.get('FREELLMAPI_API_KEY', '')
+if not FREELLMAPI_API_KEY:
+    try:
+        FREELLMAPI_API_KEY = (BASE_DIR / '.freellmapi-key').read_text(encoding='utf-8').strip()
+    except FileNotFoundError:
+        pass
+FREELLMAPI_MODEL = os.environ.get('FREELLMAPI_MODEL', 'auto:reliable')
+FREELLMAPI_SEARCH_MODEL = os.environ.get('FREELLMAPI_SEARCH_MODEL', 'gemini-flash')
+FREELLMAPI_TIMEOUT = int(os.environ.get('FREELLMAPI_TIMEOUT', '60'))
+FREELLMAPI_MAX_ATTEMPTS = int(os.environ.get('FREELLMAPI_MAX_ATTEMPTS', '3'))
+FREELLMAPI_RETRY_BASE_SECONDS = float(os.environ.get('FREELLMAPI_RETRY_BASE_SECONDS', '5'))
+FREELLMAPI_MAX_RETRY_SECONDS = float(os.environ.get('FREELLMAPI_MAX_RETRY_SECONDS', '30'))
+FREELLMAPI_MIN_INTERVAL_SECONDS = float(os.environ.get('FREELLMAPI_MIN_INTERVAL_SECONDS', '1'))
+FREELLMAPI_MAX_INPUT_CHARS = int(os.environ.get('FREELLMAPI_MAX_INPUT_CHARS', '1500'))
+FREELLMAPI_MAX_OUTPUT_TOKENS = int(os.environ.get('FREELLMAPI_MAX_OUTPUT_TOKENS', '400'))
+FREELLMAPI_BATCH_SIZE = int(os.environ.get('FREELLMAPI_BATCH_SIZE', '12'))
+FREELLMAPI_BATCH_MAX_OUTPUT_TOKENS = int(os.environ.get('FREELLMAPI_BATCH_MAX_OUTPUT_TOKENS', '2400'))
+FREELLMAPI_MAX_TOKENS_PER_RUN = int(os.environ.get('FREELLMAPI_MAX_TOKENS_PER_RUN', '200000'))
+FREELLMAPI_CONCURRENCY = int(os.environ.get('FREELLMAPI_CONCURRENCY', '1'))
+FREELLMAPI_ANALYSIS_CACHE_SIZE = int(os.environ.get('FREELLMAPI_ANALYSIS_CACHE_SIZE', '4096'))
+INTERNATIONAL_SEARCH_CACHE_HOURS = int(os.environ.get('INTERNATIONAL_SEARCH_CACHE_HOURS', '168'))
+INTERNATIONAL_EVIDENCE_CACHE_HOURS = int(os.environ.get('INTERNATIONAL_EVIDENCE_CACHE_HOURS', '168'))
+INTERNATIONAL_RESULT_CACHE_HOURS = int(os.environ.get('INTERNATIONAL_RESULT_CACHE_HOURS', '168'))
+INTERNATIONAL_GROUP_MAX_RESULTS = int(os.environ.get('INTERNATIONAL_GROUP_MAX_RESULTS', '10'))
+INTERNATIONAL_INDICATOR_MAX_RESULTS = int(os.environ.get('INTERNATIONAL_INDICATOR_MAX_RESULTS', '10'))
+INTERNATIONAL_MAX_DOWNLOADS_PER_QUERY = int(os.environ.get('INTERNATIONAL_MAX_DOWNLOADS_PER_QUERY', '6'))
+INTERNATIONAL_MAX_DOCUMENTS_PER_INDICATOR = int(os.environ.get('INTERNATIONAL_MAX_DOCUMENTS_PER_INDICATOR', '4'))
+INTERNATIONAL_MIN_DOCUMENT_QUALITY = int(os.environ.get('INTERNATIONAL_MIN_DOCUMENT_QUALITY', '45'))
+INTERNATIONAL_MIN_INDEXED_SNIPPET_CHARS = int(os.environ.get('INTERNATIONAL_MIN_INDEXED_SNIPPET_CHARS', '120'))
+INTERNATIONAL_CACHE_MAX_CHARS = int(os.environ.get('INTERNATIONAL_CACHE_MAX_CHARS', '500000'))
+INTERNATIONAL_AI_BATCH_SIZE = int(os.environ.get('INTERNATIONAL_AI_BATCH_SIZE', '4'))
+
+# Buscadores directos para la evaluación internacional (claves en backend/.env).
+TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
+EXA_API_KEY = os.environ.get('EXA_API_KEY', '')
+FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
+LINKUP_API_KEY = os.environ.get('LINKUP_API_KEY', '')
+SERP_API_KEY = os.environ.get('SERP_API_KEY', '')
+# 'serpapi' (serpapi.com) o 'serper' (serper.dev).
+SERP_PROVIDER = os.environ.get('SERP_PROVIDER', 'serpapi')
+SEARCH_DIRECT_ENABLED = os.environ.get('SEARCH_DIRECT_ENABLED', '1').lower() not in {'0', 'false', 'no'}
+SEARCH_PROVIDER_TIMEOUT = int(os.environ.get('SEARCH_PROVIDER_TIMEOUT', '45'))
+SEARCH_PROVIDER_CONTENT_CHARS = int(os.environ.get('SEARCH_PROVIDER_CONTENT_CHARS', '60000'))
+TAVILY_SEARCH_DEPTH = os.environ.get('TAVILY_SEARCH_DEPTH', 'advanced')
+EXA_SEARCH_TYPE = os.environ.get('EXA_SEARCH_TYPE', 'auto')
+LINKUP_DEPTH = os.environ.get('LINKUP_DEPTH', 'standard')
+FIRECRAWL_API_BASE = os.environ.get('FIRECRAWL_API_BASE', 'https://api.firecrawl.dev/v1')
+INTERNATIONAL_SITE_MAP_LIMIT = int(os.environ.get('INTERNATIONAL_SITE_MAP_LIMIT', '3000'))
+INTERNATIONAL_SITE_MAP_CANDIDATES = int(os.environ.get('INTERNATIONAL_SITE_MAP_CANDIDATES', '5'))
+INTERNATIONAL_SITE_MAP_CACHE_HOURS = int(os.environ.get('INTERNATIONAL_SITE_MAP_CACHE_HOURS', '336'))
+INTERNATIONAL_THIN_PAGE_CHARS = int(os.environ.get('INTERNATIONAL_THIN_PAGE_CHARS', '200'))
+INTERNATIONAL_MIN_PROVIDER_EXTRACT_CHARS = int(os.environ.get('INTERNATIONAL_MIN_PROVIDER_EXTRACT_CHARS', '300'))
+INTERNATIONAL_DEEP_SEARCH = os.environ.get('INTERNATIONAL_DEEP_SEARCH', '1').lower() not in {'0', 'false', 'no'}
+# Páginas leídas de cada PDF de evidencia web (informes de rendición de cuentas
+# superan las 30 páginas y traen las cifras en la segunda mitad).
+INTERNATIONAL_MAX_PDF_PAGES = int(os.environ.get('INTERNATIONAL_MAX_PDF_PAGES', str(LOTAIP_MAX_DOCUMENT_PAGES)))
+# Años ya cerrados: las páginas HTML del portal se leen desde la copia del
+# Internet Archive más cercana al 31 de diciembre de ese año.
+INTERNATIONAL_WAYBACK_ENABLED = os.environ.get('INTERNATIONAL_WAYBACK_ENABLED', '1').lower() not in {'0', 'false', 'no'}
+INTERNATIONAL_WAYBACK_MAX_DAYS = int(os.environ.get('INTERNATIONAL_WAYBACK_MAX_DAYS', '183'))

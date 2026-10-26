@@ -25,9 +25,22 @@ from .validation_views import (
     validate_document, validate_all_university,
     get_validation_result, get_compliance_summary, get_observations,
     get_latest_validation_period,
+    review_lotaip_criteria,
+    lotaip_run_detail, lotaip_numerals, manual_review_item,
+    lotaip_link_review_queue, lotaip_link_review_decide, cancel_lotaip_run,
+    retry_international_indicator, clear_international_cache,
 )
+from .transparency_views import transparency_model
 
 urlpatterns = [
+    path("transparency-model/", transparency_model, name="transparency_model"),
+    path("lotaip/config/numerales/", lotaip_numerals, name="lotaip_numerals"),
+    path("lotaip/ejecuciones/<int:run_id>/", lotaip_run_detail, name="lotaip_run_detail"),
+    path("lotaip/ejecuciones/<int:run_id>/cancelar/", cancel_lotaip_run, name="cancel_lotaip_run"),
+    path("evaluacion/documentos/<int:ev_id>/revision-manual/", manual_review_item, name="lotaip_manual_review"),
+    path("lotaip/ejecuciones/<int:run_id>/cola-revision/", lotaip_link_review_queue, name="lotaip_link_review_queue"),
+    path("lotaip/cola-revision/<int:item_id>/decidir/", lotaip_link_review_decide, name="lotaip_link_review_decide"),
+    path("evaluacion/documentos/<int:ev_id>/criterios/", review_lotaip_criteria, name="review_lotaip_criteria"),
     # Auth
     path("auth/register/", register_user,   name="register_user"),
     path("auth/login/",    login_user,       name="login_user"),
@@ -80,4 +93,6 @@ urlpatterns = [
     path("evaluacion/universidades/<int:univ_id>/resumen/",                 get_compliance_summary,   name="get_compliance_summary"),
     path("evaluacion/universidades/<int:univ_id>/ultimo-periodo/",         get_latest_validation_period, name="get_latest_validation_period"),
     path("evaluacion/universidades/<int:univ_id>/observaciones/",           get_observations,         name="get_observations"),
+    path("evaluacion/universidades/<int:univ_id>/internacionales/<str:indicator_code>/reintentar/", retry_international_indicator, name="retry_international_indicator"),
+    path("evaluacion/universidades/<int:univ_id>/internacionales/cache/<str:dimension_code>/limpiar/", clear_international_cache, name="clear_international_cache"),
 ]

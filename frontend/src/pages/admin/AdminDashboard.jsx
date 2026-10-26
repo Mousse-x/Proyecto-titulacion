@@ -61,7 +61,7 @@ export default function AdminDashboard() {
         <StatCard icon="⏳" label="Pendientes de revisión"   value={loading ? '—' : stats.pending_reviews}    color="var(--warning)"   iconBg="var(--warning-subtle)" changeDir="down" />
         <StatCard icon="✅" label="Documentos aprobados"     value={loading ? '—' : stats.approved_docs}      color="var(--success)"   iconBg="var(--success-subtle)" />
         <StatCard icon="📊" label="Indice nacional"          value={loading ? '—' : stats.avg_transparency}   color="var(--info)"      iconBg="var(--info-subtle)" suffix="%" />
-        <StatCard icon="🌐" label="Nacional + internacional" value={loading ? '—' : stats.avg_transparency_integrated} color="var(--primary)" iconBg="var(--primary-subtle)" suffix="%" />
+        <StatCard icon="🌐" label="Índice final ITI" value={loading ? '—' : stats.avg_transparency_integrated} color="var(--primary)" iconBg="var(--primary-subtle)" suffix="%" />
         <StatCard icon="👥" label="Usuarios activos"         value={loading ? '—' : stats.active_users}       color="var(--secondary)" iconBg="rgba(139,92,246,0.12)" />
         <StatCard icon="💬" label="Observaciones abiertas"   value={loading ? '—' : stats.observations_open}  color="var(--danger)"    iconBg="var(--danger-subtle)" changeDir="down" />
         <StatCard icon="📋" label="Indicadores activos"      value={loading ? '—' : stats.indicators_active}  color="var(--accent)"    iconBg="var(--accent-subtle)" />

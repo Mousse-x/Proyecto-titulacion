@@ -18,11 +18,10 @@ from django.db import transaction
 from django.core.files.storage import default_storage
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 from email.utils import parseaddr
-from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, Evaluation, CategoryResult, FinalResult, Feedback, EvidenceValidationResult, UniversityEvaluationSummary, UserFeedback
+from .models import AppUser, Role, AuditLog, AuditError, University, Indicator, Category, PasswordResetToken, Evidence, EvaluationPeriod, Evaluation, CategoryResult, FinalResult, Feedback, EvidenceValidationResult, UniversityEvaluationSummary, UserFeedback, IntegratedTransparencyResult
 from .encryption import encrypt_email, decrypt_email, hash_email, encrypt_field, decrypt_field
 from .middleware import generate_jwt, require_auth, require_role
 from .sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
-from .services.international_evaluator import evaluate_international_standards
 from .cache_utils import stats_cache_key
 from .otp_mailer import enqueue_otp_email
 
@@ -177,63 +176,46 @@ def _serialize_university(request, university, score_data=None):
     }
 
 
-def _get_university_score_data():
-    summaries = UniversityEvaluationSummary.objects.select_related("university").filter(
-        university__is_active=True
-    )
-    by_university = {}
-
-    for summary in summaries:
-        count = int(summary.evaluated_documents or summary.total_indicators or 0)
-        if count <= 0:
-            continue
-        bucket = by_university.setdefault(
-            summary.university_id,
-            {"score_sum": 0, "integrated_score_sum": 0, "count": 0},
+def _get_university_score_data(validations=None):
+    from .services.evaluator import is_lotaip_dictionary
+    from .services.lotaip_rubric import summarize_rubrics
+    if validations is None:
+        validations = EvidenceValidationResult.objects.select_related(
+            "evidence", "evidence__university", "evidence__indicator", "evidence__period"
         )
-        bucket["score_sum"] += float(summary.national_index or summary.total_index or 0) * count
-        bucket["integrated_score_sum"] += float(summary.integrated_index or summary.total_index or 0) * count
-        bucket["count"] += count
-
-    if not by_university:
-        validations = EvidenceValidationResult.objects.select_related("evidence", "evidence__university")
-        for vr in validations:
-            if not vr.evidence_id or not vr.evidence.university_id:
-                continue
-
-            bucket = by_university.setdefault(
-                vr.evidence.university_id,
-                {"score_sum": 0, "integrated_score_sum": 0, "count": 0},
-            )
-            national_score = float(vr.total_score)
-            bucket["score_sum"] += national_score
-            international = evaluate_international_standards(
-                vr.evidence,
-                lotaip_result={
-                    "puntaje_total": national_score,
-                    "puntaje_estructura": float(vr.score_structure),
-                },
-            )
-            bucket["integrated_score_sum"] += international["indice_nacional_internacional"]
-            bucket["count"] += 1
-
+    groups = {}
+    for vr in validations:
+        if vr.evidence_id and vr.evidence.university_id:
+            groups.setdefault(vr.evidence.university_id, []).append(vr)
     ranked = []
-    for university_id, item in by_university.items():
-        count = item["count"]
-        ranked.append((
-            university_id,
-            {
-                "transparency_score": round(item["score_sum"] / count, 2) if count else 0,
-                "integrated_transparency_score": round(item["integrated_score_sum"] / count, 2) if count else 0,
-                "evaluated_documents": count,
-            },
-        ))
-
-    ranked.sort(key=lambda entry: entry[1]["transparency_score"], reverse=True)
-    return {
-        university_id: {**score, "rank": index + 1}
-        for index, (university_id, score) in enumerate(ranked)
-    }
+    for university_id, rows in groups.items():
+        rows = [vr for vr in rows if not is_lotaip_dictionary(vr.evidence)]
+        if not rows:
+            continue
+        latest_period_id = max(
+            rows,
+            key=lambda vr: (vr.evidence.period.year, vr.evidence.period.month or 0, vr.evidence.period_id),
+        ).evidence.period_id
+        rows = [vr for vr in rows if vr.evidence.period_id == latest_period_id]
+        if any(not vr.lotaip_rubric for vr in rows):
+            continue  # Los resultados históricos requieren revalidación.
+        sita = summarize_rubrics([vr.lotaip_rubric for vr in rows])
+        national_index = sita.get("puntaje")
+        integrated = IntegratedTransparencyResult.objects.filter(
+            university_id=university_id,
+            period_id=latest_period_id,
+            index_percent__isnull=False,
+            is_provisional=False,
+        ).order_by('-month', '-calculated_at').first()
+        if national_index is None or integrated is None:
+            continue  # Pendiente no equivale a cero ni entra en rankings.
+        ranked.append((university_id, {
+            "transparency_score": national_index,
+            "integrated_transparency_score": float(integrated.index_percent),
+            "evaluated_documents": len(rows),
+        }))
+    ranked.sort(key=lambda item: item[1]["integrated_transparency_score"], reverse=True)
+    return {uid: {**score, "rank": i + 1} for i, (uid, score) in enumerate(ranked)}
 
 
 # Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers de auditorÃƒÂ­a Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -1386,111 +1368,20 @@ def system_stats(request):
                 evidences = evidences.filter(month=month)
                 validations = validations.filter(evidence__month=month)
 
+            scores = _get_university_score_data(validations)
             ranking = []
-            national_sum = 0
-            integrated_sum = 0
-            validation_count = 0
-
-            if not month:
-                summaries = UniversityEvaluationSummary.objects.select_related("university").filter(
-                    university__is_active=True
-                )
-                if period_id:
-                    summaries = summaries.filter(period_id=period_id)
-
-                by_university = {}
-                for summary in summaries:
-                    count = int(summary.evaluated_documents or summary.total_indicators or 0)
-                    if count <= 0:
-                        continue
-                    national_score = float(summary.national_index or summary.total_index or 0)
-                    integrated_score = float(summary.integrated_index or summary.total_index or 0)
-                    national_sum += national_score * count
-                    integrated_sum += integrated_score * count
-                    validation_count += count
-
-                    bucket = by_university.setdefault(summary.university_id, {
-                        "id": summary.university_id,
-                        "name": summary.university.acronym,
-                        "full_name": summary.university.name,
-                        "logo_url": _logo_url(request, _resolve_university_logo_path(summary.university)),
-                        "logo_path": _resolve_university_logo_path(summary.university) or "",
-                        "logo_initials": summary.university.acronym[:4] if summary.university.acronym else "UNIV",
-                        "score_sum": 0,
-                        "integrated_score_sum": 0,
-                        "count": 0,
-                    })
-                    bucket["score_sum"] += national_score * count
-                    bucket["integrated_score_sum"] += integrated_score * count
-                    bucket["count"] += count
-
-                for item in by_university.values():
-                    ranking.append({
-                        "id": item["id"],
-                        "name": item["name"],
-                        "full_name": item["full_name"],
-                        "logo_url": item["logo_url"],
-                        "logo_path": item["logo_path"],
-                        "logo_initials": item["logo_initials"],
-                        "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
-                        "integrated_transparency_score": round(item["integrated_score_sum"] / item["count"], 2) if item["count"] else 0,
-                        "evaluated_documents": item["count"],
-                    })
-
-            if not ranking:
-                validation_rows = list(validations)
-                validation_count = len(validation_rows)
-                national_sum = 0
-                integrated_sum = 0
-                by_university = {}
-
-                for vr in validation_rows:
-                    national_score = float(vr.total_score)
-                    international = evaluate_international_standards(
-                        vr.evidence,
-                        lotaip_result={
-                            "puntaje_total": national_score,
-                            "puntaje_estructura": float(vr.score_structure),
-                        },
-                    )
-                    integrated_score = international["indice_nacional_internacional"]
-                    national_sum += national_score
-                    integrated_sum += integrated_score
-
-                    univ = vr.evidence.university
-                    if not univ:
-                        continue
-                    bucket = by_university.setdefault(univ.id, {
-                        "id": univ.id,
-                        "name": univ.acronym,
-                        "full_name": univ.name,
-                        "logo_url": _logo_url(request, _resolve_university_logo_path(univ)),
-                        "logo_path": _resolve_university_logo_path(univ) or "",
-                        "logo_initials": univ.acronym[:4] if univ.acronym else "UNIV",
-                        "score_sum": 0,
-                        "integrated_score_sum": 0,
-                        "count": 0,
-                    })
-                    bucket["score_sum"] += national_score
-                    bucket["integrated_score_sum"] += integrated_score
-                    bucket["count"] += 1
-
-                for item in by_university.values():
-                    ranking.append({
-                        "id": item["id"],
-                        "name": item["name"],
-                        "full_name": item["full_name"],
-                        "logo_url": item["logo_url"],
-                        "logo_path": item["logo_path"],
-                        "logo_initials": item["logo_initials"],
-                        "transparency_score": round(item["score_sum"] / item["count"], 2) if item["count"] else 0,
-                        "integrated_transparency_score": round(item["integrated_score_sum"] / item["count"], 2) if item["count"] else 0,
-                        "evaluated_documents": item["count"],
-                    })
-
-            avg_transparency = round(national_sum / validation_count, 2) if validation_count else 0
-            avg_transparency_integrated = round(integrated_sum / validation_count, 2) if validation_count else 0
-            ranking.sort(key=lambda item: item["transparency_score"], reverse=True)
+            for univ in University.objects.filter(id__in=scores, is_active=True):
+                ranking.append({
+                    "id": univ.id, "name": univ.acronym, "full_name": univ.name,
+                    "logo_url": _logo_url(request, _resolve_university_logo_path(univ)),
+                    "logo_path": _resolve_university_logo_path(univ) or "",
+                    "logo_initials": univ.acronym[:4] if univ.acronym else "UNIV",
+                    **scores[univ.id],
+                })
+            ranking.sort(key=lambda item: item["integrated_transparency_score"], reverse=True)
+            validation_count = sum(item["evaluated_documents"] for item in ranking)
+            avg_transparency = round(sum(item["transparency_score"] for item in ranking) / len(ranking), 2) if ranking else 0
+            avg_transparency_integrated = round(sum(item["integrated_transparency_score"] for item in ranking) / len(ranking), 2) if ranking else 0
 
             recent_documents = [
                 {

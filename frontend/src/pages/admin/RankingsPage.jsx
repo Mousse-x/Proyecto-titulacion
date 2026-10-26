@@ -108,7 +108,7 @@ export default function RankingsPage() {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <ScoreCard score={selected.transparency_score || 0} size={82} label="Nacional" />
-                      <ScoreCard score={selected.integrated_transparency_score || 0} size={82} label="Nacional + internacional" />
+                      <ScoreCard score={selected.integrated_transparency_score || 0} size={82} label="Índice final ITI" />
                     </div>
                     <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.8125rem' }}>
                       {selected.evaluated_documents || 0} documentos evaluados

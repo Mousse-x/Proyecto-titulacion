@@ -157,7 +157,7 @@ const ADMIN_NAV = [
   { label: 'Ponderaciones', icon: 'PO', to: '/admin/weightings' },
   { section: 'Documentos' },
   { label: 'Gestion Documental', icon: 'GD', to: '/admin/documents' },
-  { label: 'Evaluacion LOTAIP', icon: 'EV', to: '/admin/validation' },
+  { label: 'Evaluación de transparencia', icon: 'EV', to: '/admin/validation' },
   { section: 'Resultados' },
   { label: 'Rankings', icon: 'RK', to: '/admin/rankings' },
   { label: 'Reportes', icon: 'RP', to: '/admin/reports' },
@@ -177,7 +177,7 @@ const UNIV_NAV = [
   { label: 'Reportes', icon: 'RP', to: '/university/reports' },
   { section: 'Cumplimiento' },
   { label: 'Documentos', icon: 'DO', to: '/university/documents' },
-  { label: 'Evaluacion LOTAIP', icon: 'EV', to: '/university/validation' },
+  { label: 'Evaluación de transparencia', icon: 'EV', to: '/university/validation' },
   { label: 'Comentarios', icon: 'FB', to: '/university/feedback' },
 ];
 
@@ -191,7 +191,7 @@ const AUDITOR_NAV = [
   { label: 'Reportes', icon: 'RP', to: '/auditor/reports' },
   { section: 'Documentos' },
   { label: 'Lista de Cumplimiento', icon: 'LC', to: '/auditor/documents' },
-  { label: 'Evaluacion LOTAIP', icon: 'EV', to: '/auditor/validation' },
+  { label: 'Evaluación de transparencia', icon: 'EV', to: '/auditor/validation' },
 ];
 
 const navsByRole = { 1: ADMIN_NAV, 2: UNIV_NAV, 3: UNIV_NAV, 4: AUDITOR_NAV };

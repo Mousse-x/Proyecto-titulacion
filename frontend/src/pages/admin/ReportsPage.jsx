@@ -59,7 +59,7 @@ function htmlReport({ title, subtitle, rows, stats, logoUrl, autoPrint = false }
     ['Documentos', stats.total_documents],
     ['Evaluados', stats.evaluated_documents],
     ['Indice nacional', `${stats.avg_transparency || 0}%`],
-    ['Nacional + internacional', `${stats.avg_transparency_integrated || 0}%`],
+    ['Índice final ITI', `${stats.avg_transparency_integrated || 0}%`],
   ];
 
   return `<!doctype html>
@@ -220,7 +220,7 @@ export default function ReportsPage() {
           Universidad: item.name,
           Nombre: item.full_name,
           'Indice nacional': item.transparency_score,
-          'Nacional + internacional': item.integrated_transparency_score,
+          'Índice final ITI': item.integrated_transparency_score,
           'Documentos evaluados': item.evaluated_documents,
         }));
     }
@@ -349,7 +349,7 @@ export default function ReportsPage() {
         <StatBox label="Documentos" value={stats?.total_documents || 0} />
         <StatBox label="Evaluados" value={stats?.evaluated_documents || 0} />
         <StatBox label="Indice nacional" value={`${stats?.avg_transparency || 0}%`} />
-        <StatBox label="Nacional + internacional" value={`${stats?.avg_transparency_integrated || 0}%`} />
+        <StatBox label="Índice final ITI" value={`${stats?.avg_transparency_integrated || 0}%`} />
       </div>
 
       <div className="grid-12">

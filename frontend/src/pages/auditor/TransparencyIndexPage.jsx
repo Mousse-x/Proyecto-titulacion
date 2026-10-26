@@ -71,6 +71,7 @@ export default function TransparencyIndexPage() {
   const [selectedId, setSelectedId] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [evolutionResults, setEvolutionResults] = useState([]);
+  const [integratedResult, setIntegratedResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [evolutionLoading, setEvolutionLoading] = useState(false);
 
@@ -93,13 +94,13 @@ export default function TransparencyIndexPage() {
 
   useEffect(() => {
     if (!selectedId) {
-      setSelectedPeriod('');
-      setEvolutionResults([]);
       return;
     }
 
     let cancelled = false;
-    setEvolutionLoading(true);
+    Promise.resolve().then(() => {
+      if (!cancelled) setEvolutionLoading(true);
+    });
     validationApi.getLatestPeriod(selectedId)
       .then((res) => {
         const period = res.data?.period;
@@ -117,12 +118,14 @@ export default function TransparencyIndexPage() {
       .then((res) => {
         if (!cancelled && res) {
           setEvolutionResults(res.data.results || []);
+          setIntegratedResult(res.data.summary?.integrated || null);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSelectedPeriod('');
           setEvolutionResults([]);
+          setIntegratedResult(null);
         }
       })
       .finally(() => {
@@ -135,7 +138,7 @@ export default function TransparencyIndexPage() {
   const selected = rankings.find((u) => String(u.id) === String(selectedId)) || rankings[0];
   const selectedUniversity = universities.find((u) => String(u.id) === String(selectedId)) || selected || {};
   const national = selected?.transparency_score || 0;
-  const integrated = selected?.integrated_transparency_score || 0;
+  const integrated = integratedResult?.index_percent ?? selected?.integrated_transparency_score ?? null;
   const evaluatedDocs = selected?.evaluated_documents || 0;
   const institutionName = selectedUniversity.full_name || selected?.full_name || selected?.name || 'Universidad';
   const institutionAcronym = selectedUniversity.name || selected?.name || 'UNIV';
@@ -151,12 +154,10 @@ export default function TransparencyIndexPage() {
         acc[label] = {
           periodo: label,
           nacionalTotal: 0,
-          integradoTotal: 0,
           documentos: 0,
         };
       }
       acc[label].nacionalTotal += Number(result.puntaje_total || 0);
-      acc[label].integradoTotal += Number(result.evaluacion_internacional?.indice_nacional_internacional || result.puntaje_total || 0);
       acc[label].documentos += 1;
       return acc;
     }, {});
@@ -168,53 +169,25 @@ export default function TransparencyIndexPage() {
           periodo: item.periodo,
           sort: Number(year) * 100 + (MONTH_ORDER[monthName] || 0),
           nacional: Number((item.nacionalTotal / item.documentos).toFixed(2)),
-          integrado: Number((item.integradoTotal / item.documentos).toFixed(2)),
           documentos: item.documentos,
         };
       })
       .sort((a, b) => a.sort - b.sort);
   }, [evolutionResults]);
 
-  const internationalRadarData = useMemo(() => {
-    const standards = [
-      { key: 'ogp', subject: 'OGP' },
-      { key: 'ocde', subject: 'OCDE' },
-      { key: 'ods', subject: 'ODS 16' },
-    ];
-
-    const rows = standards.map((standard) => {
-      const values = evolutionResults
-        .map((result) => result.evaluacion_internacional?.[standard.key]?.porcentaje)
-        .filter((value) => value !== undefined && value !== null)
-        .map(Number);
-
-      const score = values.length
-        ? values.reduce((sum, value) => sum + value, 0) / values.length
-        : 0;
-
-      return {
-        subject: standard.subject,
-        score: Number(score.toFixed(2)),
-      };
-    });
-
-    const promedio = rows.length
-      ? rows.reduce((sum, row) => sum + row.score, 0) / rows.length
-      : 0;
-
-    return [
-      { subject: 'LOTAIP', score: Number(Number(national || 0).toFixed(2)) },
-      ...rows,
-      { subject: 'Promedio internacional', score: Number(promedio.toFixed(2)) },
-    ];
-  }, [evolutionResults, national]);
+  const dimensionData = useMemo(() => (integratedResult?.dimension_scores || []).map((dimension) => ({
+    subject: `${dimension.code} · ${dimension.name}`,
+    score: dimension.score == null ? 0 : Number(dimension.score),
+    pending: dimension.pending || 0,
+    weight: dimension.weight,
+  })), [integratedResult]);
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
       <div className="page-header">
         <div className="page-header-info">
           <h1>Indice de Transparencia Institucional</h1>
-          <p>Valores reales calculados desde las validaciones LOTAIP e internacionales</p>
+          <p>Un único resultado ponderado a partir de LOTAIP y los complementos internacionales verificables</p>
         </div>
         <div className="page-header-actions">
           <select
@@ -257,12 +230,17 @@ export default function TransparencyIndexPage() {
               </div>
               <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
                 <ScoreCard score={national} size={90} label="Indice nacional" />
-                <ScoreCard score={integrated} size={90} label="Nacional + internacional" />
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: getScoreColor(integrated), lineHeight: 1 }}>
-                    {getScoreLabel(integrated)}
+                {integrated == null ? (
+                  <div style={{ width: 110, textAlign: 'center', color: 'var(--warning)', fontWeight: 800 }}>
+                    <div style={{ fontSize: '1rem' }}>Pendiente</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: 4 }}>Índice final ITI</div>
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: 4 }}>Clasificacion integrada</div>
+                ) : <ScoreCard score={integrated} size={90} label="Índice final ITI" />}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated), lineHeight: 1 }}>
+                    {integrated == null ? 'Pendiente' : getScoreLabel(integrated)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: 4 }}>Clasificación del ITI</div>
                 </div>
               </div>
             </div>
@@ -321,15 +299,15 @@ export default function TransparencyIndexPage() {
                   <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 8 }}>Indicadores actuales</div>
                   {[
                     { label: 'Indice nacional', score: national },
-                    { label: 'Nacional + internacional', score: integrated },
+                    { label: 'Índice final ITI', score: integrated },
                   ].map((item) => (
                     <div key={item.label} style={{ marginBottom: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, gap: 10 }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{item.label}</span>
-                        <span style={{ fontWeight: 900, color: getScoreColor(item.score) }}>{item.score}%</span>
+                        <span style={{ fontWeight: 900, color: item.score == null ? 'var(--warning)' : getScoreColor(item.score) }}>{item.score == null ? 'Pendiente' : `${item.score}%`}</span>
                       </div>
                       <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${item.score}%`, background: getScoreColor(item.score) }} />
+                        <div className="progress-fill" style={{ width: `${item.score || 0}%`, background: item.score == null ? 'var(--warning)' : getScoreColor(item.score) }} />
                       </div>
                     </div>
                   ))}
@@ -341,7 +319,7 @@ export default function TransparencyIndexPage() {
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontWeight: 700 }}>Documentos evaluados</div>
                   </div>
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: getScoreColor(integrated) }}>{getScoreLabel(integrated)}</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated) }}>{integrated == null ? 'Pendiente' : getScoreLabel(integrated)}</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontWeight: 700 }}>Clasificacion</div>
                   </div>
                 </div>
@@ -367,7 +345,6 @@ export default function TransparencyIndexPage() {
                     <Tooltip content={<EvolutionTooltip />} />
                     <Legend wrapperStyle={{ paddingTop: 12, fontSize: '0.8125rem' }} />
                     <Line name="Indice nacional" type="monotone" dataKey="nacional" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, strokeWidth: 0, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
-                    <Line name="Nacional + internacional" type="monotone" dataKey="integrado" stroke="var(--success)" strokeWidth={2.4} dot={{ r: 4, strokeWidth: 0, fill: 'var(--success)' }} activeDot={{ r: 6 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -382,25 +359,25 @@ export default function TransparencyIndexPage() {
 
           <div className="grid-21" style={{ marginBottom: 24 }}>
             <div className="chart-card">
-              <div className="chart-title">Evaluacion por estandares internacionales</div>
+              <div className="chart-title">Resultado por dimensión integrada</div>
               {evolutionLoading ? (
                 <div className="empty-state" style={{ minHeight: 300 }}>
-                  <h4>Cargando evaluacion internacional...</h4>
+                  <h4>Cargando dimensiones…</h4>
                 </div>
-              ) : evolutionResults.length === 0 ? (
+              ) : dimensionData.length === 0 ? (
                 <div className="empty-state" style={{ minHeight: 300 }}>
-                  <h4>Sin evaluacion internacional</h4>
-                  <p>No hay resultados validados para construir el perfil internacional.</p>
+                  <h4>Sin resultado integrado</h4>
+                  <p>Ejecuta la evaluación para calcular las ocho dimensiones.</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={internationalRadarData} layout="vertical" margin={{ top: 8, right: 34, bottom: 8, left: 28 }}>
+                  <BarChart data={dimensionData} layout="vertical" margin={{ top: 8, right: 34, bottom: 8, left: 28 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border-light)" />
                     <XAxis type="number" domain={[0, 100]} tick={{ fill: 'var(--text-subtle)', fontSize: 11 }} axisLine={false} tickLine={false} />
                     <YAxis type="category" dataKey="subject" width={138} tick={{ fill: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
                     <Tooltip content={<InternationalTooltip />} />
                     <Bar dataKey="score" radius={[0, 8, 8, 0]} barSize={28}>
-                      {internationalRadarData.map((item) => (
+                      {dimensionData.map((item) => (
                         <Cell key={item.subject} fill={getScoreColor(item.score)} />
                       ))}
                     </Bar>
@@ -409,14 +386,14 @@ export default function TransparencyIndexPage() {
               )}
             </div>
             <div className="card">
-              <div className="card-title" style={{ marginBottom: 14 }}>Marcos internacionales</div>
-              {internationalRadarData.map((item) => (
+              <div className="card-title" style={{ marginBottom: 14 }}>Dimensiones y ponderaciones</div>
+              {dimensionData.map((item) => (
                 <div key={item.subject} style={{ marginBottom: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, gap: 12 }}>
                     <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{item.subject}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontWeight: 800, color: getScoreColor(item.score) }}>{item.score}%</span>
-                      <Badge status={getScoreLabel(item.score)} />
+                      <Badge status={item.pending ? `${item.pending} pendientes` : getScoreLabel(item.score)} />
                     </div>
                   </div>
                   <div className="progress-bar">
@@ -448,9 +425,9 @@ export default function TransparencyIndexPage() {
                     <td><Badge status={getScoreLabel(national)} /></td>
                   </tr>
                   <tr>
-                    <td>Transparencia nacional + internacional</td>
-                    <td><span style={{ fontWeight: 800, color: getScoreColor(integrated) }}>{integrated}%</span></td>
-                    <td><Badge status={getScoreLabel(integrated)} /></td>
+                    <td>Índice de Transparencia Institucional (resultado único)</td>
+                    <td><span style={{ fontWeight: 800, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated) }}>{integrated == null ? 'Pendiente' : `${integrated}%`}</span></td>
+                    <td><Badge status={integrated == null ? 'Provisional' : getScoreLabel(integrated)} /></td>
                   </tr>
                 </tbody>
               </table>

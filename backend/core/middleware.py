@@ -61,7 +61,7 @@ def generate_jwt(user, is_refresh=False):
     payload = {
         "user_id":  user.id,
         "role_id":  user.role_id,
-        "session_id": str(user.session_id) if user.session_id else None,
+        "session_id": str(session_id) if (session_id := getattr(user, "session_id", None)) else None,
         "is_refresh": is_refresh,
         "iat":      now,
         "exp":      now + exp_seconds,

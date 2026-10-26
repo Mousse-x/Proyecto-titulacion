@@ -430,6 +430,8 @@ class EvidenceValidationResult(models.Model):
         NO_CUMPLE           = 'NO_CUMPLE',           'No cumple'
         NO_PRESENTADO       = 'NO_PRESENTADO',       'No presentado'
         ERROR_PROCESAMIENTO = 'ERROR_PROCESAMIENTO', 'Error de procesamiento'
+        PENDIENTE_REVISION = 'PENDIENTE_REVISION', 'Pendiente de revisión'
+        NO_VERIFICABLE = 'NO_VERIFICABLE', 'No verificable automáticamente'
 
     evidence            = models.OneToOneField(Evidence, on_delete=models.CASCADE, related_name='validation_result')
     score_existence     = models.DecimalField(max_digits=5, decimal_places=2, default=0)
@@ -445,6 +447,11 @@ class EvidenceValidationResult(models.Model):
         default=ComplianceStatus.NO_PRESENTADO,
     )
     observations        = models.JSONField(default=list, blank=True)
+    lotaip_rubric        = models.JSONField(default=dict, blank=True)
+    engine_version       = models.CharField(max_length=50, blank=True, default='')
+    automatic_result     = models.JSONField(default=dict, blank=True)
+    manual_override      = models.JSONField(default=dict, blank=True)
+    requires_review      = models.BooleanField(default=False)
     validated_at        = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -455,6 +462,78 @@ class EvidenceValidationResult(models.Model):
 
     def __str__(self):
         return f"Validación {self.evidence_id}: {self.total_score}/100 ({self.compliance_status})"
+
+
+class LotaipEvaluationRun(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDIENTE', 'Pendiente'
+        PROCESSING = 'PROCESANDO', 'Procesando'
+        COMPLETED = 'COMPLETADA', 'Completada'
+        COMPLETED_REVIEWS = 'COMPLETADA_CON_REVISIONES', 'Completada con revisiones'
+        CANCELLED = 'CANCELADA', 'Cancelada'
+        ERROR = 'ERROR', 'Error'
+
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='lotaip_runs')
+    period = models.ForeignKey(EvaluationPeriod, on_delete=models.CASCADE, related_name='lotaip_runs')
+    month = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
+    engine_version = models.CharField(max_length=50)
+    legal_source = models.CharField(max_length=255)
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(AppUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'lotaip_evaluation_runs'
+        ordering = ['-created_at']
+
+
+class LotaipManualReview(models.Model):
+    class Decision(models.TextChoices):
+        ACCEPT = 'ACEPTAR', 'Aceptar cumplimiento'
+        REJECT = 'RECHAZAR', 'Rechazar cumplimiento'
+
+    validation_result = models.ForeignKey(EvidenceValidationResult, on_delete=models.CASCADE, related_name='manual_reviews')
+    criterion = models.CharField(max_length=40)
+    automatic_result = models.JSONField(default=dict)
+    decision = models.CharField(max_length=10, choices=Decision.choices)
+    observation = models.TextField()
+    reviewed_by = models.ForeignKey(AppUser, on_delete=models.PROTECT)
+    reviewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'lotaip_manual_reviews'
+        ordering = ['-reviewed_at']
+
+class LotaipLinkReview(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDIENTE_REVISION', 'Pendiente de revisión'
+        APPROVED = 'APROBADO_MANUALMENTE', 'Aprobado manualmente'
+        REJECTED = 'RECHAZADO_MANUALMENTE', 'Rechazado manualmente'
+    run = models.ForeignKey(LotaipEvaluationRun, on_delete=models.CASCADE, related_name='link_reviews')
+    numeral = models.PositiveSmallIntegerField()
+    format_code = models.CharField(max_length=30)
+    row_number = models.PositiveIntegerField(null=True, blank=True)
+    field_name = models.CharField(max_length=255, blank=True, default='')
+    original_url = models.TextField()
+    final_url = models.TextField(blank=True, default='')
+    http_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    reason_code = models.CharField(max_length=60)
+    expected_identifiers = models.JSONField(default=list)
+    automatic_evidence = models.JSONField(default=dict)
+    automatic_decision = models.CharField(max_length=40)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
+    reviewed_by = models.ForeignKey(AppUser, on_delete=models.PROTECT, null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_observation = models.TextField(blank=True, default='')
+    review_evidence = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table = 'lotaip_link_reviews'
+        ordering = ['numeral', 'original_url']
 
 
 class UniversityEvaluationSummary(models.Model):
@@ -486,3 +565,159 @@ class UniversityEvaluationSummary(models.Model):
 
     def __str__(self):
         return f"{self.university.acronym} - {self.period.period_name}: {self.total_index}%"
+
+
+class TransparencyDimension(models.Model):
+    """Dimensión de la matriz integrada de transparencia institucional."""
+
+    code = models.CharField(max_length=4, unique=True)
+    name = models.CharField(max_length=180)
+    description = models.TextField(blank=True, default='')
+    weight_percent = models.DecimalField(max_digits=5, decimal_places=2, default=12.50)
+    display_order = models.PositiveSmallIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"evaluation"."transparency_dimensions"'
+        ordering = ['display_order', 'code']
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+class IntegratedIndicator(models.Model):
+    """Indicador definitivo del modelo de 58 indicadores de la tesis."""
+
+    class Classification(models.TextChoices):
+        NATIONAL = 'NACIONAL', 'Nacional'
+        MIXED = 'MIXTO', 'Mixto'
+        INTERNATIONAL = 'INTERNACIONAL', 'Internacional complementario'
+
+    dimension = models.ForeignKey(
+        TransparencyDimension, on_delete=models.PROTECT, related_name='indicators',
+    )
+    code = models.CharField(max_length=10, unique=True)
+    statement = models.TextField()
+    classification = models.CharField(max_length=20, choices=Classification.choices)
+    family_code = models.CharField(max_length=12, blank=True, default='')
+    family_name = models.CharField(max_length=250, blank=True, default='')
+    traceability = models.TextField(blank=True, default='')
+    source_frameworks = models.JSONField(default=list, blank=True)
+    lotaip_numerals = models.JSONField(default=list, blank=True)
+    weight_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    display_order = models.PositiveSmallIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"evaluation"."integrated_indicators"'
+        ordering = ['display_order', 'code']
+
+    def __str__(self):
+        return f"{self.code} - {self.get_classification_display()}"
+
+
+class IntegratedIndicatorResult(models.Model):
+    """Resultado trazable de un indicador nacional, mixto o internacional."""
+
+    class Status(models.TextChoices):
+        COMPLIANT = 'CUMPLE', 'Cumple'
+        PARTIAL = 'PARCIAL', 'Cumple parcialmente'
+        NON_COMPLIANT = 'NO_CUMPLE', 'No cumple'
+        NOT_APPLICABLE = 'NO_APLICA', 'No aplica'
+        NO_EVIDENCE = 'SIN_EVIDENCIA', 'Sin evidencia verificable'
+        PENDING = 'PENDIENTE', 'Pendiente'
+        TECHNICAL_ERROR = 'ERROR_TECNICO', 'Error técnico'
+
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='integrated_indicator_results')
+    period = models.ForeignKey(EvaluationPeriod, on_delete=models.CASCADE, related_name='integrated_indicator_results')
+    indicator = models.ForeignKey(IntegratedIndicator, on_delete=models.PROTECT, related_name='results')
+    month = models.PositiveSmallIntegerField(default=0)
+    score = models.DecimalField(max_digits=5, decimal_places=4, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    source_url = models.TextField(blank=True, default='')
+    source_title = models.TextField(blank=True, default='')
+    source_location = models.TextField(blank=True, default='')
+    evidence_excerpt = models.TextField(blank=True, default='')
+    justification = models.TextField(blank=True, default='')
+    search_query = models.TextField(blank=True, default='')
+    metadata = models.JSONField(default=dict, blank=True)
+    evaluated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"evaluation"."integrated_indicator_results"'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['university', 'period', 'month', 'indicator'],
+                name='unique_integrated_indicator_result',
+            ),
+        ]
+        ordering = ['indicator__display_order']
+
+
+class IntegratedTransparencyResult(models.Model):
+    """Índice único y desglose por dimensión con la ponderación usada."""
+
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='integrated_transparency_results')
+    period = models.ForeignKey(EvaluationPeriod, on_delete=models.CASCADE, related_name='integrated_transparency_results')
+    month = models.PositiveSmallIntegerField(default=0)
+    index_percent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    is_provisional = models.BooleanField(default=True)
+    dimension_scores = models.JSONField(default=list, blank=True)
+    coverage = models.JSONField(default=dict, blank=True)
+    weights_snapshot = models.JSONField(default=dict, blank=True)
+    calculated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"evaluation"."integrated_transparency_results"'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['university', 'period', 'month'],
+                name='unique_integrated_transparency_result',
+            ),
+        ]
+
+
+class IntegratedSearchCache(models.Model):
+    """Resultados reutilizables de una búsqueda web agrupada o específica."""
+
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='integrated_search_cache')
+    period = models.ForeignKey(EvaluationPeriod, on_delete=models.CASCADE, related_name='integrated_search_cache')
+    month = models.PositiveSmallIntegerField(default=0)
+    scope = models.CharField(max_length=40)
+    query = models.TextField()
+    results = models.JSONField(default=list, blank=True)
+    expires_at = models.DateTimeField(db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"evaluation"."integrated_search_cache"'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['university', 'period', 'month', 'scope'],
+                name='unique_integrated_search_cache',
+            ),
+        ]
+
+
+class IntegratedWebEvidenceCache(models.Model):
+    """Contenido web verificado compartido por varios indicadores internacionales."""
+
+    university = models.ForeignKey(University, on_delete=models.CASCADE, related_name='integrated_web_evidence_cache')
+    url_hash = models.CharField(max_length=64)
+    url = models.TextField()
+    title = models.TextField(blank=True, default='')
+    content_type = models.CharField(max_length=200, blank=True, default='')
+    located_text = models.TextField()
+    expires_at = models.DateTimeField(db_index=True)
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"evaluation"."integrated_web_evidence_cache"'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['university', 'url_hash'],
+                name='unique_integrated_web_evidence_cache',
+            ),
+        ]

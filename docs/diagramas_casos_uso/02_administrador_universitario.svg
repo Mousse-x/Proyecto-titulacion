@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1500" viewBox="0 0 2400 1500">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<defs><marker id="openArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M 10 1 L 1 6 L 10 11" fill="none" stroke="#111111" stroke-width="1.5"/></marker></defs>
+<rect x="310" y="55" width="2040" height="1370" fill="none" stroke="#111111" stroke-width="3"/>
+<text x="1330" y="91" text-anchor="middle" font-family="Arial, sans-serif" font-size="31" font-weight="700" fill="#111111">Sistema de Evaluación de Transparencia Institucional</text>
+<text x="1330" y="124" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" fill="#111111">Diagrama de casos de uso — Administrador Universitario</text>
+<circle cx="155" cy="685" r="27" fill="none" stroke="#111111" stroke-width="4"/><line x1="155" y1="712" x2="155" y2="817" stroke="#111111" stroke-width="4"/><line x1="93" y1="747" x2="217" y2="747" stroke="#111111" stroke-width="4"/><line x1="155" y1="817" x2="97" y2="895" stroke="#111111" stroke-width="4"/><line x1="155" y1="817" x2="213" y2="895" stroke="#111111" stroke-width="4"/><text x="155" y="938" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#111111">Administrador</text><text x="155" y="969" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#111111">Universitario</text>
+<line x1="217" y1="747" x2="570.2" y2="256.4" stroke="#111111" stroke-width="3"/>
+<line x1="217" y1="747" x2="527.3" y2="551.0" stroke="#111111" stroke-width="3"/>
+<line x1="217" y1="747" x2="441.8" y2="792.8" stroke="#111111" stroke-width="3"/>
+<line x1="217" y1="747" x2="557.1" y2="1127.0" stroke="#111111" stroke-width="3"/>
+<line x1="940.6" y1="188.8" x2="766.6" y2="202.2" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="778" y="155" width="136" height="29" fill="#ffffff"/><text x="846" y="178" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1491.9" y1="181.3" x2="772.9" y2="208.5" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="1035" y="154" width="136" height="29" fill="#ffffff"/><text x="1103" y="177" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="927.6" y1="460.6" x2="781.6" y2="480.4" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="780" y="430" width="136" height="29" fill="#ffffff"/><text x="848" y="453" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1421.2" y1="451.1" x2="802.1" y2="491.7" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="1018" y="432" width="136" height="29" fill="#ffffff"/><text x="1086" y="455" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1165.8" y1="550.9" x2="798.4" y2="521.1" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="899" y="493" width="136" height="29" fill="#ffffff"/><text x="967" y="516" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="891.7" y1="770.7" x2="764.2" y2="794.5" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="754" y="742" width="136" height="29" fill="#ffffff"/><text x="822" y="765" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1338.2" y1="747.9" x2="791.7" y2="805.0" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="975" y="737" width="136" height="29" fill="#ffffff"/><text x="1043" y="760" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1801.6" y1="755.8" x2="803.9" y2="813.3" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="1194" y="745" width="136" height="29" fill="#ffffff"/><text x="1262" y="768" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="868.8" y1="859.4" x2="784.1" y2="848.6" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="755" y="812" width="136" height="29" fill="#ffffff"/><text x="823" y="835" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1331.2" y1="869.2" x2="803.3" y2="837.3" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="978" y="810" width="136" height="29" fill="#ffffff"/><text x="1046" y="833" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1817.3" y1="873.2" x2="807.0" y2="833.2" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="1203" y="810" width="136" height="29" fill="#ffffff"/><text x="1271" y="833" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="869.0" y1="1117.8" x2="755.3" y2="1142.0" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="739" y="1089" width="136" height="29" fill="#ffffff"/><text x="807" y="1112" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1320.4" y1="1097.2" x2="790.6" y2="1154.4" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="966" y="1087" width="136" height="29" fill="#ffffff"/><text x="1034" y="1110" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1791.5" y1="1101.1" x2="802.9" y2="1162.4" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="1189" y="1093" width="136" height="29" fill="#ffffff"/><text x="1257" y="1116" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="851.9" y1="1206.5" x2="785.1" y2="1198.1" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="747" y="1160" width="136" height="29" fill="#ffffff"/><text x="815" y="1183" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1319.0" y1="1215.9" x2="804.0" y2="1186.6" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="972" y="1159" width="136" height="29" fill="#ffffff"/><text x="1040" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1797.0" y1="1218.7" x2="807.5" y2="1182.6" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="1194" y="1158" width="136" height="29" fill="#ffffff"/><text x="1262" y="1181" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<line x1="1340.8" y1="1322.3" x2="759.8" y2="1206.8" stroke="#111111" stroke-width="3" stroke-dasharray="13 9" marker-end="url(#openArrow)"/><rect x="959" y="1218" width="136" height="29" fill="#ffffff"/><text x="1027" y="1241" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" fill="#111111">&lt;&lt;extend&gt;&gt;</text>
+<ellipse cx="600" cy="215" rx="175.0" ry="42.0" fill="#f7f7f7" stroke="#111111" stroke-width="3"/>
+<text x="600" y="224.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">Iniciar sesión</text>
+<ellipse cx="600" cy="505" rx="210.0" ry="49.0" fill="#f7f7f7" stroke="#111111" stroke-width="3"/>
+<text x="600" y="499.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">Gestionar información</text>
+<text x="600" y="529.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">institucional</text>
+<ellipse cx="600" cy="825" rx="210.0" ry="49.0" fill="#f7f7f7" stroke="#111111" stroke-width="3"/>
+<text x="600" y="819.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">Gestionar evidencias</text>
+<text x="600" y="849.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">de transparencia</text>
+<ellipse cx="600" cy="1175" rx="210.0" ry="49.0" fill="#f7f7f7" stroke="#111111" stroke-width="3"/>
+<text x="600" y="1169.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">Consultar evaluación</text>
+<text x="600" y="1199.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#111111">y resultados</text>
+<ellipse cx="1120" cy="175" rx="190.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1120" y="184.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Restablecer contraseña</text>
+<ellipse cx="1660" cy="175" rx="170.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1660" y="184.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Verificar acceso 2FA</text>
+<ellipse cx="1080" cy="440" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1080" y="449.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Consultar universidad</text>
+<ellipse cx="1590" cy="440" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1590" y="434.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Actualizar datos</text>
+<text x="1590" y="464.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">institucionales</text>
+<ellipse cx="1340" cy="565" rx="185.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1340" y="559.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Seleccionar período</text>
+<text x="1340" y="589.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">de evaluación</text>
+<ellipse cx="1030" cy="745" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1030" y="739.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Cargar documento</text>
+<text x="1030" y="769.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">o enlace</text>
+<ellipse cx="1510" cy="730" rx="190.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1510" y="724.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Clasificar evidencia</text>
+<text x="1510" y="754.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">por literal LOTAIP</text>
+<ellipse cx="1990" cy="745" rx="195.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1990" y="739.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Reemplazar o eliminar</text>
+<text x="1990" y="769.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">evidencia</text>
+<ellipse cx="1030" cy="880" rx="185.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1030" y="874.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Consultar o descargar</text>
+<text x="1030" y="904.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">documento</text>
+<ellipse cx="1510" cy="880" rx="185.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1510" y="874.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Ejecutar validación</text>
+<text x="1510" y="904.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">automática</text>
+<ellipse cx="1990" cy="880" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1990" y="874.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Consultar estado</text>
+<text x="1990" y="904.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">de cumplimiento</text>
+<ellipse cx="1000" cy="1090" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1000" y="1099.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Visualizar dashboard</text>
+<ellipse cx="1480" cy="1080" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1480" y="1074.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Consultar índice</text>
+<text x="1480" y="1104.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">de transparencia</text>
+<ellipse cx="1970" cy="1090" rx="185.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1970" y="1099.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Comparar universidades</text>
+<ellipse cx="1000" cy="1225" rx="165.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1000" y="1234.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Consultar rankings</text>
+<ellipse cx="1480" cy="1225" rx="165.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1480" y="1234.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Generar reportes</text>
+<ellipse cx="1970" cy="1225" rx="175.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1970" y="1219.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Enviar comentarios</text>
+<text x="1970" y="1249.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">y feedback</text>
+<ellipse cx="1480" cy="1350" rx="185.0" ry="42.0" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+<text x="1480" y="1359.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="400" fill="#111111">Consultar observaciones</text>
+<text x="1330" y="1468" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" fill="#444444">Notación UML: asociación (línea continua) · extensión (línea discontinua)</text>
+</svg>

@@ -127,6 +127,10 @@ export const api = {
     uploadTemplate: (id, formData) => client.post(`/indicators/${id}/template/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     deleteTemplate: (id) => client.delete(`/indicators/${id}/template/`),
   },
+  transparencyModel: {
+    get: () => client.get('/transparency-model/'),
+    updateWeights: (data) => client.put('/transparency-model/', data),
+  },
   evidences: {
     list:     (params)              => client.get('/evidences/', { params }),
     get:      (id)                  => client.get(`/evidences/${id}/`),

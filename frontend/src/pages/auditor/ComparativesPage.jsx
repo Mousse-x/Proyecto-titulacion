@@ -36,7 +36,7 @@ export default function ComparativesPage() {
         b: uB.transparency_score || 0,
       },
       {
-        label: 'Nacional + internacional',
+        label: 'Índice final ITI',
         a: uA.integrated_transparency_score || 0,
         b: uB.integrated_transparency_score || 0,
       },

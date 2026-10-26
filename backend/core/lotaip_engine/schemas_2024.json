@@ -1,0 +1,1388 @@
+{
+  "version": "LOTAIP-v3-OCR-IA",
+  "source": "Plantillas XLSX oficiales incluidas en backend/media/templates",
+  "formats": [
+    {
+      "format_id": "1.1",
+      "numerals": [
+        1
+      ],
+      "template": "1-1-estructura-organica.xlsx",
+      "dataset_fields": [
+        "Nivel superior",
+        "Unidad",
+        "Nivel de los Procesos de la Estructura Organica Funcional"
+      ],
+      "required_fields": [
+        "Nivel superior",
+        "Unidad",
+        "Nivel de los Procesos de la Estructura Organica Funcional"
+      ],
+      "optional_fields": [],
+      "nullable_fields": [
+        "Unidad"
+      ],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para consultar el organigrama estructural"
+      ],
+      "metadata_url_fields": [
+        "Enlace para consultar el organigrama estructural"
+      ],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Nivel superior",
+        "Unidad",
+        "Nivel de los Procesos de la Estructura Organica Funcional"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "1.2",
+      "numerals": [
+        1
+      ],
+      "template": "1-2-base-legal-regulaciones-procedimientos-internos.xlsx",
+      "dataset_fields": [
+        "Tipo",
+        "Descripcion",
+        "Enlace"
+      ],
+      "required_fields": [
+        "Tipo",
+        "Descripcion",
+        "Enlace"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Tipo",
+        "Descripcion",
+        "Enlace"
+      ],
+      "aliases": {
+        "Descripcion": [
+          "Descripcion de regulacion"
+        ],
+        "Enlace": [
+          "Enlace a regulacion"
+        ]
+      },
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "1.3",
+      "numerals": [
+        1
+      ],
+      "template": "1-3-metas-y-objetivos_unidades.xlsx",
+      "dataset_fields": [
+        "Unidad",
+        "Objetivo",
+        "Indicador",
+        "Meta cuantificable",
+        "Enlace al sistema de gestion de planificacion para verificacion de los indicadores y metas cuantificables"
+      ],
+      "required_fields": [
+        "Unidad",
+        "Objetivo",
+        "Indicador",
+        "Meta cuantificable",
+        "Enlace al sistema de gestion de planificacion para verificacion de los indicadores y metas cuantificables"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace al sistema de gestion de planificacion para verificacion de los indicadores y metas cuantificables"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Unidad",
+        "Objetivos",
+        "Indicador",
+        "Meta cuantificable",
+        "Enlace al sistema de gestion de planificacion para verificacion de los indicadores y metas cuantificables por procesos o niveles"
+      ],
+      "aliases": {
+        "Objetivo": [
+          "Objetivos"
+        ],
+        "Enlace al sistema de gestion de planificacion para verificacion de los indicadores y metas cuantificables": [
+          "Enlace al sistema de gestion de planificacion para verificacion de los indicadores y metas cuantificables por procesos o niveles"
+        ]
+      },
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "10",
+      "numerals": [
+        10
+      ],
+      "template": "10-planes-y-programas.xlsx",
+      "dataset_fields": [
+        "Nombre del Plan o Programa",
+        "Período",
+        "Monto",
+        "Enlace al Plan o Programa",
+        "Enlace al estado"
+      ],
+      "required_fields": [
+        "Nombre del Plan o Programa",
+        "Período",
+        "Monto",
+        "Enlace al Plan o Programa",
+        "Enlace al estado"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace al Plan o Programa",
+        "Enlace al estado"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [
+        "Monto"
+      ],
+      "dictionary_fields": [
+        "Nombre del Plan o Programa",
+        "Periodo",
+        "Monto",
+        "Enlace al Plan o Programa",
+        "Enlace al estado"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "11",
+      "numerals": [
+        11
+      ],
+      "template": "11-contratos-de-credito-externos-o-internos.xlsx",
+      "dataset_fields": [
+        "Tipo de Contrato",
+        "Objeto",
+        "Fecha de suscripcion o renovacion",
+        "Nombre Deudor",
+        "Nombre Acreedor",
+        "Nombre Ejecutor",
+        "Tasa de Interes - %",
+        "Plazo",
+        "Fondos con los que se cancelara la obligacion crediticia",
+        "Enlace para descargar el contrato de credito externo o interno",
+        "Monto del prestamo o contrato",
+        "Desembolsos efectuados",
+        "Desembolsos por efectuar"
+      ],
+      "required_fields": [
+        "Tipo de Contrato",
+        "Objeto",
+        "Fecha de suscripcion o renovacion",
+        "Nombre Deudor",
+        "Nombre Acreedor",
+        "Nombre Ejecutor",
+        "Tasa de Interes - %",
+        "Plazo",
+        "Fondos con los que se cancelara la obligacion crediticia",
+        "Enlace para descargar el contrato de credito externo o interno",
+        "Monto del prestamo o contrato",
+        "Desembolsos efectuados",
+        "Desembolsos por efectuar"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el contrato de credito externo o interno"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [
+        "Fecha de suscripcion o renovacion"
+      ],
+      "money_fields": [
+        "Monto del prestamo o contrato",
+        "Desembolsos efectuados",
+        "Desembolsos por efectuar"
+      ],
+      "dictionary_fields": [
+        "Tipo de Contrato",
+        "Objeto",
+        "Fecha de suscripcion o renovacion",
+        "Nombre del deudor",
+        "Nombre del acreedor",
+        "Nombre del ejecutor",
+        "Tasa de Interes - %",
+        "Plazo",
+        "Fondos con los que se cancelara la obligacion crediticia",
+        "Enlace para descargar el contrato de credito externo o interno",
+        "Monto del prestamo o contrato",
+        "Desembolsos efectuados",
+        "Desembolsos por efectuar"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "12",
+      "numerals": [
+        12
+      ],
+      "template": "12-mecanismos-rendicion-cuentas.xlsx",
+      "dataset_fields": [
+        "Nombre del mecanismo",
+        "Numero de certificado",
+        "Periodo",
+        "Enlace"
+      ],
+      "required_fields": [
+        "Nombre del mecanismo",
+        "Numero de certificado",
+        "Periodo",
+        "Enlace"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para la descarga de otros mecanismos de rendición de cuentas"
+      ],
+      "metadata_url_fields": [
+        "Enlace para la descarga de otros mecanismos de rendición de cuentas"
+      ],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Nombre del mecanismo",
+        "Numero de certificado",
+        "Periodo",
+        "Enlace"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "13",
+      "numerals": [
+        13
+      ],
+      "template": "13-viaticos-informes-de-trabajo-y-justificativos-de-movilizacion.xlsx",
+      "dataset_fields": [
+        "Nombres y apellidos",
+        "Puesto institucional",
+        "Tipo",
+        "Fecha de inicio del viaje",
+        "Fecha de fin del viaje",
+        "Motivo del viaje",
+        "Valor del viatico",
+        "Enlace para descargar el informe y justificativos"
+      ],
+      "required_fields": [
+        "Nombres y apellidos",
+        "Puesto institucional",
+        "Tipo",
+        "Fecha de inicio del viaje",
+        "Fecha de fin del viaje",
+        "Motivo del viaje",
+        "Valor del viatico",
+        "Enlace para descargar el informe y justificativos"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el informe y justificativos"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para descargar el reporte consolidado de gastos de viaticos nacionales e internacionales"
+      ],
+      "metadata_url_fields": [
+        "Enlace para descargar el reporte consolidado de gastos de viaticos nacionales e internacionales"
+      ],
+      "date_fields": [
+        "Fecha de inicio del viaje",
+        "Fecha de fin del viaje"
+      ],
+      "money_fields": [
+        "Valor del viatico"
+      ],
+      "dictionary_fields": [
+        "Nombres y Apellidos",
+        "Puesto Institucional",
+        "Tipo",
+        "Fecha de inicio del viaje",
+        "Fecha de fin del viaje",
+        "Motivo del viaje",
+        "Valor del viatico",
+        "Enlace para descargar el informe y justificativo"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "14",
+      "numerals": [
+        14
+      ],
+      "template": "14-responsables-del-acceso-de-informacion-publica.xlsx",
+      "dataset_fields": [
+        "Nombres y apellidos",
+        "Denominacion del puesto",
+        "Responsabilidad LOTAIP",
+        "Direccion de la oficina",
+        "Numero telefonico",
+        "Extension telefonica",
+        "Correo electronico"
+      ],
+      "required_fields": [
+        "Nombres y apellidos",
+        "Denominacion del puesto",
+        "Responsabilidad LOTAIP",
+        "Direccion de la oficina",
+        "Numero telefonico",
+        "Extension telefonica",
+        "Correo electronico"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Enlace para descargar el acuerdo o resolucion de creacion del Comite de Transparencia",
+        "Enlace para descargar el acuerdo o resolucion para delegar el manejo de las solicitudes de acceso a la informacion publica en territorio",
+        "Enlace para la recepcion de solicitudes de acceso a la informacion publica por via electronica",
+        "Enlace para descargar el listado de responsables de atender las solicitudes de acceso a la informacion en las unidades desconcentradas",
+        "Licencia"
+      ],
+      "metadata_url_fields": [
+        "Enlace para descargar el acuerdo o resolucion de creacion del Comite de Transparencia",
+        "Enlace para descargar el acuerdo o resolucion para delegar el manejo de las solicitudes de acceso a la informacion publica en territorio",
+        "Enlace para la recepcion de solicitudes de acceso a la informacion publica por via electronica",
+        "Enlace para descargar el listado de responsables de atender las solicitudes de acceso a la informacion en las unidades desconcentradas"
+      ],
+      "email_fields": [
+        "Enlace para la recepcion de solicitudes de acceso a la informacion publica por via electronica"
+      ],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Nombres y apellidos",
+        "Denominacion del puesto",
+        "Responsabilidad LOTAIP",
+        "Direccion de la oficina",
+        "Numero telefonico",
+        "Extension telefonica",
+        "Correo electronico"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "15",
+      "numerals": [
+        15
+      ],
+      "template": "15-texto-integro-de-los-contratos-colectivos-vigentes-y-reformas.xlsx",
+      "dataset_fields": [
+        "Denominacion de la organizacion sindical",
+        "Fecha de suscripcion del contrato",
+        "Enlace para descargar el contrato colectivo original",
+        "Fecha de la ultima reforma o revision",
+        "Enlace para descargar todas las reformas completas del contrato colectivo"
+      ],
+      "required_fields": [
+        "Denominacion de la organizacion sindical",
+        "Fecha de suscripcion del contrato",
+        "Enlace para descargar el contrato colectivo original",
+        "Fecha de la ultima reforma o revision",
+        "Enlace para descargar todas las reformas completas del contrato colectivo"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el contrato colectivo original",
+        "Enlace para descargar todas las reformas completas del contrato colectivo"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [
+        "Fecha de suscripcion del contrato",
+        "Fecha de la ultima reforma o revision"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Denominacion de la organizacion sindical",
+        "Fecha de suscripcion del contrato",
+        "Enlace para descargar el contrato colectivo original",
+        "Fecha de la ultima reforma o revision",
+        "Enlace para descargar todas las reformas completas del contrato colectivo"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "16",
+      "numerals": [
+        16
+      ],
+      "template": "16-indice-informacion-reservada.xlsx",
+      "dataset_fields": [
+        "Tema",
+        "Numero de Resolucion",
+        "Fecha de la clasificacion de la informacion reservada",
+        "Periodo de vigencia de la clasificacion de la reserva",
+        "Enlace para descargar la resolucion de clasificacion de informacion reservada"
+      ],
+      "required_fields": [
+        "Tema",
+        "Numero de Resolucion",
+        "Fecha de la clasificacion de la informacion reservada",
+        "Periodo de vigencia de la clasificacion de la reserva",
+        "Enlace para descargar la resolucion de clasificacion de informacion reservada"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar la resolucion de clasificacion de informacion reservada"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para descargar el listado indice de informacion reservada - certificado de cumplimiento",
+        "Enlace para descargar el listado índice de información reservada - reporte del literal c del Sistema de la Defensoría del Pueblo de Ecuador"
+      ],
+      "metadata_url_fields": [
+        "Enlace para descargar el listado indice de informacion reservada - certificado de cumplimiento",
+        "Enlace para descargar el listado índice de información reservada - reporte del literal c del Sistema de la Defensoría del Pueblo de Ecuador"
+      ],
+      "date_fields": [
+        "Fecha de la clasificacion de la informacion reservada"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Tema",
+        "Numero de resolucion",
+        "Fecha de la clasificacion de la informacion reservada",
+        "Periodo de vigencia de la clasificacion de la reserva",
+        "Enlace para descargar la resolucion de clasificacion de informacion reservada"
+      ],
+      "aliases": {
+        "Enlace para descargar el listado índice de información reservada - reporte del literal c del Sistema de la Defensoría del Pueblo de Ecuador": [
+          "ENLACE PARA DESCARGAR EL LISTADO ÍNDICE DE INFORMACIÓN RESERVADA - REPORTE DEL LITERAL C DEL SERVICIO NACIONAL DE CONTRATACIÓN PÚBLICA"
+        ]
+      },
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "17",
+      "numerals": [
+        17
+      ],
+      "template": "17-audiencias-y-reuniones-autoridades.xlsx",
+      "dataset_fields": [
+        "Nombres y Apellidos",
+        "Puesto institucional",
+        "Asunto",
+        "Fecha de la audiencia o reunion",
+        "Modalidad",
+        "Lugar",
+        "Descripcion de la audiencia o reunion",
+        "Duracion",
+        "Nombre de personas externas",
+        "Institucion externa",
+        "Enlace para descargar el registro de asistencia de las personas que participaron en la reunion o audiencia"
+      ],
+      "required_fields": [
+        "Nombres y Apellidos",
+        "Puesto institucional",
+        "Asunto",
+        "Fecha de la audiencia o reunion",
+        "Modalidad",
+        "Lugar",
+        "Descripcion de la audiencia o reunion",
+        "Duracion",
+        "Nombre de personas externas",
+        "Institucion externa",
+        "Enlace para descargar el registro de asistencia de las personas que participaron en la reunion o audiencia"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el registro de asistencia de las personas que participaron en la reunion o audiencia"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [
+        "Fecha de la audiencia o reunion"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Nombres y Apellidos",
+        "Puesto institucional",
+        "Asunto",
+        "Fecha de la reunion",
+        "Modalidad",
+        "Lugar",
+        "Descripcion de la reunion",
+        "Duracion de la reunion",
+        "Personas externas",
+        "Institucion externa",
+        "Enlace para descargar el registro de asistencia de las personas que participaron en las reuniones o audiencias"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "18",
+      "numerals": [
+        18
+      ],
+      "template": "18-detalle-de-convenios-nacionales-e-internacionales.xlsx",
+      "dataset_fields": [
+        "Tipo",
+        "Fecha de suscripcion",
+        "Objeto",
+        "Nombre de la organizacion, persona natural o persona juridica",
+        "Plazo de duracion",
+        "Enlace para descargar el convenio"
+      ],
+      "required_fields": [
+        "Tipo",
+        "Fecha de suscripcion",
+        "Objeto",
+        "Nombre de la organizacion, persona natural o persona juridica",
+        "Plazo de duracion",
+        "Enlace para descargar el convenio"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el convenio"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [
+        "Fecha de suscripcion"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Tipo",
+        "Fecha de suscripcion",
+        "Objeto del convenio",
+        "Nombre de la organizacion o persona juridica",
+        "Plazo de duracion",
+        "Enlace para descargar el convenio"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "19",
+      "numerals": [
+        19
+      ],
+      "template": "19-detalle-donativos-oficiales-y-protocolares.xlsx",
+      "dataset_fields": [
+        "Fecha",
+        "Descripcion",
+        "Ocasion o motivo",
+        "Persona natural o jurídica",
+        "Enlace para descargar el documento mediante el cual se oficializa el regalo o donativo"
+      ],
+      "required_fields": [
+        "Fecha",
+        "Descripcion",
+        "Ocasion o motivo",
+        "Persona natural o jurídica",
+        "Enlace para descargar el documento mediante el cual se oficializa el regalo o donativo"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el documento mediante el cual se oficializa el regalo o donativo"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [
+        "Fecha"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Fecha",
+        "Descripcion",
+        "Motivo",
+        "Persona natural o juridica",
+        "Enlace para descargar el documento mediante el cual se oficializa el regalo o donativo"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "2",
+      "numerals": [
+        2
+      ],
+      "template": "2-directorio-y-distributivo-personal-de-la-entidad.xlsx",
+      "dataset_fields": [
+        "No.",
+        "Apellidos y Nombres",
+        "Puesto Institucional",
+        "Unidad a la que pertenece",
+        "Direccion institucional",
+        "Ciudad en la que labora",
+        "Teléfono institucional",
+        "Extension telefonica",
+        "Correo electronico institucional"
+      ],
+      "required_fields": [
+        "No.",
+        "Apellidos y Nombres",
+        "Puesto Institucional",
+        "Unidad a la que pertenece",
+        "Direccion institucional",
+        "Ciudad en la que labora",
+        "Teléfono institucional",
+        "Extension telefonica",
+        "Correo electronico institucional"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "No.",
+        "Apellidos y Nombres",
+        "Puesto Institucional",
+        "Unidad a la que pertenece",
+        "Direccion institucional",
+        "Ciudad en la que labora",
+        "Telefono institucional",
+        "Extension telefonica",
+        "Correo Electronico institucional"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "20",
+      "numerals": [
+        20
+      ],
+      "template": "20-registro-de-activos-de-informacion-frecuente-y-complementaria.xlsx",
+      "dataset_fields": [
+        "Tema",
+        "Numero de requerimientos",
+        "Enlace para descargar el detalle de la informacion solicitada frecuentemente",
+        "Enlace para descargar la solicitud de informacion complementaria que haya sido solicitada recurrentemente"
+      ],
+      "required_fields": [
+        "Tema",
+        "Numero de requerimientos",
+        "Enlace para descargar el detalle de la informacion solicitada frecuentemente",
+        "Enlace para descargar la solicitud de informacion complementaria que haya sido solicitada recurrentemente"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el detalle de la informacion solicitada frecuentemente",
+        "Enlace para descargar la solicitud de informacion complementaria que haya sido solicitada recurrentemente"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Tema",
+        "Numero de requerimientos",
+        "Enlace para descargar el detalle de la informacion solicitada frecuentemente",
+        "Enlace para descargar la solicitud de informacion complementaria que haya sido solicitada recurrentemente"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "21",
+      "numerals": [
+        21
+      ],
+      "template": "21-politicas-publicas-o-informacion-grupo-especifico.xlsx",
+      "dataset_fields": [
+        "Grupo especifico",
+        "Nombre de politica publica",
+        "Fase",
+        "Fecha",
+        "Enlace a informe"
+      ],
+      "required_fields": [
+        "Grupo especifico",
+        "Nombre de politica publica",
+        "Fase",
+        "Fecha",
+        "Enlace a informe"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace a informe"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para descargar las acciones y buenas prácticas de actores sociales e interinstitucionales que vigilan el cumplimiento de la politica publica"
+      ],
+      "metadata_url_fields": [
+        "Enlace para descargar las acciones y buenas prácticas de actores sociales e interinstitucionales que vigilan el cumplimiento de la politica publica"
+      ],
+      "date_fields": [
+        "Fecha"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Grupo especifico",
+        "Nombre de politica publica",
+        "Fase",
+        "Fecha",
+        "Enlace a informe"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "23",
+      "numerals": [
+        23
+      ],
+      "template": "23-detalle-personas-servidoras-publicas-con-acciones-afirmativas.xlsx",
+      "dataset_fields": [
+        "Accion afirmativa",
+        "No. de personas con acciones afirmativas"
+      ],
+      "required_fields": [
+        "Accion afirmativa",
+        "No. de personas con acciones afirmativas"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Accion afirmativa",
+        "No. de personas con acciones afirmativas"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "24",
+      "numerals": [
+        24
+      ],
+      "template": "24-informacion-relevante-para-el-ejercicio-de-derechos-ods.xlsx",
+      "dataset_fields": [
+        "Informacion relevante",
+        "Enlace para descargar"
+      ],
+      "required_fields": [
+        "Informacion relevante",
+        "Enlace para descargar"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Informacion relevante",
+        "Enlace para descargar"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "3",
+      "numerals": [
+        3
+      ],
+      "template": "3-remuneraciones-ingresos-adicionales.xlsx",
+      "dataset_fields": [
+        "Numeracion",
+        "Puesto Institucional",
+        "Regimen laboral al que pertenece",
+        "Numero de partida presupuestaria",
+        "Grado jerarquico o escala al que pertenece el puesto",
+        "Remuneracion mensual unificada",
+        "Remuneracion unificada - anual",
+        "Decimo Tercera Remuneracion",
+        "Decima Cuarta Remuneracion",
+        "Horas suplementarias y extraordinarias",
+        "Encargos y subrogaciones",
+        "Total ingresos adicionales"
+      ],
+      "required_fields": [
+        "Numeracion",
+        "Puesto Institucional",
+        "Regimen laboral al que pertenece",
+        "Numero de partida presupuestaria",
+        "Grado jerarquico o escala al que pertenece el puesto",
+        "Remuneracion mensual unificada",
+        "Remuneracion unificada - anual",
+        "Decimo Tercera Remuneracion",
+        "Decima Cuarta Remuneracion",
+        "Horas suplementarias y extraordinarias",
+        "Encargos y subrogaciones",
+        "Total ingresos adicionales"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [
+        "Remuneracion mensual unificada",
+        "Remuneracion unificada - anual",
+        "Decimo Tercera Remuneracion",
+        "Decima Cuarta Remuneracion",
+        "Horas suplementarias y extraordinarias",
+        "Encargos y subrogaciones",
+        "Total ingresos adicionales"
+      ],
+      "dictionary_fields": [
+        "Numeracion",
+        "Puesto Institucional",
+        "Regimen laboral al que pertenece",
+        "Numero de partida presupuestaria",
+        "Grado jerarquico o escala al que pertenece el puesto",
+        "Remuneracion mensual unificada",
+        "Remuneracion unificada -anual",
+        "Decimo Tercera Remuneracion",
+        "Decima Cuarta Remuneracion",
+        "Horas suplementarias y extraordinarias",
+        "Encargos y subrogaciones",
+        "Total ingresos adicionales"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "4",
+      "numerals": [
+        4
+      ],
+      "template": "4-detalle-licencia-comisiones.xlsx",
+      "dataset_fields": [
+        "Nombres y Apellidos",
+        "Puesto Institucional",
+        "Fecha de inicio",
+        "Fecha de fin",
+        "Lugar",
+        "Tipo"
+      ],
+      "required_fields": [
+        "Nombres y Apellidos",
+        "Puesto Institucional",
+        "Fecha de inicio",
+        "Fecha de fin",
+        "Lugar",
+        "Tipo"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [
+        "Fecha de inicio",
+        "Fecha de fin"
+      ],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Nombres y Apellidos",
+        "Puesto Institucional",
+        "Fecha de inicio",
+        "Fecha de fin",
+        "Lugar",
+        "Tipo"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "5-22",
+      "numerals": [
+        5,
+        22
+      ],
+      "template": "5-22-servicios-formularios-formatos-tramites.xlsx",
+      "dataset_fields": [
+        "Denominacion del servicio publico que se brinda",
+        "Enlace para acceder al reporte del servicio",
+        "Numero de personas que acceden mensualmente al servicio institucional",
+        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio",
+        "Enlace para el servicio por internet en linea",
+        "Porcentaje de satisfaccion sobre el uso del servicio"
+      ],
+      "required_fields": [
+        "Denominacion del servicio publico que se brinda",
+        "Enlace para acceder al reporte del servicio",
+        "Numero de personas que acceden mensualmente al servicio institucional",
+        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio",
+        "Enlace para el servicio por internet en linea",
+        "Porcentaje de satisfaccion sobre el uso del servicio"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace a portal unico de tramites ciudadanos"
+      ],
+      "metadata_url_fields": [],
+      "email_fields": [
+        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio"
+      ],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "Denominacion del servicio publico que se brinda",
+        "Enlace para acceder al reporte del servicio",
+        "Numero de personas que acceden mensualmente al servicio institucional",
+        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio",
+        "Enlace para el servicio por internet en linea",
+        "Porcentaje de satisfaccion sobre el uso del servicio"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "6",
+      "numerals": [
+        6
+      ],
+      "template": "6-presupuesto-de-la-institucion.xlsx",
+      "dataset_fields": [
+        "Cuenta",
+        "Categoria",
+        "Descripcion",
+        "Asignado",
+        "Modificado",
+        "Codificado",
+        "Monto certificado",
+        "Comprometido",
+        "Devengado",
+        "Pagado",
+        "Saldo por comprometer",
+        "Saldo por devengar",
+        "Saldo por pagar",
+        "Porcentaje de ejecucion"
+      ],
+      "required_fields": [
+        "Cuenta",
+        "Categoria",
+        "Descripcion",
+        "Asignado",
+        "Modificado",
+        "Codificado",
+        "Monto certificado",
+        "Comprometido",
+        "Devengado",
+        "Pagado",
+        "Saldo por comprometer",
+        "Saldo por devengar",
+        "Saldo por pagar",
+        "Porcentaje de ejecucion"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia"
+      ],
+      "metadata_url_fields": [],
+      "date_fields": [],
+      "money_fields": [
+        "Asignado",
+        "Modificado",
+        "Codificado",
+        "Monto certificado",
+        "Comprometido",
+        "Devengado",
+        "Pagado",
+        "Saldo por comprometer",
+        "Saldo por devengar",
+        "Saldo por pagar"
+      ],
+      "dictionary_fields": [
+        "Cuenta",
+        "Categoria",
+        "Descripcion",
+        "Asignado",
+        "Modificado",
+        "Codificado",
+        "Monto certificado",
+        "Comprometido",
+        "Devengado",
+        "Pagado",
+        "Saldo por comprometer",
+        "Saldo por devengar",
+        "Saldo por pagar",
+        "Porcentaje de ejecucion"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "7",
+      "numerals": [
+        7
+      ],
+      "template": "7-resultados-de-las-auditorias-internas-y-gubernamentales.xlsx",
+      "dataset_fields": [
+        "No.",
+        "Numero del informe",
+        "Tipo de examen",
+        "Nombre del examen",
+        "Período analizado",
+        "Area o proceso auditado",
+        "Enlace para descargar el informe especifico",
+        "Enlace para descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoria"
+      ],
+      "required_fields": [
+        "No.",
+        "Numero del informe",
+        "Tipo de examen",
+        "Nombre del examen",
+        "Período analizado",
+        "Area o proceso auditado",
+        "Enlace para descargar el informe especifico",
+        "Enlace para descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoria"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Enlace para descargar el informe especifico",
+        "Enlace para descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoria"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace al sitio web de la Contraloría General del Estado para consulta de informes aprobados"
+      ],
+      "metadata_url_fields": [
+        "Enlace al sitio web de la Contraloría General del Estado para consulta de informes aprobados"
+      ],
+      "date_fields": [],
+      "money_fields": [],
+      "dictionary_fields": [
+        "No",
+        "Numero del informe",
+        "Tipo de examen",
+        "Nombre del examen",
+        "Periodo analizado",
+        "area o proceso auditado",
+        "Enlace para descargar el informe especifico",
+        "Enlace para descargar el reporte de seguimiento al cumplimiento de recomendaciones del informe de auditoria"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "8",
+      "numerals": [
+        8
+      ],
+      "template": "8-procesos-de-contratacion-publica.xlsx",
+      "dataset_fields": [
+        "Fecha de publicacion",
+        "Codigo del proceso",
+        "Tipo de proceso",
+        "Objeto del proceso",
+        "Presupuesto referencial - USD",
+        "Partida presupuestaria",
+        "Monto de la adjudicacion - usd",
+        "Etapa de la contratacion",
+        "Identificacion del contratista",
+        "Link para descargar el proceso de contratacion desde el portal de compras publicas"
+      ],
+      "required_fields": [
+        "Fecha de publicacion",
+        "Codigo del proceso",
+        "Tipo de proceso",
+        "Objeto del proceso",
+        "Presupuesto referencial - USD",
+        "Partida presupuestaria",
+        "Monto de la adjudicacion - usd",
+        "Etapa de la contratacion",
+        "Identificacion del contratista",
+        "Link para descargar el proceso de contratacion desde el portal de compras publicas"
+      ],
+      "optional_fields": [],
+      "url_fields": [
+        "Link para descargar el proceso de contratacion desde el portal de compras publicas"
+      ],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para la busqueda de procesos de contratacion desde el Sistema Oficial de Contratacion Publica"
+      ],
+      "metadata_url_fields": [
+        "Enlace para la busqueda de procesos de contratacion desde el Sistema Oficial de Contratacion Publica"
+      ],
+      "date_fields": [
+        "Fecha de publicacion"
+      ],
+      "money_fields": [
+        "Presupuesto referencial - USD",
+        "Monto de la adjudicacion - usd"
+      ],
+      "dictionary_fields": [
+        "Fecha de publicacion",
+        "Codigo del proceso",
+        "Tipo de proceso",
+        "Objeto del proceso",
+        "Presupuesto referencial",
+        "Partida presupuestaria",
+        "Monto de la adjudicacion - USD",
+        "Etapa de la contratacion",
+        "Identificacion del contratista",
+        "Link para descargar el proceso de contratacion desde el portal de comprass publicas"
+      ],
+      "aliases": {
+        "Enlace para la busqueda de procesos de contratacion desde el Sistema Oficial de Contratacion Publica": [
+          "Enlace para la b£squeda de procesos de contrataci¢n desde el Sistema oficial de Contrataci¢n P£blica"
+        ]
+      },
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    },
+    {
+      "format_id": "9",
+      "numerals": [
+        9
+      ],
+      "template": "9-listado-de-empresas-y-personas-que-han-incumplido-contratos.xlsx",
+      "dataset_fields": [
+        "No.",
+        "RUC - Numero Identificacion de la empresa o persona contratista",
+        "Numero de contrato - codigo del proceso de contratacion fallido o incumplido",
+        "Monto del contrato incumplido",
+        "Fecha desde",
+        "Fecha hasta"
+      ],
+      "required_fields": [
+        "No.",
+        "RUC - Numero Identificacion de la empresa o persona contratista",
+        "Numero de contrato - codigo del proceso de contratacion fallido o incumplido",
+        "Monto del contrato incumplido",
+        "Fecha desde",
+        "Fecha hasta"
+      ],
+      "optional_fields": [],
+      "url_fields": [],
+      "metadata_fields": [
+        "Fecha actualizacion de la informacion",
+        "Periodicidad de actualizacion de la informacion",
+        "Unidad poseedora de la informacion",
+        "Persona responsable de la unidad poseedora de la informacion",
+        "Correo electronico de la persona responsable de la unidad poseedora de la informacion",
+        "Numero telefonico de la persona responsable de la unidad poseedora de la informacion",
+        "Licencia",
+        "Enlace para consulta de proveedores incumplidos y adjudicatarios fallidos del sistema oficial de contratacion publica"
+      ],
+      "metadata_url_fields": [
+        "Enlace para consulta de proveedores incumplidos y adjudicatarios fallidos del sistema oficial de contratacion publica"
+      ],
+      "date_fields": [
+        "Fecha desde",
+        "Fecha hasta"
+      ],
+      "money_fields": [
+        "Monto del contrato incumplido"
+      ],
+      "dictionary_fields": [
+        "No",
+        "RUC - Numero Identificacion de la empresa o persona contratista",
+        "Numero de contrato - codigo del proceso de contratacion fallido o incumplido",
+        "Monto del contrato incumplido",
+        "Fecha desde",
+        "Fecha hasta"
+      ],
+      "aliases": {},
+      "empty_policy": "REQUIRE_SENTINEL_AND_DICTIONARY_NOTE"
+    }
+  ],
+  "link_matrix_source": "PNT SERCOP 1148, diciembre 2025; docs/matriz-enlaces-pnt-sercop-2025-12.md"
+}

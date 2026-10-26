@@ -31,7 +31,7 @@ export default function UniversitiesPage() {
       const res = await api.universities.list({ include_inactive: 1 });
       setUnivs(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar universidades. Ã‚Â¿EstÃƒÂ¡ el servidor activo?');
+      setError(err.response?.data?.error || 'Error al cargar universidades. ¿Está el servidor activo?');
     } finally {
       setLoading(false);
     }

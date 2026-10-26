@@ -67,6 +67,37 @@ def normalize_text(text):
     return text
 
 
+ABSENCE_MARKERS = {"no aplica", "informacion no disponible"}
+
+EMAIL_RE = re.compile(
+    r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+"
+    r"[a-zA-Z]{2,63}$"
+)
+
+
+def absence_marker(value):
+    """Reconoce excepciones documentales sin depender de capitalización o tildes."""
+    normalized = normalize_text(value)
+    return normalized if normalized in ABSENCE_MARKERS else None
+
+
+def normalize_email(value):
+    """Devuelve un correo válido (también desde mailto:) o None."""
+    candidate = str(value or "").strip()
+    if candidate.lower().startswith("mailto:"):
+        candidate = candidate[7:].strip()
+    if not candidate or len(candidate) > 254 or re.search(r"\s", candidate):
+        return None
+    return candidate if EMAIL_RE.fullmatch(candidate) else None
+
+
+def field_allows_email(schema, field):
+    """Limita la excepción de correo a los campos mixtos declarados en esquema."""
+    expected = normalize_text(field)
+    return any(normalize_text(value) == expected for value in schema.get("email_fields", []))
+
+
 def _similarity_percent(left, right):
     if not left or not right:
         return 0

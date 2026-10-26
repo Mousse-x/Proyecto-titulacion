@@ -11,7 +11,7 @@ const PAGE_META = {
   '/admin/audit': { title: 'Auditoria', sub: 'Registros y trazabilidad del sistema' },
   '/admin/feedback': { title: 'Comentarios', sub: 'Feedback enviado por usuarios' },
   '/admin/documents': { title: 'Gestion Documental', sub: 'Administrar evidencias institucionales' },
-  '/admin/validation': { title: 'Evaluacion LOTAIP', sub: 'Validacion nacional e internacional' },
+  '/admin/validation': { title: 'Evaluación de transparencia', sub: 'Evaluaciones nacionales e internacionales separadas' },
   '/university/dashboard': { title: 'Mi Dashboard', sub: 'Estado de transparencia institucional' },
   '/university/universities': { title: 'Universidades', sub: 'Gestionar instituciones registradas' },
   '/university/index': { title: 'Indice de Transparencia', sub: 'Informacion institucional y resultados' },
@@ -21,14 +21,14 @@ const PAGE_META = {
   '/university/documents': { title: 'Carga Documental', sub: 'Subir y gestionar evidencias' },
   '/university/observations': { title: 'Observaciones', sub: 'Observaciones del auditor' },
   '/university/feedback': { title: 'Comentarios', sub: 'Comentarios de transparencia' },
-  '/university/validation': { title: 'Evaluacion LOTAIP', sub: 'Validacion automatica de documentos institucionales' },
+  '/university/validation': { title: 'Evaluación de transparencia', sub: 'Resultados nacionales e internacionales' },
   '/auditor/dashboard': { title: 'Dashboard Auditor', sub: 'Vista general del sistema' },
   '/auditor/index': { title: 'Indice de Transparencia', sub: 'Calculo del indice institucional' },
   '/auditor/comparatives': { title: 'Analisis Comparativo', sub: 'Comparar universidades' },
   '/auditor/rankings': { title: 'Rankings', sub: 'Clasificacion nacional de transparencia' },
   '/auditor/reports': { title: 'Reportes', sub: 'Generar y exportar informes' },
   '/auditor/documents': { title: 'Lista de Cumplimiento', sub: 'Consulta de evidencias publicadas' },
-  '/auditor/validation': { title: 'Evaluacion LOTAIP', sub: 'Consulta detallada de literales y observaciones' },
+  '/auditor/validation': { title: 'Evaluación de transparencia', sub: 'Consulta nacional, internacional e ITI final' },
 };
 
 export default function Header() {
