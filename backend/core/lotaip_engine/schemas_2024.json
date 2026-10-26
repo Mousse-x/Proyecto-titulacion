@@ -1085,7 +1085,9 @@
       ],
       "optional_fields": [],
       "url_fields": [
-        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio"
+        "Enlace para acceder al reporte del servicio",
+        "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio",
+        "Enlace para el servicio por internet en linea"
       ],
       "metadata_fields": [
         "Fecha actualizacion de la informacion",

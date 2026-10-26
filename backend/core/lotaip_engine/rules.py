@@ -6,8 +6,8 @@ cambiar. Esta matriz define únicamente aplicabilidad normativa y evaluador espe
 from dataclasses import dataclass
 from .schemas import schema_summary
 
-ENGINE_VERSION = "LOTAIP-v4-OCR-IA"
-CONTENT_POLICY_VERSION = "document-content-only-v16-official-portals"
+ENGINE_VERSION = "LOTAIP-v5-OCR-IA"
+CONTENT_POLICY_VERSION = "document-content-only-v19-bot-challenge-entity-fullocr"
 LEGAL_SOURCE = "Resolución 053-DPE-CGAJ-2024, Registro Oficial 633, 30-08-2024"
 LEGAL_URL = "https://www.registroficial.gob.ec/registro-oficial-no-633/"
 
@@ -57,9 +57,9 @@ CRITERIA = {
     "cta": {"name": "Información completa y actualizada", "options": [0, .5, 1], "reference": "6.2.1, Tabla 1"},
     "eta": {"name": "Estructura de datos abiertos", "options": [0, 1], "reference": "6.2.2, Tabla 2"},
     "rp": {"name": "Registro dentro del plazo", "options": [0, 1], "reference": "6.2.3, Tabla 3"},
-    "verificables": {"name": "Estado de verificables", "options": ["SI", "NO"], "reference": "7.1.1, Tabla 6; mayoría estricta >50%; NO APLICA = cumple"},
-    "vigencia": {"name": "Vigencia de la información", "options": ["SI", "NO", "REQUIERE_REVISION"], "reference": "7.1.2, Tablas 4 y 7"},
-    "validez": {"name": "Validez de la información", "options": ["SI", "NO", "REQUIERE_REVISION"], "reference": "7.1.3, Tablas 5 y 7"},
+    "verificables": {"name": "Estado de verificables", "options": ["SI", "NO", "SIN EVALUACIÓN"], "reference": "7.1.1, Tabla 6; muestra reproducible de 3 filas (nota 3); todos deben cumplir; NO APLICA = SIN EVALUACIÓN"},
+    "vigencia": {"name": "Vigencia de la información", "options": ["SI", "NO", "SIN EVALUACIÓN"], "reference": "7.1.2, Tablas 4 y 7"},
+    "validez": {"name": "Validez de la información", "options": ["SI", "NO", "SIN EVALUACIÓN"], "reference": "7.1.3, Tablas 5 y 7"},
 }
 
 def numeral_rule(number):

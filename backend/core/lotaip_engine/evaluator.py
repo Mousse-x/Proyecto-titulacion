@@ -46,20 +46,10 @@ def evaluate_format(evidence, siblings, template=None, check_online=True, fetch=
         verifiable = next(row for row in legacy["criterios"] if row["id"] == "verificables")
         verifiable.update(calificacion=None, sugerencia=None,
             observacion="REQUIERE_REVISION: la Tabla 7 exige estado de verificables, pero la plantilla oficial del formato no contiene campos URL; no se asigna cero.")
-    # Política v4: una ejecución automática siempre produce una nota.
-    # Tras agotar descargas, OCR e IA, la ausencia de evidencia comprobable no
-    # acredita cumplimiento. Se cierra en cero/NO y se conserva el diagnóstico.
-    if check_online:
-        for row in legacy["criterios"]:
-            if row["aplica"] and row.get("calificacion") is None:
-                fallback = "NO" if row["id"] in {"verificables", "vigencia", "validez"} else 0
-                row["calificacion"] = fallback
-                row["sugerencia"] = fallback
-                row["estado_verificacion"] = "VERIFICADO_AUTOMATICAMENTE"
-                row["observacion"] += (
-                    " Cierre automático estricto: agotadas las comprobaciones disponibles, "
-                    "no se acreditó el cumplimiento; se asigna NO/0 sin revisión manual."
-                )
+    # Lo que no pudo comprobarse queda PENDIENTE: en las Tablas 1, 3 y 6 el
+    # 0/NO afirma un incumplimiento (no publicada, fuera de plazo, enlace que
+    # no cumple), no la falta de una fuente técnica. Se resuelve con reintento
+    # o revisión, y el SITA se informa como provisional con su rango.
     criteria = {}
     technical_errors = []
     requires_review = []

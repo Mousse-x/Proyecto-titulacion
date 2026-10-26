@@ -13,6 +13,7 @@ from core.services.comparison_engine import (
     normalize_text,
 )
 from core.services.lotaip_automatic import parse_date, money
+from .schemas import header_key, header_map
 
 ARTIFICIAL_PREFIXES = ("unnamed", "column", "field")
 
@@ -25,10 +26,10 @@ def parse_csv(evidence):
         return result
     raw = path.read_bytes()
     text = None
-    for encoding in ("utf-8-sig", "utf-8", "cp1252"):
+    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         try:
             text = raw.decode(encoding)
-            if encoding == "cp1252": result["warnings"].append("Advertencia de codificación")
+            if encoding in {"cp1252", "latin-1"}: result["warnings"].append("Advertencia de codificación")
             break
         except UnicodeDecodeError:
             pass
@@ -60,16 +61,6 @@ def expected_fields(template, document_type):
     per_file = structure.get("fields", {}) if isinstance(structure, dict) else {}
     return per_file.get(document_type, configured if document_type == "Conjunto de datos" else [])
 
-def _canonical_map(schema):
-    aliases = schema.get("aliases", {})
-    result = {}
-    for field in schema["dataset_fields"]:
-        result[normalize_text(field)] = field
-    for canonical, values in aliases.items():
-        for value in values:
-            result[normalize_text(value)] = canonical
-    return result
-
 def validate_dataset(rows, schema, numeral):
     """Valida encabezados por significado normalizado, nunca por posición."""
     errors, warnings = [], []
@@ -78,8 +69,8 @@ def validate_dataset(rows, schema, numeral):
                 "explanation": "El conjunto de datos no contiene filas interpretables."}], "warnings": []}
     found = [str(value).strip() for value in rows[0]]
     normalized = [normalize_text(value) for value in found]
-    mapping = _canonical_map(schema)
-    canonical_found = [mapping.get(value) for value in normalized]
+    mapping = header_map(schema)
+    canonical_found = [mapping.get(header_key(value)) for value in found]
     for expected in schema["required_fields"]:
         if expected not in canonical_found:
             errors.append({"code": "MISSING_REQUIRED_FIELD", "numeral": numeral,

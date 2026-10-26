@@ -25,8 +25,9 @@ export default function LotaipCriteriaTable({ result, onSaved }) {
     <p><strong>Evaluación LOTAIP automática</strong> · <a href={rubric.fuente} target="_blank" rel="noreferrer">Consultar instructivo de referencia</a></p>
     <p style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Versión del motor: {result.engine_version || rubric.engine_version || rubric.version}</p>
     <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-      La nota se calcula sobre el paquete de metadatos, diccionario y conjunto de datos. Si, después de los reintentos,
-      el sistema no puede acreditar acceso, legibilidad o correspondencia, asigna automáticamente NO/0 y conserva el motivo.
+      La nota se calcula sobre el paquete de metadatos, diccionario y conjunto de datos. Los enlaces se comprueban en una
+      muestra reproducible de 3 filas y todos deben cumplir (Tabla 6). Lo que no pudo comprobarse queda pendiente de
+      reintento; los enlaces con NO APLICA se marcan SIN EVALUACIÓN y no entran en el promedio.
     </p>
     {error && <div role="alert" className="alert alert-danger">{error}</div>}
     <div className="table-wrapper">
@@ -39,7 +40,7 @@ export default function LotaipCriteriaTable({ result, onSaved }) {
             <small style={{ color: 'var(--text-subtle)' }}>{criterion.referencia}</small>
           </td>
           <td style={{ width: '18%', whiteSpace: 'normal' }}>
-            {!criterion.aplica ? 'No aplica' : <strong>{criterion.calificacion ?? 'Resultado histórico: revalidar'}</strong>}
+            {!criterion.aplica ? 'No aplica' : <strong>{criterion.calificacion ?? 'Pendiente de verificación'}</strong>}
           </td>
           <td style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
             {criterion.observacion}

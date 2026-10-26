@@ -83,7 +83,10 @@ def extract_document(response, deadline=None, sample_large=False):
                     return result
                 else:
                     page_indices = list(range(len(doc)))
-                if sample_large and len(page_indices) > semantic_pages:
+                # Un escaneado dentro del límite de páginas se lee completo: con
+                # sólo una muestra, la IA no puede acreditar que el documento
+                # sea íntegro (p. ej. un contrato colectivo de 30 páginas).
+                if result['sampled_pages'] and len(page_indices) > semantic_pages:
                     ocr_indices = {
                         page_indices[round(index * (len(page_indices) - 1) / (semantic_pages - 1))]
                         for index in range(semantic_pages)

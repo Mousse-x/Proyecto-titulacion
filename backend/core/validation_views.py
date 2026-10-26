@@ -36,7 +36,7 @@ from .services.integrated_transparency import (
     sync_national_results,
 )
 from .services.evaluator import is_lotaip_dictionary
-from .services.lotaip_rubric import review_rubric, summarize_rubrics, VERSION
+from .services.lotaip_rubric import pending_links, review_link, review_rubric, summarize_rubrics, VERSION
 from .lotaip_engine.rules import ENGINE_VERSION, LEGAL_SOURCE, NUMERAL_CONFIG
 from .cache_utils import invalidate_dashboard_cache
 
@@ -693,6 +693,116 @@ def get_compliance_summary(request, univ_id):
     return response
 
 
+def _persist_package_rubric(ev, related, rubric):
+    """Guarda una rúbrica revisada en todos los archivos del paquete."""
+    score = summarize_rubrics([rubric])["puntaje_formato"]
+    applicable = [c["calificacion"] for c in rubric["criterios"] if c["aplica"]]
+    if any(value is None for value in applicable):
+        status = "NO_VERIFICABLE"
+    elif all(value in (1, "SI", "SIN EVALUACIÓN") for value in applicable):
+        status = "CUMPLE"
+    elif rubric["criterios"][0]["calificacion"] == 0:
+        status = "NO_CUMPLE"
+    else:
+        status = "CUMPLE_PARCIALMENTE"
+    EvidenceValidationResult.objects.filter(id__in=[row.id for row in related]).update(
+        lotaip_rubric=rubric, total_score=score or 0, compliance_status=status,
+        observations=[f"{c['criterio']}: {c['observacion']}" for c in rubric["criterios"]],
+        validated_at=timezone.now(),
+    )
+    # El resumen cacheado anterior ya no representa estas calificaciones.
+    UniversityEvaluationSummary.objects.filter(university_id=ev.university_id, period_id=ev.period_id).delete()
+
+
+def _dataset_record(ev, row_number):
+    """Fila del conjunto de datos para resultados guardados antes de conservarla."""
+    from .lotaip_engine.parsers import parse_csv
+    from .services.document_processor import detect_lotaip_document_type
+    if not row_number:
+        return {}
+    siblings = Evidence.objects.filter(university_id=ev.university_id, period_id=ev.period_id,
+                                       month=ev.month, indicator_id=ev.indicator_id)
+    dataset = next((s for s in siblings if (detect_lotaip_document_type(s.file_path or "")
+                    or detect_lotaip_document_type(s.title or "")) == "Conjunto de datos"), None)
+    rows = parse_csv(dataset).get("rows", []) if dataset else []
+    if row_number > len(rows):
+        return {}
+    return {header: value for header, value in zip(rows[0], rows[row_number - 1]) if str(value).strip()}
+
+
+@csrf_exempt
+def lotaip_pending_links(request, univ_id):
+    """Cola de enlaces que el verificador no pudo comprobar (p. ej. Cloudflare)."""
+    _, err = require_role(request, [1, 4])
+    if err: return err
+    if request.method != "GET": return JsonResponse({"error": "Método no permitido"}, status=405)
+    try:
+        period_id = int(request.GET["periodo_id"])
+        month = int(request.GET["month"]) if request.GET.get("month") else None
+    except (KeyError, ValueError):
+        return JsonResponse({"error": "Indique periodo_id y, opcionalmente, month."}, status=400)
+    results = (EvidenceValidationResult.objects
+               .filter(evidence__university_id=univ_id, evidence__period_id=period_id,
+                       evidence__indicator__code__startswith="LOTAIP")
+               .select_related("evidence", "evidence__indicator").order_by("-validated_at"))
+    if month:
+        results = results.filter(evidence__month=month)
+    seen, items = set(), []
+    for vr in results:
+        ev = vr.evidence
+        unit = (vr.lotaip_rubric or {}).get("unidad") or f"{ev.month}:{ev.indicator_id}"
+        if unit in seen or (vr.lotaip_rubric or {}).get("version") != VERSION:
+            continue
+        seen.add(unit)
+        for index, item in pending_links(vr.lotaip_rubric):
+            items.append({
+                "evidence_id": ev.id, "index": index, "month": ev.month,
+                "format": ev.indicator.code, "format_name": ev.indicator.name,
+                "document": item.get("document"), "row": item.get("row"), "field": item.get("field"),
+                "url": item.get("url") or item.get("value"), "http_status": item.get("http_status"),
+                "bot_challenge": bool(item.get("bot_challenge")), "reason": item.get("reason"),
+                "record": item.get("record") or (_dataset_record(ev, item.get("row"))
+                                                 if item.get("document") == "Conjunto de datos" else {}),
+            })
+    items.sort(key=lambda x: (x["month"], [int(p) for p in x["format"].split("-")[1].split(".")], x["row"] or 0))
+    return JsonResponse({"count": len(items), "items": items})
+
+
+@csrf_exempt
+def lotaip_decide_link(request, ev_id, index):
+    """Aprueba o rechaza un enlace pendiente y recalcula el paquete."""
+    user, err = require_role(request, [1, 4])
+    if err: return err
+    if request.method != "POST": return JsonResponse({"error": "Método no permitido"}, status=405)
+    try:
+        payload = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+    with transaction.atomic():
+        try:
+            vr = EvidenceValidationResult.objects.select_related("evidence").get(evidence_id=ev_id)
+        except EvidenceValidationResult.DoesNotExist:
+            return JsonResponse({"error": "Primero ejecute la validación del documento."}, status=404)
+        ev = vr.evidence
+        related = list(EvidenceValidationResult.objects.select_for_update().filter(
+            evidence__university_id=ev.university_id, evidence__period_id=ev.period_id,
+            evidence__month=ev.month, evidence__indicator_id=ev.indicator_id,
+        ).order_by("id"))
+        current = next(row for row in related if row.id == vr.id)
+        try:
+            rubric = review_link(current.lotaip_rubric, index, payload.get("decision"),
+                                 payload.get("observation"), user.id, timezone.now().isoformat())
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        _persist_package_rubric(ev, related, rubric)
+    invalidate_dashboard_cache()
+    criterion = next(c for c in rubric["criterios"] if c["id"] == "verificables")
+    _log(user.id, "REVIEW_LOTAIP_LINK",
+         f"Paquete {rubric.get('unidad')}; enlace {index}: {payload.get('decision')}; verificables={criterion['calificacion']}")
+    return JsonResponse({"evidence_id": ev.id, "index": index, "verificables": criterion["calificacion"],
+                         "pending": len(pending_links(rubric))})
+
+
 @csrf_exempt
 def review_lotaip_criteria(request, ev_id):
     """Revisión con fundamento por criterio para el paquete completo del formato."""
@@ -722,23 +832,7 @@ def review_lotaip_criteria(request, ev_id):
             rubric = review_rubric(current.lotaip_rubric, payload, user.id, timezone.now().isoformat())
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
-        score = summarize_rubrics([rubric])["puntaje_formato"]
-        applicable = [c["calificacion"] for c in rubric["criterios"] if c["aplica"]]
-        if any(value is None for value in applicable):
-            status = "NO_VERIFICABLE"
-        elif all(value in (1, "SI", "SIN EVALUACIÓN") for value in applicable):
-            status = "CUMPLE"
-        elif rubric["criterios"][0]["calificacion"] == 0:
-            status = "NO_CUMPLE"
-        else:
-            status = "CUMPLE_PARCIALMENTE"
-        EvidenceValidationResult.objects.filter(id__in=[row.id for row in related]).update(
-            lotaip_rubric=rubric, total_score=score or 0, compliance_status=status,
-            observations=[f"{c['criterio']}: {c['observacion']}" for c in rubric["criterios"]],
-            validated_at=timezone.now(),
-        )
-        # El resumen cacheado anterior ya no representa estas calificaciones.
-        UniversityEvaluationSummary.objects.filter(university_id=ev.university_id, period_id=ev.period_id).delete()
+        _persist_package_rubric(ev, related, rubric)
     invalidate_dashboard_cache()
     _log(user.id, "REVIEW_LOTAIP_CRITERIA", f"Paquete {rubric['unidad']}; criterios: {json.dumps(payload, ensure_ascii=False)}")
     vr.refresh_from_db()

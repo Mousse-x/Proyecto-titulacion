@@ -86,7 +86,7 @@ class ControlledPerfectEvaluationTests(SimpleTestCase):
                          {"CTA": 100.0, "ETA": 100.0, "RP": 100.0, "CI": 100.0, "SITA": 100.0})
 
     def test_schema_provenance_has_stable_sha256(self):
-        self.assertEqual(ENGINE_VERSION, "LOTAIP-v4-OCR-IA")
+        self.assertEqual(ENGINE_VERSION, "LOTAIP-v5-OCR-IA")
         self.assertRegex(schema_checksum(), r"^[0-9a-f]{64}$")
 
     def test_numeral_23_url_absence_requires_review_without_zero(self):

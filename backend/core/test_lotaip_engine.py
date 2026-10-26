@@ -114,7 +114,24 @@ class LotaipEngineV2Tests(SimpleTestCase):
         self.assertEqual(check_validity([["Fecha de suscripcion", "Plazo de duracion"],
                                          ["01/01/2020", "12 meses"]], date(2024, 11, 30))[0], "NO")
         self.assertEqual(check_validity([["Fecha de suscripcion", "Plazo de duracion"],
-                                         ["01/01/2024", "indefinido"]], date(2024, 11, 30))[0], "NO")
+                                         ["01/01/2024", "INDEFINIDO"]], date(2024, 11, 30))[0], "SI")
+        self.assertEqual(check_validity([["Fecha de suscripcion", "Plazo de duracion"],
+                                         ["01/01/2025", "indefinido"]], date(2024, 11, 30))[0], "NO")
+
+    def test_vigencia_without_start_dates_is_not_evaluated(self):
+        rows = [["Tema", "Fecha de la clasificacion de la informacion reservada",
+                 "Periodo de vigencia de la clasificacion de la reserva", "Enlace"],
+                ["No aplica", "No aplica", "No aplica", "https://example.org/resolucion"]]
+        self.assertEqual(check_validity(rows, date(2026, 1, 31))[0], "SIN EVALUACIÓN")
+
+    def test_remuneration_sum_treats_empty_components_as_zero(self):
+        rows = [["Decimo Tercera Remuneracion", "Decima Cuarta Remuneracion",
+                 "Horas suplementarias y extraordinarias", "Encargos y subrogaciones",
+                 "Total ingresos adicionales"],
+                ["270,58", "39,17", "", "NO APLICA", "309,75"]]
+        self.assertEqual(check_sums(3, rows)[0], "SI")
+        rows[1][-1] = "400,00"
+        self.assertEqual(check_sums(3, rows)[0], "NO")
 
     def test_numeral_18_real_samples_are_current(self):
         rows = [["Fecha de suscripcion", "Plazo de duracion"],
@@ -163,12 +180,7 @@ class LotaipNumeralSchemaTests(SimpleTestCase):
             missing = validate_dataset([schema["dataset_fields"][1:], row[1:]], schema, number)
             self.assertIn("MISSING_REQUIRED_FIELD", {item["code"] for item in missing["errors"]})
             detected_urls = [field for field in schema["dataset_fields"] if any(token in field.lower() for token in ("enlace", "link", "url"))]
-            if schema["format_id"] == "5-22":
-                self.assertEqual(schema["url_fields"], [
-                    "Enlace para descargar el formulario o formato del servicio - Correo electronico para solicitar el servicio",
-                ])
-            else:
-                self.assertEqual(schema["url_fields"], detected_urls)
+            self.assertEqual(schema["url_fields"], detected_urls)
 
 
 def _make_schema_test(number):

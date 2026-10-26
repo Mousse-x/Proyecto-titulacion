@@ -16,7 +16,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit, urljoin
 
 from django.conf import settings
-from .comparison_engine import normalize_text
+from .comparison_engine import absence_marker, normalize_text
 
 MAX_BYTES = 8 * 1024 * 1024
 
@@ -172,7 +172,10 @@ def check_sums(number, rows):
     for line, row in enumerate(rows[1:], 2):
         if not any(c.strip() for c in row):
             continue
-        values = [money(row[i]) if i < len(row) else None for i in indices]
+        # Un componente vacío o NO APLICA no suma (vale 0); el vacío ya se
+        # califica en la condición de información completa (Tabla 1).
+        cells = [row[i].strip() if i < len(row) else "" for i in indices]
+        values = [Decimal("0") if not cell or absence_marker(cell) else money(cell) for cell in cells]
         if any(v is None for v in values):
             unknown.append(line)
             continue
@@ -195,8 +198,15 @@ def check_validity(rows, evaluated_on, sample_seed=None):
     duration_indices = [i for i, h in enumerate(headers) if h in duration_names]
     if len(start_indices) != 1 or (len(end_indices) != 1 and len(duration_indices) != 1):
         return "NO", "No se identificaron fechas de inicio y fin, o inicio y duración con unidades explícitas."
+    # Plazo indefinido: el instrumento sigue vigente desde su inicio.
+    open_ended = {"indefinido", "indefinida", "plazo indefinido", "sin plazo", "sin fecha de fin"}
     failed, unknown, checked = [], [], 0
-    candidates = list(enumerate(rows[1:], 2))
+    # Sin fecha de inicio (NO APLICA) no hay instrumento cuya vigencia
+    # comprobar, aunque la fila conserve un enlace a un documento de respaldo.
+    candidates = [(line, row) for line, row in enumerate(rows[1:], 2)
+                  if not (start_indices[0] < len(row) and absence_marker(row[start_indices[0]]))]
+    if not candidates:
+        return "SIN EVALUACIÓN", "No hay registros con fecha de inicio: el formato declara NO APLICA y no existe información sujeta a vigencia."
     if len(candidates) > 3:
         import random
         candidates = sorted(random.Random(str(sample_seed or "lotaip")).sample(candidates, 3))
@@ -205,6 +215,12 @@ def check_validity(rows, evaluated_on, sample_seed=None):
         try:
             start = parse_date(row[start_indices[0]])
             end = parse_date(row[end_indices[0]]) if len(end_indices) == 1 else None
+            limit = normalize_text(row[end_indices[0]] if len(end_indices) == 1 else row[duration_indices[0]])
+            if start and not end and limit in open_ended:
+                checked += 1
+                if evaluated_on < start:
+                    failed.append(line)
+                continue
             if not end and start and len(duration_indices) == 1:
                 duration = normalize_text(row[duration_indices[0]])
                 match = re.fullmatch(r"(\d+) (dias?|mes(?:es)?|anos?)", duration)
@@ -371,7 +387,7 @@ def check_deadline(evidence, fetch):
     year, month = evidence.period.year, evidence.month
     first_next = date(year + (month == 12), month % 12 + 1, 1)
     if published < first_next:
-        return None, note + " Fecha anterior al cierre del período; registro no concluyente."
+        return 1, note + " Registro anterior al cierre del período: dentro del plazo."
     deadline = first_next.replace(day=15)
     holidays = _ecuador_non_working_days(first_next.year)
     configured = getattr(settings, "LOTAIP_NON_WORKING_DAYS", {}).get(str(first_next.year), [])

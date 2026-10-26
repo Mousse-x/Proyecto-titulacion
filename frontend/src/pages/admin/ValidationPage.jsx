@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { validationApi } from '../../api/validation';
 import { useAuth } from '../../context/AuthContext';
 import LotaipCriteriaTable from '../../components/LotaipCriteriaTable';
+import LotaipLinkReviewQueue from '../../components/LotaipLinkReviewQueue';
 import { formatLotaipPercent, getLotaipDashboard } from '../../utils/lotaipDashboard';
 import { groupLotaipPackages, pendingLotaipPackages } from '../../utils/lotaipPackages';
 
@@ -646,6 +647,10 @@ export default function ValidationPage({ readOnly = false }) {
               {validating && validationScope === 'lotaip' && <EvaluationProgressPanel
                 scope="lotaip" progress={progress} activeRunId={activeRunId}
                 stopping={stopping} onStop={handleStopValidation}
+              />}
+              {!validating && [1, 4].includes(Number(user?.role_id)) && <LotaipLinkReviewQueue
+                universityId={selectedUniv} periodId={selectedPeriod} month={selectedMonth}
+                refreshKey={results} onDecided={loadResults}
               />}
             </Fragment>
           )}

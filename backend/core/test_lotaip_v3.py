@@ -93,7 +93,7 @@ class MatrixTests(SimpleTestCase):
         validation = validate_dataset(rows, schema, 1)
         self.assertFalse([error for error in validation['errors'] if error['code'] == 'MISSING_REQUIRED_FIELD'])
 
-    def test_v4_closes_every_applicable_criterion_automatically(self):
+    def test_unverified_criteria_stay_pending_instead_of_zero(self):
         def row(identifier, applies=True, value=None):
             return {
                 'id': identifier, 'aplica': applies, 'calificacion': value,
@@ -114,10 +114,9 @@ class MatrixTests(SimpleTestCase):
             result = evaluate_format(evidence, [], check_online=True)
 
         applicable = [criterion for criterion in result['criterios'] if criterion['aplica']]
-        self.assertFalse(any(criterion['calificacion'] is None for criterion in applicable))
-        self.assertEqual([criterion['calificacion'] for criterion in applicable], [0, 1, 0, 'NO'])
-        self.assertEqual(result['errores_tecnicos'], [])
-        self.assertIn('Cierre automático estricto', applicable[0]['observacion'])
+        self.assertEqual([criterion['calificacion'] for criterion in applicable], [None, 1, None, None])
+        self.assertEqual([error['criterion'] for error in result['errores_tecnicos']], ['cta', 'rp', 'verificables'])
+        self.assertEqual(result['criteria']['cta']['status'], 'PENDIENTE')
 
     @override_settings(FREELLMAPI_CONCURRENCY=4)
     def test_independent_ai_checks_run_concurrently(self):
@@ -178,14 +177,21 @@ class MatrixTests(SimpleTestCase):
         return check_package_links(files, schema or resolve_format('LOTAIP-19'), {'numeral':'LOTAIP-19'},
                                    fetch or MagicMock(), analyze=analyze)
 
-    def test_no_aplica_always_counts_as_success_without_network_or_ai(self):
+    def test_no_aplica_with_dictionary_note_is_not_evaluated(self):
+        note = 'No se recibieron donativos oficiales durante el mes reportado.'
         for value in ['no aplica', 'NO APLICA', 'No Aplica', 'nO aPlIcA', '  No   aplica.  ']:
             with self.subTest(value=value):
                 fetch, ai = MagicMock(), MagicMock()
-                result = self.run_links(self.files([['Sin donativos', value]], ''), fetch, ai)
-                self.assertEqual(result[0], 'SI')
+                result = self.run_links(self.files([['Sin donativos', value]], note), fetch, ai)
+                self.assertEqual(result[0], 'SIN EVALUACIÓN')
                 self.assertTrue(result[2][0]['exception'])
                 fetch.assert_not_called(); ai.assert_not_called()
+
+    def test_no_aplica_without_dictionary_note_is_also_not_evaluated(self):
+        fetch, ai = MagicMock(), MagicMock()
+        result = self.run_links(self.files([['Sin donativos', 'NO APLICA']], ''), fetch, ai)
+        self.assertEqual(result[0], 'SIN EVALUACIÓN')
+        fetch.assert_not_called(); ai.assert_not_called()
 
     def test_literal_14_accepts_no_aplica_under_shortened_metadata_heading(self):
         official = ('Enlace para descargar el listado de responsables de atender las solicitudes '
@@ -199,11 +205,11 @@ class MatrixTests(SimpleTestCase):
         files = {
             'Conjunto de datos': {'rows': []},
             'Metadatos': {'rows': [[published_variant, 'NO APLICA']]},
-            'Diccionario': {'rows': []},
+            'Diccionario': {'rows': [['Nota aclaratoria', 'La entidad no cuenta con unidades desconcentradas.']]},
         }
         fetch, ai = MagicMock(), MagicMock()
         result = self.run_links(files, fetch, ai, schema=schema)
-        self.assertEqual(result[0], 'SI')
+        self.assertEqual(result[0], 'SIN EVALUACIÓN')
         self.assertEqual(result[2][0]['field'], official)
         self.assertEqual(result[2][0]['row'], 1)
         self.assertTrue(result[2][0]['exception'])
@@ -268,12 +274,12 @@ class MatrixTests(SimpleTestCase):
         self.assertTrue(result[2][0]['official_file_url'].endswith('reporte_anual_2025.xlsx'))
         ai.assert_not_called()
 
-    def test_information_unavailable_justified_counts_as_success(self):
+    def test_information_unavailable_justified_is_not_evaluated(self):
         result = self.run_links(self.files(
             [['Sin donativos', 'INFORMACIÓN NO DISPONIBLE']],
             'No existe información porque no se recibieron donativos durante el mes.',
         ))
-        self.assertEqual(result[0], 'SI')
+        self.assertEqual(result[0], 'SIN EVALUACIÓN')
         self.assertTrue(result[2][0]['exception'])
 
     def test_invalid_values_and_unjustified_information_unavailable_are_failures(self):
@@ -282,7 +288,7 @@ class MatrixTests(SimpleTestCase):
                 self.assertEqual(self.run_links(self.files([['Donativo',value]], 'NO APLICA'))[0], 'NO')
 
     def test_retry_does_not_reuse_old_failure_for_no_aplica(self):
-        files = self.files([['Sin donativos', 'NO APLICA']], '')
+        files = self.files([['Sin donativos', 'NO APLICA']], 'No se recibieron donativos durante el mes.')
         schema = resolve_format('LOTAIP-19')
         context = {'numeral': 'LOTAIP-19'}
         first = check_package_links(files, schema, context, MagicMock())
@@ -290,8 +296,8 @@ class MatrixTests(SimpleTestCase):
 
         result = check_package_links(files, schema, context, MagicMock(), previous=stale)
 
-        self.assertEqual(result[0], 'SI')
-        self.assertEqual(result[2][0]['status'], 'SI')
+        self.assertEqual(result[0], 'SIN EVALUACIÓN')
+        self.assertEqual(result[2][0]['status'], 'SIN EVALUACIÓN')
 
     def test_valid_url_does_not_hide_invalid_second_row(self):
         files=self.files([['A','https://example.org/a'],['B','archivo.pdf']])
@@ -300,22 +306,22 @@ class MatrixTests(SimpleTestCase):
         result=self.run_links(files,fetch,ai)
         self.assertEqual(result[0],'NO'); self.assertEqual(len(result[2]),2)
 
-    def test_api_ocr_and_ai_failures_are_detailed_but_aggregate_as_no(self):
+    def test_api_ocr_and_ai_failures_are_detailed_and_aggregate_as_pending(self):
         files=self.files([['A','https://example.org/a']])
         result=self.run_links(files,lambda _: {'status':503,'error':'timeout'})
-        self.assertEqual(result[0], 'NO'); self.assertEqual(result[2][0]['status'],'PENDIENTE')
+        self.assertIsNone(result[0]); self.assertEqual(result[2][0]['status'],'PENDIENTE')
         with patch('core.lotaip_engine.verificables.extract_document',return_value={'error':'Tesseract ausente'}):
-            self.assertEqual(self.run_links(files,lambda _: {'status':200})[0], 'NO')
+            self.assertIsNone(self.run_links(files,lambda _: {'status':200})[0])
         with patch('core.lotaip_engine.verificables.extract_document',return_value={'text': '', 'error': None}):
             ai = MagicMock()
             empty = self.run_links(files, lambda _: {'status': 200}, ai)
-            self.assertEqual(empty[0], 'NO')
+            self.assertIsNone(empty[0])
             self.assertEqual(empty[2][0]['status'], 'PENDIENTE')
             ai.assert_not_called()
-        self.assertEqual(self.run_links(files,lambda _: {'status':200,'body':b'<html>Donativo A</html>','content_type':'text/html'},
-                                        lambda *_: {'corresponde':None,'error':'Cuota agotada'})[0], 'NO')
+        self.assertIsNone(self.run_links(files,lambda _: {'status':200,'body':b'<html>Donativo A</html>','content_type':'text/html'},
+                                         lambda *_: {'corresponde':None,'error':'Cuota agotada'})[0])
 
-    def test_strict_majority_of_links_marks_verifiables_as_yes(self):
+    def test_one_failed_link_marks_verifiables_no_under_table_6(self):
         files = self.files([
             ['A', 'https://example.org/a'],
             ['B', 'https://example.org/b'],
@@ -324,8 +330,67 @@ class MatrixTests(SimpleTestCase):
         fetch = lambda url: {'status': 200, 'body': f'<html>{url}</html>'.encode(), 'content_type': 'text/html'}
         analyze = lambda *_: {'corresponde': True, 'observacion': 'Contenido correspondiente'}
         result = self.run_links(files, fetch, analyze)
-        self.assertEqual(result[0], 'SI')
-        self.assertIn('cumplimiento=66.67%', result[1])
+        self.assertEqual(result[0], 'NO')
+        self.assertIn('todos deben cumplir', result[1])
+
+    def test_cloudflare_challenge_leaves_link_pending_without_ai(self):
+        files = self.files([['Donativo A', 'https://example.org/a']])
+        challenge = {'url': 'https://example.org/a', 'status': 403, 'error': None,
+                     'content_type': 'text/html; charset=UTF-8',
+                     'body': b'<!DOCTYPE html><html><head><title>Just a moment...</title></head></html>'}
+        ai = MagicMock()
+        result = self.run_links(files, MagicMock(return_value=challenge), ai)
+        self.assertIsNone(result[0])
+        self.assertEqual(result[2][0]['status'], 'PENDIENTE')
+        self.assertTrue(result[2][0]['bot_challenge'])
+        ai.assert_not_called()
+
+    def test_general_description_note_in_dictionary_justifies_absence(self):
+        files = self.files([['Sin donativos', 'INFORMACIÓN NO DISPONIBLE']])
+        files['Diccionario']['rows'] = [['Descripcion', 'Donativos. Informacion no disponible debido a que '
+                                                        'no se recibieron donativos durante el mes.']]
+        self.assertEqual(self.run_links(files)[0], 'SIN EVALUACIÓN')
+
+    def test_ai_context_names_the_evaluated_institution_and_page_count(self):
+        files = self.files([['Donativo A', 'https://example.org/a']])
+        seen = []
+        def analyze(text, context):
+            seen.append(context)
+            return {'corresponde': True, 'observacion': 'Correcto'}
+        fetch = lambda url: {'status': 200, 'content_type': 'text/html', 'body': b'<html>Donativo A</html>'}
+        check_package_links(files, resolve_format('LOTAIP-19'),
+                            {'institucion': 'Escuela Politecnica Nacional', 'numeral': 'LOTAIP-19'},
+                            fetch, analyze=analyze)
+        self.assertEqual(seen[0]['institucion'], 'Escuela Politecnica Nacional')
+        self.assertEqual(seen[0]['paginas'], 1)
+
+    def test_headers_match_regardless_of_word_order(self):
+        schema = resolve_format('LOTAIP-4')
+        headers = ['Apellidos y Nombres' if field == 'Nombres y Apellidos' else field
+                   for field in schema['required_fields']]
+        self.assertIn('Apellidos y Nombres', headers)
+        validation = validate_dataset([headers, ['x'] * len(headers)], schema, 4)
+        self.assertFalse([e for e in validation['errors'] if e['code'] == 'MISSING_REQUIRED_FIELD'])
+
+    def test_large_dataset_checks_a_reproducible_sample_of_three_rows(self):
+        rows = [[f'Donativo {index}', f'https://example.org/{index}'] for index in range(80)]
+        rows += [['Sin registro', 'NO APLICA']] * 5
+        files = self.files(rows, 'No se recibieron donativos en algunos registros del mes.')
+        schema, context = resolve_format('LOTAIP-19'), {'numeral': 'LOTAIP-19'}
+        def run(seed):
+            fetch = MagicMock(side_effect=lambda url: {'status': 200, 'content_type': 'text/html',
+                                                       'body': f'<html>{url}</html>'.encode()})
+            result = check_package_links(files, schema, context, fetch, sample_seed=seed,
+                                         analyze=lambda *_: {'corresponde': True, 'observacion': 'Correcto'})
+            return result, sorted(c.args[0] for c in fetch.call_args_list)
+        first, first_urls = run('1:2:11:LOTAIP-19')
+        again, again_urls = run('1:2:11:LOTAIP-19')
+        self.assertEqual(first[0], 'SI')
+        self.assertEqual(len(first_urls), 3)
+        self.assertEqual(first_urls, again_urls)
+        self.assertEqual({r['row'] for r in first[2]}, {r['row'] for r in again[2]})
+        self.assertFalse(any(r.get('exception') for r in first[2]))
+        self.assertIn('Muestra reproducible de 3 de 85 filas', first[1])
 
     def test_link_progress_reports_download_and_ai_subprocesses(self):
         files = self.files([['Donativo A', 'https://example.org/a']])
@@ -511,7 +576,7 @@ class MatrixTests(SimpleTestCase):
         self.assertEqual(fetch.call_args_list,[call(shared),call(direct)])
         self.assertEqual(result[2][0]['final_url'],pdf['url'])
 
-    def test_private_sharepoint_link_is_detailed_but_aggregate_is_no(self):
+    def test_private_sharepoint_link_is_detailed_and_aggregate_is_pending(self):
         shared='https://tenant-my.sharepoint.com/:b:/g/personal/user/token'
         files=self.files([['Normativa',shared]])
         fetch=MagicMock(return_value={
@@ -519,7 +584,7 @@ class MatrixTests(SimpleTestCase):
             'status':403,'error':None,'content_type':'text/plain','body':b'403 FORBIDDEN',
         })
         result=self.run_links(files,fetch)
-        self.assertEqual(result[0], 'NO')
+        self.assertIsNone(result[0])
         self.assertEqual(result[2][0]['status'],'PENDIENTE')
         self.assertIn('recuperar automáticamente',result[2][0]['reason'])
         self.assertEqual(fetch.call_count,2)
@@ -589,11 +654,12 @@ class MatrixTests(SimpleTestCase):
                 fetch.assert_not_called()
                 ai.assert_not_called()
 
-    def test_format_5_22_only_checks_form_or_service_request_field(self):
+    def test_format_5_22_checks_all_its_link_fields(self):
         selected = ('Enlace para descargar el formulario o formato del servicio - '
                     'Correo electronico para solicitar el servicio')
         schema = resolve_format('LOTAIP-5.22')
-        self.assertEqual(schema['url_fields'], [selected])
+        self.assertEqual(schema['url_fields'], ['Enlace para acceder al reporte del servicio', selected,
+                                                'Enlace para el servicio por internet en linea'])
         self.assertEqual(schema['metadata_url_fields'], [])
         files = {
             'Conjunto de datos': {'rows': [[
@@ -610,9 +676,9 @@ class MatrixTests(SimpleTestCase):
             'Diccionario': {'rows': []},
         }
         targets = collect_fields(files, schema)
-        self.assertEqual(len(targets), 1)
-        self.assertEqual(targets[0]['field'], selected)
-        self.assertEqual(targets[0]['value'], 'https://example.org/formulario.pdf')
+        self.assertEqual([t['field'] for t in targets], schema['url_fields'])
+        self.assertEqual([t['value'] for t in targets],
+                         ['texto que no es enlace', 'https://example.org/formulario.pdf', 'otro valor sin importancia'])
 
     def test_email_is_rejected_outside_mixed_fields_and_invalid_email_is_rejected(self):
         field = 'Enlace para acceder al reporte del servicio'
@@ -667,7 +733,7 @@ class MatrixTests(SimpleTestCase):
             return {'status':200,'body':b'<html>Acta A</html>','content_type':'text/html'} if url.endswith('/a') else {'status':503}
         ai=MagicMock(return_value={'corresponde':True,'observacion':'Acta correcta'})
         first=check_package_links(files,schema,{'numeral':19},fetch,analyze=ai)
-        self.assertEqual(first[0], 'NO')
+        self.assertIsNone(first[0])
         retry=MagicMock(return_value={'status':200,'body':b'<html>Acta B</html>','content_type':'text/html'})
         final=check_package_links(files,schema,{'numeral':19},retry,analyze=ai,previous=first[2])
         self.assertEqual(final[0],'SI'); retry.assert_called_once_with('https://example.org/b')
@@ -881,12 +947,13 @@ class FreeLLMTests(SimpleTestCase):
             body=json.loads(request.data)
             sent=json.loads(body['messages'][1]['content'])['contexto']
             self.assertEqual(sent, {
+                'institucion':'Institución evaluada',
                 'numeral':'LOTAIP-1.1', 'requisito':'Estructura organizacional',
                 'campo':'Enlace para consultar el organigrama estructural',
                 'registro': {'id': '123'},
             })
-            self.assertIn('Ignora por completo institución', body['messages'][0]['content'])
-            self.assertIn('otra entidad o período', body['messages'][0]['content'])
+            self.assertIn('propio de otra entidad', body['messages'][0]['content'])
+            self.assertIn('no rechaces por no ver el texto completo', body['messages'][0]['content'])
             self.assertEqual(body['temperature'], 0)
             self.assertEqual(body['max_tokens'], 400)
             self.assertEqual(body['reasoning_effort'], 'none')
@@ -1248,3 +1315,74 @@ class ScoreAndPeriodTests(SimpleTestCase):
             api=[{'numeral':{'name':'Numeral 6'},'year':2026,'month':8,'published':True,'published_at':'2026-09-15','files':files}]
             rubric=evaluate_package(ev,siblings,check_online=True,fetch=lambda _: {'status':200,'body':json.dumps(api).encode()})
             self.assertEqual(summarize_rubrics([rubric])['puntaje'],100)
+
+
+class LinkReviewQueueTests(SimpleTestCase):
+    """Revisión manual de enlaces que el verificador dejó pendientes."""
+
+    def rubric(self, statuses):
+        return {'version': 'v', 'criterios': [
+            {'id': 'cta', 'aplica': True, 'calificacion': 1, 'observacion': ''},
+            {'id': 'verificables', 'aplica': True, 'calificacion': None, 'observacion': 'Automático.',
+             'evidencias': [{'status': status, 'row': index + 2, 'reason': 'HTTP 403 anti-bots'}
+                            for index, status in enumerate(statuses)]},
+        ], 'criteria': {'verificables': {'status': 'PENDIENTE', 'score': None}},
+            'errores_tecnicos': [{'criterion': 'verificables'}]}
+
+    def test_queue_lists_pending_links_only_while_the_criterion_is_pending(self):
+        from core.services.lotaip_rubric import pending_links
+        self.assertEqual([index for index, _ in pending_links(self.rubric(['SI', 'PENDIENTE']))], [1])
+        decided = self.rubric(['NO', 'PENDIENTE'])
+        decided['criterios'][1]['calificacion'] = 'NO'
+        self.assertEqual(pending_links(decided), [])
+
+    def test_approving_last_pending_link_resolves_criterion_as_yes(self):
+        from core.services.lotaip_rubric import review_link
+        rubric = review_link(self.rubric(['SI', 'PENDIENTE']), 1, 'SI', '', 7, '2026-10-26T12:00:00')
+        criterion = rubric['criterios'][1]
+        self.assertEqual(criterion['calificacion'], 'SI')
+        item = criterion['evidencias'][1]
+        self.assertEqual(item['status'], 'SI')
+        self.assertEqual(item['manual_review']['reviewed_by'], 7)
+        self.assertEqual(item['manual_review']['automatic_reason'], 'HTTP 403 anti-bots')
+        self.assertIn('Revisión manual', item['reason'])
+        self.assertEqual(rubric['criteria']['verificables']['status'], 'SI')
+        self.assertEqual(rubric['errores_tecnicos'], [])
+
+    def test_partial_approval_keeps_pending_and_rejection_closes_as_no(self):
+        from core.services.lotaip_rubric import review_link
+        partial = review_link(self.rubric(['PENDIENTE', 'PENDIENTE']), 0, 'SI', 'Abre el PEDI.', 1, 'now')
+        self.assertIsNone(partial['criterios'][1]['calificacion'])
+        self.assertEqual(partial['criterios'][1]['evidencias'][0]['reason'], 'Abre el PEDI.')
+        rejected = review_link(partial, 1, 'NO', '', 1, 'now')
+        self.assertEqual(rejected['criterios'][1]['calificacion'], 'NO')
+
+    def test_invalid_decisions_are_rejected(self):
+        from core.services.lotaip_rubric import review_link
+        with self.assertRaises(ValueError):
+            review_link(self.rubric(['PENDIENTE']), 0, 'TAL VEZ', '', 1, 'now')
+        with self.assertRaises(ValueError):
+            review_link(self.rubric(['SI']), 0, 'SI', '', 1, 'now')
+        with self.assertRaises(ValueError):
+            review_link(self.rubric(['PENDIENTE']), 5, 'SI', '', 1, 'now')
+
+    def test_full_reevaluation_reuses_manual_decision_for_unchanged_link(self):
+        from core.services.evaluator import _manual_link_decisions
+        from core.services.lotaip_rubric import review_link
+        files = {'Conjunto de datos': {'rows': [
+            ['Descripcion', 'Enlace para descargar el documento mediante el cual se oficializa el regalo o donativo'],
+            ['Donativo A', 'https://example.org/a']]},
+            'Diccionario': {'rows': []}, 'Metadatos': {'rows': []}}
+        schema, context = resolve_format('LOTAIP-19'), {'numeral': 'LOTAIP-19'}
+        challenge = MagicMock(return_value={'status': 403, 'content_type': 'text/html',
+                                            'body': b'<html><title>Just a moment...</title></html>'})
+        value, _, details = check_package_links(files, schema, context, challenge)
+        self.assertIsNone(value)
+        self.assertEqual(details[0]['record'], {'Descripcion': 'Donativo A'})
+        rubric = {'criterios': [{'id': 'verificables', 'aplica': True, 'calificacion': None,
+                                 'observacion': '', 'evidencias': details}]}
+        reviewed = review_link(rubric, 0, 'SI', '', 1, 'now')
+        again = check_package_links(files, schema, context, challenge,
+                                    previous=_manual_link_decisions(reviewed)['criterios'][0]['evidencias'])
+        self.assertEqual(again[0], 'SI')
+        self.assertTrue(again[2][0]['manual_review'])

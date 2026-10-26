@@ -25,6 +25,25 @@ def resolve_format(indicator_code, number=None):
     matches = formats_for_numeral(number) if number else []
     return matches[0] if len(matches) == 1 else None
 
+def header_key(value):
+    """Clave de encabezado sin tildes ni orden de palabras.
+
+    Las entidades invierten términos de la plantilla oficial («Apellidos y
+    Nombres» por «Nombres y Apellidos») sin cambiar el significado del campo.
+    """
+    from core.services.comparison_engine import normalize_text
+    return " ".join(sorted(normalize_text(value).split()))
+
+
+def header_map(schema):
+    """Encabezado publicado → campo oficial, incluidos los alias declarados."""
+    mapping = {header_key(field): field for field in schema.get("dataset_fields", [])}
+    for field, values in schema.get("aliases", {}).items():
+        for value in values:
+            mapping[header_key(value)] = field
+    return mapping
+
+
 def schema_summary(number):
     values = formats_for_numeral(number)
     return {

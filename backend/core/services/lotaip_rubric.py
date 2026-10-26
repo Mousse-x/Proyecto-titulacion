@@ -5,13 +5,12 @@ import re
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
-from datetime import datetime
 
 from django.conf import settings
 
 from .document_processor import detect_lotaip_document_type
 from .comparison_engine import ABSENCE_MARKERS, absence_marker, normalize_text
-from core.lotaip_engine.schemas import resolve_format
+from core.lotaip_engine.schemas import header_key, header_map, resolve_format
 from core.lotaip_engine.rules import ENGINE_VERSION
 
 VERSION = ENGINE_VERSION
@@ -23,11 +22,11 @@ DEFINITIONS = [
      "1: datos estructurados publicados en CSV delimitado por comas; 0: sin publicación accesible que cumpla ese formato."),
     ("rp", "Registro dentro del plazo", [0, 1], "6.2.3 · Tabla 3 · p. 60",
      "1: registro en el PNT hasta el día 15 del mes siguiente o siguiente día laborable; 0: registro fuera del plazo. Verificar feriados aplicables."),
-    ("verificables", "Estado de verificables", ["SI", "NO"], "7.2 · Tabla 6 · p. 63; adaptación de la metodología",
-     "Sí: más del 50% de los enlaces comprobados cumplen acceso, correspondencia y legibilidad. No: cumple el 50% o menos. NO APLICA siempre cuenta como enlace cumplido."),
-    ("vigencia", "Vigencia de la información", ["SI", "NO"], "7.1.2 y 7.2 · pp. 61–63",
+    ("verificables", "Estado de verificables", ["SI", "NO", "SIN EVALUACIÓN"], "7.1.1 y 7.2 · Tabla 6 · p. 63; muestra de la nota 3",
+     "Sí: todos los verificables de una muestra reproducible de 3 filas son de libre acceso, corresponden y son legibles. No: alguno no cumple. SIN EVALUACIÓN: NO APLICA, o INFORMACIÓN NO DISPONIBLE con nota aclaratoria en el diccionario (nota 1)."),
+    ("vigencia", "Vigencia de la información", ["SI", "NO", "SIN EVALUACIÓN"], "7.1.2 y 7.2 · pp. 61–63",
      "Sí: información dentro del plazo de vigencia; No: vencida. Art. 19, numerales 16 y 18; art. 21, formatos 1, 2, 4 y 5."),
-    ("validez", "Validez de la información", ["SI", "NO"], "7.1.3 y 7.2 · pp. 62–63",
+    ("validez", "Validez de la información", ["SI", "NO", "SIN EVALUACIÓN"], "7.1.3 y 7.2 · pp. 62–63",
      "Sí: importes coherentes; No: inconsistencias. Art. 19.3: suma de componentes = total de ingresos adicionales; art. 19.6: devengado + saldo por devengar = codificado."),
 ]
 
@@ -50,14 +49,14 @@ def _read_csv(evidence):
     if path.suffix.lower() != ".csv":
         return {"error": f"Formato {path.suffix or 'desconocido'}: no es CSV delimitado por comas.", "not_csv": True}
     raw = path.read_bytes()
-    for encoding in ("utf-8-sig", "cp1252"):
+    # latin-1 nunca falla: recupera CSV con bytes fuera de cp1252 (p. ej. 0x81)
+    # en lugar de declarar ilegible un archivo publicado.
+    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
         try:
             text = raw.decode(encoding)
             break
         except UnicodeDecodeError:
             continue
-    else:
-        return {"error": "No se pudo decodificar el CSV."}
     candidates = []
     for delimiter in (",", ";", "\t", "|"):
         try:
@@ -90,14 +89,8 @@ def _required_empty_values(data, schema):
     rows = data.get("rows", [])
     if len(rows) < 2 or not schema:
         return data.get("empty", 0)
-    aliases = schema.get("aliases", {})
-    mapping = {}
-    for field in schema.get("dataset_fields", []):
-        mapping[normalize_text(field)] = field
-    for field, values in aliases.items():
-        for value in values:
-            mapping[normalize_text(value)] = field
-    canonical = [mapping.get(normalize_text(header)) for header in rows[0]]
+    mapping = header_map(schema)
+    canonical = [mapping.get(header_key(header)) for header in rows[0]]
     nullable = set(schema.get("nullable_fields", []))
     required = set(schema.get("required_fields", [])) - nullable
     return sum(
@@ -174,17 +167,14 @@ def evaluate_package(evidence, siblings, check_online=False, fetch=None, previou
     # El mes seleccionado en el PNT es el mes de los datos. El monitoreo
     # corresponde al siguiente mes; no se resta un mes una segunda vez.
     expected = (evaluated_year, evidence.month)
+    from .lotaip_automatic import parse_date
     metadata_dates = []
     for row in files.get("Metadatos", {}).get("rows", []):
         if row and "fecha" in normalize_text(row[0]):
             for cell in row[1:]:
-                for fmt in ("%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%d-%m-%Y"):
-                    try:
-                        parsed = datetime.strptime(cell.strip(), fmt)
-                        metadata_dates.append((parsed.year, parsed.month))
-                        break
-                    except ValueError:
-                        pass
+                parsed = parse_date(cell)
+                if parsed:
+                    metadata_dates.append((parsed.year, parsed.month))
     sentinels = ABSENCE_MARKERS
     placeholders = {normalize_text(cell) for data in files.values() for row in data.get("rows", []) for cell in row
                     if normalize_text(cell) in sentinels}
@@ -204,6 +194,10 @@ def evaluate_package(evidence, siblings, check_online=False, fetch=None, previou
     elif complete and metadata_dates and all(value == expected for value in metadata_dates) and explained:
         cta["sugerencia"] = 1
     elif not complete or not explained or (metadata_dates and expected[0] is not None and any(value != expected for value in metadata_dates)):
+        cta["sugerencia"] = 0.5
+    elif expected[0] is not None:
+        # Publicada y legible, pero sin fecha de metadatos que acredite la
+        # actualización: Tabla 1 la ubica en 0,5, nunca en 0 (no publicada).
         cta["sugerencia"] = 0.5
     else:
         cta["sugerencia"] = None
@@ -235,6 +229,9 @@ def evaluate_package(evidence, siblings, check_online=False, fetch=None, previou
             if time.monotonic() > deadline:
                 return {"status": None, "error": "Tiempo de comprobación agotado; se puede reintentar", "body": b""}
             return request(url)
+        # Semilla estable por institución, período y formato: la muestra de
+        # tres filas (nota 3) se repite idéntica en cada reevaluación.
+        sample_seed = f"{evidence.university_id}:{evidence.period_id}:{evidence.month}:{getattr(evidence.indicator, 'code', number)}"
         report("Comprobando publicación", "Contrastando el paquete con la publicación oficial en el PNT.", 35)
         published_matches, source_notes = check_publication(evidence, siblings, bounded_fetch)
         # La fecha oficial del PNT debe consultarse antes de las descargas, el
@@ -261,24 +258,25 @@ def evaluate_package(evidence, siblings, check_online=False, fetch=None, previou
         if by_key["validez"]["aplica"]:
             value, note = check_sums(number, rows)
             if rows[1:] and explained and all(absence_marker(cell) for row in rows[1:] for cell in row):
-                value, note = "SI", "NO APLICA justificado: no existen registros para validar importes."
+                value, note = "SIN EVALUACIÓN", "NO APLICA con nota aclaratoria: no existen registros para validar importes."
             by_key["validez"].update(calificacion=value if published_matches else None, sugerencia=value, observacion=note)
         if by_key["vigencia"]["aplica"]:
             year = getattr(getattr(evidence, "period", None), "year", None)
             reference = date(year, evidence.month, calendar.monthrange(year, evidence.month)[1]) if year and evidence.month else None
-            value, note = check_validity(rows, reference, sample_seed=getattr(evidence, "id", None) or f"{evidence.university_id}:{evidence.period_id}:{number}")
+            value, note = check_validity(rows, reference, sample_seed=sample_seed)
             dataset_sentinels = {absence_marker(cell) for row in rows[1:] for cell in row if absence_marker(cell)}
             if dataset_sentinels and explained and all(absence_marker(cell) for row in rows[1:] for cell in row if cell.strip()):
-                value, note = "SI", "No existen registros sujetos a vigencia; el conjunto declara NO APLICA y el diccionario explica la causa."
+                value, note = "SIN EVALUACIÓN", "No existen registros sujetos a vigencia; el conjunto declara NO APLICA y el diccionario explica la causa."
             by_key["vigencia"].update(calificacion=value if published_matches else None, sugerencia=value, observacion=note)
         if by_key["verificables"]["aplica"]:
             report("Verificando enlaces", "Preparando descarga, extracción de texto y análisis de correspondencia.", 45)
-            context = {"numeral": evidence.indicator.code,
+            context = {"institucion": getattr(getattr(evidence, "university", None), "name", ""),
+                       "numeral": evidence.indicator.code,
                        "requisito": getattr(evidence.indicator, "name", "") or str(number)}
             prior = next((c.get('evidencias', []) for c in (previous or {}).get('criterios', []) if c['id']=='verificables'), [])
             value, note, details = check_package_links(
                 files, schema, context, bounded_fetch, previous=prior,
-                progress_callback=progress_callback, ai_budget=ai_budget,
+                progress_callback=progress_callback, ai_budget=ai_budget, sample_seed=sample_seed,
             )
             # La accesibilidad y correspondencia del enlace se comprueban de
             # forma directa; una falla independiente de la API del PNT no debe
@@ -338,12 +336,65 @@ def review_rubric(rubric, payload, user_id, reviewed_at):
     return updated
 
 
+LINK_DECISIONS = {
+    "SI": "Revisión manual: el verificable es de libre acceso, corresponde a la información reportada y es legible.",
+    "NO": "Revisión manual: el verificable no es de libre acceso, no corresponde a la información reportada o no es legible.",
+}
+
+
+def pending_links(rubric):
+    """Comprobaciones de enlaces que el verificador automático dejó pendientes.
+
+    Sólo cuando el criterio sigue pendiente: si otro enlace ya no cumple, la
+    Tabla 6 da NO y revisar el resto no cambia la calificación.
+    """
+    criterion = next((c for c in rubric.get("criterios", []) if c["id"] == "verificables"), None)
+    if not criterion or not criterion["aplica"] or criterion.get("calificacion") is not None:
+        return []
+    return [(index, item) for index, item in enumerate(criterion.get("evidencias", []))
+            if item.get("status") == "PENDIENTE"]
+
+
+def review_link(rubric, index, decision, observation, user_id, reviewed_at):
+    """Resuelve un enlace pendiente y recalcula el estado de verificables (Tabla 6)."""
+    from core.lotaip_engine.verificables import aggregate_link_statuses
+    if decision not in LINK_DECISIONS:
+        raise ValueError("La decisión debe ser SI o NO.")
+    updated = deepcopy(rubric)
+    criterion = next((c for c in updated.get("criterios", []) if c["id"] == "verificables"), None)
+    items = criterion.get("evidencias", []) if criterion and criterion["aplica"] else []
+    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(items):
+        raise ValueError("Enlace no encontrado en la rúbrica.")
+    item = items[index]
+    if item.get("status") != "PENDIENTE":
+        raise ValueError("El enlace ya no está pendiente; vuelva a cargar la cola.")
+    observation = (observation or "").strip() or LINK_DECISIONS[decision]
+    if len(observation) > 2000:
+        raise ValueError("La observación admite hasta 2000 caracteres.")
+    item.update(status=decision, reason=observation,
+                manual_review={"decision": decision, "observation": observation,
+                               "reviewed_by": user_id, "reviewed_at": reviewed_at,
+                               "automatic_status": "PENDIENTE", "automatic_reason": item.get("reason", "")})
+    value = aggregate_link_statuses(row.get("status") for row in items)
+    reviewed = sum(bool(row.get("manual_review")) for row in items)
+    note = f" Revisión manual de enlaces: {reviewed} enlace(s) resueltos por un revisor; resultado={value or 'PENDIENTE'}."
+    criterion.update(calificacion=value, sugerencia=value,
+                     estado_verificacion="VERIFICADO" if value is not None else "PENDIENTE",
+                     observacion=re.sub(r" Revisión manual de enlaces: .*$", "", criterion["observacion"], flags=re.S) + note)
+    # Contrato v2 (``criteria``) que leen las vistas nuevas.
+    if isinstance(updated.get("criteria"), dict) and "verificables" in updated["criteria"]:
+        updated["criteria"]["verificables"].update(status=value or "PENDIENTE", score=None, reason=criterion["observacion"])
+        updated["errores_tecnicos"] = [error for error in updated.get("errores_tecnicos", [])
+                                       if value is None or error.get("criterion") != "verificables"]
+    return updated
+
+
 def summarize_rubrics(rubrics):
     """Promediar cada columna y luego CTA, ETA, RP y CI; excluir no aplicables.
 
     En v3, CI promedia comprobaciones cualitativas aplicables (Sí=1, No=0).
-    NO APLICA justificado llega como SI. SIN EVALUACIÓN se conserva únicamente
-    para resultados históricos. Sin CI, no hay SITA definitivo.
+    NO APLICA con nota aclaratoria llega como SIN EVALUACIÓN (Tabla 6, nota 1)
+    y se excluye del promedio. Sin CI, no hay SITA definitivo.
     """
     unique = {r["unidad"]: r for r in rubrics if r and r.get("criterios")}
     columns = {key: [] for key, *_ in DEFINITIONS}

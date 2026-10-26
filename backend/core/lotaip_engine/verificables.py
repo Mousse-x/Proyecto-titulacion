@@ -112,6 +112,21 @@ class _RepositoryPageParser(HTMLParser):
             self._capture[1].append(text)
 
 
+def is_bot_challenge(response):
+    """Página de verificación anti-bots (p. ej. Cloudflare «Just a moment...»).
+
+    No es el verificable ni prueba su ausencia: el servidor no entregó el
+    recurso a un cliente automatizado. Se deja pendiente y nunca se intenta
+    superar el desafío.
+    """
+    if response.get('status') not in {403, 429, 503}:
+        return False
+    head = (response.get('body') or b'')[:20000].lower()
+    return any(token in head for token in (
+        b'<title>just a moment', b'cf-chl', b'challenge-platform', b'cf_chl_opt',
+        b'attention required! | cloudflare', b'ddos-guard'))
+
+
 def is_direct_pdf_response(response):
     """La respuesta real manda; la extensión de la URL es sólo decorativa."""
     body = response.get('body', b'')
@@ -312,7 +327,11 @@ def justified_exception(dictionary, field, aliases=()):
         label = field_key(row[0])
         description = field_key(' '.join(row[1:]))
         explicit_note = any(word in label for word in ('nota', 'aclaracion', 'observacion', 'justificacion'))
-        if label not in labels and not explicit_note:
+        # Nota general: la fila «Descripción» del diccionario explica la
+        # ausencia de todo el formato («No aplica debido a que...»).
+        general_note = label == 'descripcion' and any(
+            marker in description for marker in ('no aplica', 'informacion no disponible'))
+        if label not in labels and not explicit_note and not general_note:
             continue
         # La columna del campo no cuenta como justificación.
         reason = description.replace('no aplica', '').replace('informacion no disponible', '').strip()
@@ -464,15 +483,58 @@ def collect_fields(files, schema):
     return targets
 
 
+SAMPLE_ROWS = 3
+
+
+def aggregate_link_statuses(statuses):
+    """Tabla 6: SÍ sólo si todos los verificables revisados cumplen.
+
+    Una comprobación técnica no concluida deja el criterio pendiente (None);
+    nunca equivale a incumplimiento. Las excepciones documentadas (SIN
+    EVALUACIÓN) no cuentan; si sólo hay excepciones, el criterio no se evalúa.
+    """
+    statuses = list(statuses)
+    if 'NO' in statuses:
+        return 'NO'
+    if 'PENDIENTE' in statuses:
+        return None
+    if 'SI' in statuses:
+        return 'SI'
+    return 'SIN EVALUACIÓN'
+
+
+def sample_targets(targets, seed, size=SAMPLE_ROWS):
+    """Nota 3 del instructivo: con más de tres filas se validan tres al azar.
+
+    Se sortean filas del conjunto de datos que tengan al menos un valor distinto
+    de NO APLICA/INFORMACIÓN NO DISPONIBLE. La semilla fija la muestra para que
+    una reevaluación del mismo formato compruebe las mismas filas. Metadatos y
+    campos ausentes se conservan porque son pocos y no dependen de filas.
+    """
+    import random
+    rows = sorted({t['row'] for t in targets
+                   if t['document'] == 'Conjunto de datos' and not t.get('missing_field')
+                   and not absence_marker(t['value'])})
+    if len(rows) <= size:
+        return targets, rows
+    chosen = sorted(random.Random(str(seed or 'lotaip')).sample(rows, size))
+    kept = [t for t in targets if t['document'] != 'Conjunto de datos' or t.get('missing_field')
+            or t['row'] in chosen]
+    return kept, chosen
+
+
 def check_package_links(files, schema, context, fetch, analyze=None, previous=(),
-                        progress_callback=None, ai_budget=None):
+                        progress_callback=None, ai_budget=None, sample_seed=None):
     if not schema:
         return None, 'PENDIENTE: no se identificó el esquema del formato.', []
     default_analyzer = analyze is None
     use_shared_cache = default_analyzer
     analyze = analyze or analyze_correspondence
     dictionary = files.get('Diccionario', {}).get('rows', [])
-    targets = collect_fields(files, schema)
+    all_targets = collect_fields(files, schema)
+    dataset_rows = len({t['row'] for t in all_targets if t['document'] == 'Conjunto de datos'
+                        and not t.get('missing_field')})
+    targets, sampled_rows = sample_targets(all_targets, sample_seed or json.dumps(context, sort_keys=True))
     def report(phase, detail, stage_pct):
         if progress_callback:
             progress_callback({'phase': phase, 'detail': detail, 'stage_pct': stage_pct})
@@ -483,15 +545,16 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
     deadline = time.monotonic() + settings.LOTAIP_PACKAGE_TIMEOUT
     for order, target in enumerate(targets):
         item = {k: v for k, v in target.items() if k != 'record'}
+        # El registro queda a la vista del revisor cuando el enlace requiere
+        # revisión manual (p. ej. bloqueo anti-bots).
+        if target.get('record'):
+            item['record'] = compact_record_context(target['record'], target['field'])
         item['_order'] = order
         signature = hashlib.sha256(json.dumps({'context': context, 'target': target, 'dictionary': dictionary}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         item['record_hash'] = signature
         value = target['value']
         marker = absence_marker(value)
-        # NO APLICA es una regla concluyente del verificador. No se reutiliza
-        # un resultado anterior porque pudo haberse calculado cuando todavía
-        # se exigía una justificación en el diccionario.
-        if signature in completed and marker != 'no aplica':
+        if signature in completed and not marker:
             cached_item = dict(completed[signature])
             cached_item['_order'] = order
             results.append(cached_item)
@@ -502,14 +565,18 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
         if target.get('missing_field'):
             finish('NO', 'Falta el campo de enlace requerido en este documento.')
         elif marker == 'no aplica':
-            finish('SI', 'NO APLICA: cumple por regla del verificador, sin descarga, OCR ni IA.')
+            # Criterio del proyecto: NO APLICA declara que no hay verificable
+            # que enlazar, así que se omite sin exigir la nota del diccionario.
+            finish('SIN EVALUACIÓN', 'NO APLICA: no se evalúa el enlace (Tabla 6, nota 1).')
             item['exception'] = True
         elif marker:
+            # Tabla 6, nota 1: INFORMACIÓN NO DISPONIBLE con nota aclaratoria
+            # en el diccionario no se evalúa; sin esa nota el enlace falta.
             if justified_exception(dictionary, target['field'], [target.get('label', ''), *schema.get('aliases', {}).get(target['field'], [])]):
-                finish('SI', f'{marker.upper()} justificado en el diccionario: cumple, sin descarga, OCR ni IA.')
+                finish('SIN EVALUACIÓN', f'{marker.upper()} con nota aclaratoria en el diccionario: no se evalúa (Tabla 6, nota 1).')
                 item['exception'] = True
             else:
-                finish('NO', f'{marker.upper()} sin una causa identificable en el diccionario.')
+                finish('NO', f'{marker.upper()} sin nota aclaratoria en el diccionario.')
         elif field_allows_email(schema, target['field']) and normalize_email(value):
             item['email'] = normalize_email(value)
             finish('SI', 'Correo electrónico válido admitido por el campo mixto; cumple sin descarga, OCR ni IA.')
@@ -558,7 +625,9 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
                             response = {**detail_response, 'url': original_url}
                             sercop_detail_url = detail_url
                     page_json = None
-                    if (response.get('status') in {200, 403} and not response.get('error')
+                    if is_bot_challenge(response):
+                        extracted = {}
+                    elif (response.get('status') in {200, 403} and not response.get('error')
                             and is_html_response(response)
                             and not is_direct_pdf_response(response)):
                         page_json = extract_repository_page_json(response)
@@ -605,7 +674,12 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
                 item['repository_document_url'] = repository_document_url
             if sercop_detail_url:
                 item['sercop_detail_url'] = sercop_detail_url
-            if response.get('status') in {400, 401, 404, 410}:
+            if is_bot_challenge(response):
+                item['bot_challenge'] = True
+                finish('PENDIENTE', f"El servidor respondió HTTP {response.get('status')} con una página de verificación "
+                       'anti-bots (p. ej. Cloudflare); no entregó el documento al verificador automático. '
+                       'No acredita incumplimiento: requiere revisión manual del enlace.')
+            elif response.get('status') in {400, 401, 404, 410}:
                 finish('NO', f"Verificable inaccesible: HTTP {response['status']}.")
             elif (sharepoint_blocked or response.get('status') == 403 and _sharepoint_download_url(value)) and not page_json:
                 finish('PENDIENTE', 'SharePoint/OneDrive no permitió recuperar automáticamente el archivo compartido. '
@@ -642,6 +716,7 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
                     analysis_context = {**context, 'documento': target['document'], 'campo': target['field'],
                                         'fuente': ('documento_repositorio' if repository_document_url else
                                                    'metadatos_json_pagina' if page_json else 'documento_directo'),
+                                        'paginas': extracted.get('pages'),
                                         'registro': record_context}
                     analysis_key = hashlib.sha256(json.dumps({
                         'policy': 'semantic-content-v8-official-portals',
@@ -753,18 +828,16 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
     results.sort(key=lambda row: row.pop('_order', len(targets)))
     if not results:
         return 'NO', 'El esquema no produjo verificables comprobables; no se acredita cumplimiento.', []
-    pending = sum(r['status']=='PENDIENTE' for r in results)
-    failures = sum(r['status']=='NO' for r in results)
-    successes = len(results) - pending - failures
-    percentage = successes / len(results) * 100
-    # Regla institucional solicitada: el apartado cumple cuando una mayoría
-    # estricta de todos los enlaces comprobados (más del 50 %) termina en SÍ.
-    # Los fallos técnicos agotados permanecen en el detalle, pero cuentan como
-    # no acreditados en el denominador y nunca dejan el criterio pendiente.
-    status = 'SI' if percentage > 50 else 'NO'
-    summary = (f'{len(results)} campos/registros comprobados: {successes} cumplen, '
-               f'{failures} no cumplen, {pending} no acreditados; '
-               f'cumplimiento={percentage:.2f}% (se exige más del 50%).')
+    excluded = sum(r['status'] == 'SIN EVALUACIÓN' for r in results)
+    pending = sum(r['status'] == 'PENDIENTE' for r in results)
+    failures = sum(r['status'] == 'NO' for r in results)
+    successes = sum(r['status'] == 'SI' for r in results)
+    status = aggregate_link_statuses(r['status'] for r in results)
+    sample_note = (f'Muestra reproducible de {len(sampled_rows)} de {dataset_rows} filas del conjunto de datos '
+                   f'(nota 3): filas {sampled_rows}. ' if dataset_rows > SAMPLE_ROWS else '')
+    summary = (f'{sample_note}{len(results)} campos/registros revisados: {successes} cumplen, '
+               f'{failures} no cumplen, {pending} pendientes, {excluded} sin evaluación por excepción documentada; '
+               'regla de la Tabla 6: todos deben cumplir.')
     reported_tokens = sum(
         analysis_cache[key].get('usage', {}).get('total_tokens', 0)
         for key in unique_jobs
@@ -776,5 +849,6 @@ def check_package_links(files, schema, context, fetch, analyze=None, previous=()
     reused_count = sum(bool(row.get('analysis_reused')) for row in results)
     if reused_count:
         summary += f' {reused_count} análisis reutilizados sin consumo adicional.'
-    details = ' '.join(f"{r['document']}, {r['field']}, fila {r['row']}: {r['reason']}" for r in results if r['status']!='SI')
+    details = ' '.join(f"{r['document']}, {r['field']}, fila {r['row']}: {r['reason']}" for r in results
+                       if r['status'] not in {'SI', 'SIN EVALUACIÓN'})
     return status, summary + ' ' + details[:4500], results

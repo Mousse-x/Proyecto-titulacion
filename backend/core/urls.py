@@ -25,7 +25,7 @@ from .validation_views import (
     validate_document, validate_all_university,
     get_validation_result, get_compliance_summary, get_observations,
     get_latest_validation_period,
-    review_lotaip_criteria,
+    review_lotaip_criteria, lotaip_pending_links, lotaip_decide_link,
     lotaip_run_detail, lotaip_numerals, manual_review_item,
     lotaip_link_review_queue, lotaip_link_review_decide, cancel_lotaip_run,
     retry_international_indicator, clear_international_cache,
@@ -41,6 +41,8 @@ urlpatterns = [
     path("lotaip/ejecuciones/<int:run_id>/cola-revision/", lotaip_link_review_queue, name="lotaip_link_review_queue"),
     path("lotaip/cola-revision/<int:item_id>/decidir/", lotaip_link_review_decide, name="lotaip_link_review_decide"),
     path("evaluacion/documentos/<int:ev_id>/criterios/", review_lotaip_criteria, name="review_lotaip_criteria"),
+    path("evaluacion/universidades/<int:univ_id>/enlaces-pendientes/", lotaip_pending_links, name="lotaip_pending_links"),
+    path("evaluacion/documentos/<int:ev_id>/enlaces/<int:index>/decidir/", lotaip_decide_link, name="lotaip_decide_link"),
     # Auth
     path("auth/register/", register_user,   name="register_user"),
     path("auth/login/",    login_user,       name="login_user"),

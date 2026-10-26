@@ -186,7 +186,7 @@ def evaluar_documento(evidence_id, network_cache=None, retry_pending=False, reev
             evidence, siblings, template=template, check_online=True, fetch=fetch,
             previous=(saved.lotaip_rubric
                       if saved_uses_current_content_policy and retry_pending and not reevaluate
-                      else None),
+                      else _manual_link_decisions(saved.lotaip_rubric if saved else None)),
             progress_callback=progress_callback,
             ai_budget=(ai_budget if ai_budget is not None else {
                 "limit": getattr(settings, "FREELLMAPI_MAX_TOKENS_PER_RUN", 200000),
@@ -225,6 +225,18 @@ def evaluar_documento(evidence_id, network_cache=None, retry_pending=False, reev
         )
         _save_validation_result(evidence, error_result)
         return error_result
+
+
+def _manual_link_decisions(rubric):
+    """Decisiones manuales de enlaces que sobreviven a una reevaluación completa.
+
+    Sin versión, el motor no reutiliza criterios; sólo el verificador de enlaces
+    toma estas filas, y únicamente cuando el registro y la URL no cambiaron
+    (misma huella ``record_hash``).
+    """
+    criterion = next((c for c in (rubric or {}).get("criterios", []) if c.get("id") == "verificables"), None)
+    manual = [item for item in (criterion or {}).get("evidencias", []) if item.get("manual_review")]
+    return {"criterios": [{"id": "verificables", "evidencias": manual}]} if manual else None
 
 
 def _build_result(evidence, template, score_existence=0, score_format=0,

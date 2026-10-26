@@ -37,6 +37,12 @@ export const validationApi = {
   cancelRun: (runId) => client.post(`/lotaip/ejecuciones/${runId}/cancelar/`),
   getReviewQueue: (runId, params = {}) => client.get(`/lotaip/ejecuciones/${runId}/cola-revision/`, { params }),
   decideReviewItem: (itemId, payload) => client.post(`/lotaip/cola-revision/${itemId}/decidir/`, payload),
+  getPendingLinks: (universityId, periodId, month) => client.get(
+    `/evaluacion/universidades/${universityId}/enlaces-pendientes/`,
+    { params: { periodo_id: periodId, ...(month ? { month } : {}) } },
+  ),
+  decidePendingLink: (evidenceId, index, payload) =>
+    client.post(`/evaluacion/documentos/${evidenceId}/enlaces/${index}/decidir/`, payload),
   manualReview: (evidenceId, payload) => client.post(`/evaluacion/documentos/${evidenceId}/revision-manual/`, payload),
   reviewCriteria: (evidenceId, payload) =>
     client.post(`/evaluacion/documentos/${evidenceId}/criterios/`, payload),
@@ -58,9 +64,10 @@ export const validationApi = {
         {
           periodo_id: periodId,
           month: month || null,
-          // El botón internacional debe rehacer búsqueda, descarga y dictamen;
-          // de lo contrario los resultados definitivos se reutilizan por siete días.
-          reevaluate: options.reevaluate ?? scope === 'international',
+          // Los botones de evaluar rehacen descarga y dictamen; sin esto el
+          // backend reutiliza resultados guardados. Completar sólo lo pendiente
+          // es la acción separada «Actualizar pendientes».
+          reevaluate: options.reevaluate ?? true,
           scope,
         },
         { signal: options.signal },
