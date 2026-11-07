@@ -583,7 +583,8 @@ def analyze_correspondence_batch(text, contexts, progress_callback=None, token_b
     except urllib.error.HTTPError as exc:
         error = f'FreeLLMAPI respondió HTTP {exc.code}; pendiente de reintento.'
     except InvalidProviderResponse as exc:
-        error = f'FreeLLMAPI pendiente: {exc}'
+        return [{'corresponde': None, 'error': f'FreeLLMAPI pendiente: {exc}',
+                 'error_code': 'INVALID_RESPONSE'} for _ in contexts]
     except (urllib.error.URLError, TimeoutError, ConnectionError):
         error = 'FreeLLMAPI pendiente: no se pudo conectar o se agotó el tiempo de espera.'
     except Exception as exc:

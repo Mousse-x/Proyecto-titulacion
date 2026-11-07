@@ -43,7 +43,8 @@ def parse_csv(evidence):
         widths = Counter(len(r) for r in rows)
         if widths:
             width, count = widths.most_common(1)[0]
-            candidates.append(((count / len(rows), width), delimiter, rows))
+            # Una sola columna significa que ese carácter no separa campos.
+            candidates.append(((width >= 2, count / len(rows), width), delimiter, rows))
     if not candidates:
         result["error"] = "CSV vacío o corrupto"
         return result

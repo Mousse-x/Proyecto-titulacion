@@ -1,39 +1,16 @@
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { DASHBOARD_BY_ROLE, NAV_BY_ROLE, PAGE_META, pageKey, sectionForPath } from './navConfig';
 
-const PAGE_META = {
-  '/admin/dashboard': { title: 'Dashboard', sub: 'Administracion del Sistema' },
-  '/admin/users': { title: 'Gestion de Usuarios', sub: 'Administrar cuentas y roles' },
-  '/admin/universities': { title: 'Universidades', sub: 'Instituciones registradas' },
-  '/admin/indicators': { title: 'Indicadores LOTAIP', sub: 'Marco de evaluacion' },
-  '/admin/weightings': { title: 'Ponderaciones', sub: 'Configurar pesos por categoria' },
-  '/admin/rankings': { title: 'Rankings Nacionales', sub: 'Indice de transparencia institucional' },
-  '/admin/reports': { title: 'Reportes', sub: 'Generar y exportar informes' },
-  '/admin/audit': { title: 'Auditoria', sub: 'Registros y trazabilidad del sistema' },
-  '/admin/feedback': { title: 'Comentarios', sub: 'Feedback enviado por usuarios' },
-  '/admin/documents': { title: 'Gestion Documental', sub: 'Administrar evidencias institucionales' },
-  '/admin/validation': { title: 'Evaluación de transparencia', sub: 'Evaluaciones nacionales e internacionales separadas' },
-  '/university/dashboard': { title: 'Mi Dashboard', sub: 'Estado de transparencia institucional' },
-  '/university/universities': { title: 'Universidades', sub: 'Gestionar instituciones registradas' },
-  '/university/index': { title: 'Indice de Transparencia', sub: 'Informacion institucional y resultados' },
-  '/university/comparatives': { title: 'Analisis Comparativo', sub: 'Comparar universidades' },
-  '/university/rankings': { title: 'Rankings', sub: 'Clasificacion nacional de transparencia' },
-  '/university/reports': { title: 'Reportes', sub: 'Generar y exportar informes' },
-  '/university/documents': { title: 'Carga Documental', sub: 'Subir y gestionar evidencias' },
-  '/university/observations': { title: 'Observaciones', sub: 'Observaciones del auditor' },
-  '/university/feedback': { title: 'Comentarios', sub: 'Comentarios de transparencia' },
-  '/university/validation': { title: 'Evaluación de transparencia', sub: 'Resultados nacionales e internacionales' },
-  '/auditor/dashboard': { title: 'Dashboard Auditor', sub: 'Vista general del sistema' },
-  '/auditor/index': { title: 'Indice de Transparencia', sub: 'Calculo del indice institucional' },
-  '/auditor/comparatives': { title: 'Analisis Comparativo', sub: 'Comparar universidades' },
-  '/auditor/rankings': { title: 'Rankings', sub: 'Clasificacion nacional de transparencia' },
-  '/auditor/reports': { title: 'Reportes', sub: 'Generar y exportar informes' },
-  '/auditor/documents': { title: 'Lista de Cumplimiento', sub: 'Consulta de evidencias publicadas' },
-  '/auditor/validation': { title: 'Evaluación de transparencia', sub: 'Consulta nacional, internacional e ITI final' },
-};
-
-export default function Header() {
+export default function Header({ onToggleMenu, menuOpen, onOpenHelp, onOpenSearch }) {
   const { pathname } = useLocation();
-  const meta = PAGE_META[pathname] || { title: 'SisTransp', sub: 'Plataforma de Transparencia' };
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const key = pageKey(pathname);
+  const meta = PAGE_META[key] || { title: 'SisTransp', sub: 'Plataforma de Transparencia' };
+  const dashboardPath = DASHBOARD_BY_ROLE[user?.role_id] || '/';
+  const { section } = sectionForPath(NAV_BY_ROLE[user?.role_id] || [], pathname);
+  const isHome = pathname === dashboardPath;
   const now = new Date().toLocaleDateString('es-EC', {
     weekday: 'long',
     year: 'numeric',
@@ -41,14 +18,46 @@ export default function Header() {
     day: 'numeric',
   });
 
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(dashboardPath);
+  };
+
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <span className="topbar-title">{meta.title}</span>
-        <span className="topbar-breadcrumb">{meta.sub}</span>
+        <button type="button" className="topbar-btn menu-toggle" onClick={onToggleMenu}
+          aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} aria-controls="app-sidebar">
+          <span aria-hidden="true">{menuOpen ? '✕' : '☰'}</span>
+        </button>
+        {!isHome && (
+          <button type="button" className="topbar-btn topbar-back" onClick={goBack} title="Volver a la pantalla anterior" aria-label="Volver a la pantalla anterior">
+            <span aria-hidden="true">←</span><span className="topbar-btn-text">Volver</span>
+          </button>
+        )}
+        <div className="topbar-heading">
+          <nav className="breadcrumbs" aria-label="Ruta de navegación">
+            <ol>
+              <li><Link to={dashboardPath}>Inicio</Link></li>
+              {!isHome && section && <li aria-hidden="false"><span>{section}</span></li>}
+              {!isHome && <li aria-current="page"><span>{meta.title}</span></li>}
+            </ol>
+          </nav>
+          <div className="topbar-title">{meta.title}</div>
+          <span className="topbar-breadcrumb">{meta.sub}</span>
+        </div>
       </div>
       <div className="topbar-right">
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginRight: 4 }}>{now}</span>
+        <button type="button" className="topbar-btn topbar-search" onClick={onOpenSearch} title="Búsqueda rápida (Ctrl + K)">
+          <span aria-hidden="true">🔍</span>
+          <span className="topbar-btn-text">Buscar</span>
+          <kbd className="topbar-kbd">Ctrl K</kbd>
+        </button>
+        <button type="button" className="topbar-btn topbar-help" onClick={onOpenHelp} title="Ayuda de esta pantalla (Alt + H)">
+          <span aria-hidden="true" className="topbar-help-icon">?</span>
+          <span className="topbar-btn-text">Ayuda</span>
+        </button>
+        <span className="topbar-date">{now}</span>
       </div>
     </header>
   );

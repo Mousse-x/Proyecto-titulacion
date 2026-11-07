@@ -44,17 +44,42 @@ def _load_env_file(path):
 _load_env_file(BASE_DIR / '.env')
 
 
+def _env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None or value.strip() == '':
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'si', 'sí', 'on'}
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-*m25q%38t=q&ybiwyek48is!ie@1qhcy$dopcc0d1hi6f(g229'
+def _env_list(name, default=()):
+    value = os.environ.get(name)
+    if value is None or value.strip() == '':
+        return list(default)
+    return [item.strip() for item in value.split(',') if item.strip()]
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+def _env_required(name):
+    value = os.environ.get(name, '').strip()
+    if not value:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            f'Falta la variable {name} en backend/.env (ver backend/.env.production.example).'
+        )
+    return value
+
+
+# ─── Entorno ─────────────────────────────────────────────────────────
+# Desarrollo: sin variables, DEBUG queda activo como antes.
+# Producción: DEBUG=False en backend/.env (ver backend/.env.production.example).
+DEBUG = _env_bool('DEBUG', True)
+
+# La clave solo puede faltar en desarrollo; en producción es obligatoria.
+SECRET_KEY = os.environ.get('SECRET_KEY', '').strip() or (
+    'django-insecure-solo-para-desarrollo-local' if DEBUG else _env_required('SECRET_KEY')
+)
+
+ALLOWED_HOSTS = _env_list('ALLOWED_HOSTS', ['localhost', '127.0.0.1', '[::1]'] if DEBUG else [])
+CSRF_TRUSTED_ORIGINS = _env_list('CSRF_TRUSTED_ORIGINS')
 
 
 # Application definition
@@ -112,11 +137,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "transparencia_universitaria",
-        "USER": "postgres",
-        "PASSWORD": "root",
-        "HOST": "127.0.0.1",
-        "PORT": "5432",
+        "NAME": os.environ.get("DB_NAME", "transparencia_universitaria"),
+        "USER": os.environ.get("DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "root" if DEBUG else ""),
+        "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
         "OPTIONS": {
             "options": "-c search_path=core,universities,transparency,evaluation,evidence,catalogs,public"
         },
@@ -160,17 +185,21 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+# Destino de `python manage.py collectstatic` (lo sirve Nginx en producción).
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Archivos subidos por usuarios (documentos de evidencia)
 MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-CORS_ALLOWED_ORIGINS = [
+# En producción el frontend y el API comparten dominio (Nginx), así que CORS
+# solo hace falta si se sirven desde orígenes distintos.
+CORS_ALLOWED_ORIGINS = _env_list('CORS_ALLOWED_ORIGINS', [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-]
+] if DEBUG else [])
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',  # ← primero = default
@@ -178,20 +207,21 @@ PASSWORD_HASHERS = [
 ]
 
 # ─── Cifrado de campos sensibles (email) ────────────────────────────
-FIELD_ENCRYPTION_KEY = '7elgs3oBEcSARG4Yk_0RnZATRye1iop_lUdtBb_PFlg='
+# No cambiarla nunca: los correos ya guardados están cifrados con ella.
+FIELD_ENCRYPTION_KEY = _env_required('FIELD_ENCRYPTION_KEY')
 
 # ─── Email — Brevo SMTP ───────────────────────────────────────────────
 # Backend personalizado que resuelve el error SSL de Python 3.14 con Brevo
 EMAIL_BACKEND       = 'core.email_backend.BrevoEmailBackend'
-EMAIL_HOST          = 'smtp-relay.brevo.com'
-EMAIL_PORT          = 587
-EMAIL_USE_TLS       = True
-EMAIL_HOST_USER     = 'a8d5ed001@smtp-brevo.com'
-EMAIL_HOST_PASSWORD = 'KyXta5h1BqW3j8bL'
-DEFAULT_FROM_EMAIL  = 'SisTransp ESPOCH <sistema_transparencia@hotmail.com>'
+EMAIL_HOST          = os.environ.get('EMAIL_HOST', 'smtp-relay.brevo.com')
+EMAIL_PORT          = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS       = _env_bool('EMAIL_USE_TLS', True)
+EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL  = os.environ.get('DEFAULT_FROM_EMAIL', 'SisTransp ESPOCH <sistema_transparencia@hotmail.com>')
 
 # URL base del frontend — usada en los links de reset
-FRONTEND_URL = 'http://localhost:5173'
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
 
 # Tiempo de expiración del token de reset (minutos)
 PASSWORD_RESET_EXPIRY_MINUTES = 30
@@ -207,12 +237,19 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = False       # → True en producción con HTTPS
-CSRF_COOKIE_SECURE = False          # → True en producción con HTTPS
-SECURE_HSTS_SECONDS = 0             # → 31536000 en producción
-SECURE_HSTS_INCLUDE_SUBDOMAINS = False  # → True en producción
-SECURE_HSTS_PRELOAD = False         # → True en producción
-SECURE_SSL_REDIRECT = False         # → True en producción
+# Producción detrás de Cloudflare Tunnel + Nginx: el HTTPS termina en
+# Cloudflare y Nginx avisa a Django con la cabecera X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = _env_bool('USE_X_FORWARDED_HOST', False)
+SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', not DEBUG)
+CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', not DEBUG)
+# HSTS solo se envía en peticiones HTTPS; Cloudflare ya fuerza HTTPS.
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', False)
+SECURE_HSTS_PRELOAD = _env_bool('SECURE_HSTS_PRELOAD', False)
+# La redirección a HTTPS la hace Cloudflare ("Always Use HTTPS"); activarla
+# aquí rompería el acceso por http://IP-local dentro de la red de casa.
+SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', False)
 
 # ─── Límites de carga de datos (HT-08) ───────────────────────────────
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
@@ -236,6 +273,10 @@ LOTAIP_MAX_DOCUMENT_CHARS = int(os.environ.get('LOTAIP_MAX_DOCUMENT_CHARS', '100
 LOTAIP_PACKAGE_TIMEOUT = int(os.environ.get('LOTAIP_PACKAGE_TIMEOUT', '1800'))
 LOTAIP_RUN_STALE_SECONDS = int(os.environ.get('LOTAIP_RUN_STALE_SECONDS', '7200'))
 LOTAIP_MAX_DOWNLOAD_BYTES = int(os.environ.get('LOTAIP_MAX_DOWNLOAD_BYTES', str(32 * 1024 * 1024)))
+# Verificables: espera antes de repetir una descarga con corte, 429 o 5xx, y filas
+# que pueden sustituir a una fila de la muestra no verificable automáticamente.
+LOTAIP_LINK_RETRY_DELAY_SECONDS = float(os.environ.get('LOTAIP_LINK_RETRY_DELAY_SECONDS', '3'))
+LOTAIP_SAMPLE_REPLACEMENTS = int(os.environ.get('LOTAIP_SAMPLE_REPLACEMENTS', '6'))
 FREELLMAPI_BASE_URL = os.environ.get('FREELLMAPI_BASE_URL', 'http://127.0.0.1:31415/v1')
 FREELLMAPI_API_KEY = os.environ.get('FREELLMAPI_API_KEY', '')
 if not FREELLMAPI_API_KEY:

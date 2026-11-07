@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { FeedbackProvider } from './context/FeedbackContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 
@@ -11,7 +12,7 @@ import ResetPassword from './pages/auth/ResetPassword';
 import AdminDashboard     from './pages/admin/AdminDashboard';
 import UsersPage          from './pages/admin/UsersPage';
 import UniversitiesPage   from './pages/admin/UniversitiesPage';
-import IndicatorsPage     from './pages/admin/IndicatorsPage';
+import IndicatorsPage     from './pages/admin/IndicatorsCatalogPage';
 import WeightingsPage     from './pages/admin/IntegratedWeightingsPage';
 import RankingsPage       from './pages/admin/RankingsPage';
 import ReportsPage        from './pages/admin/ReportsPage';
@@ -31,6 +32,9 @@ import ComparativesPage      from './pages/auditor/ComparativesPage';
 import TransparencyIndexPage from './pages/auditor/TransparencyIndexPage';
 import DocumentsAuditorPage  from './pages/auditor/DocumentsAuditorPage';
 
+// Ayuda
+import HelpPage from './pages/HelpPage';
+
 const AuditorRankingsPage = () => <RankingsPage />;
 
 function WithLayout({ children }) {
@@ -40,6 +44,7 @@ function WithLayout({ children }) {
 export default function App() {
   return (
     <AuthProvider>
+      <FeedbackProvider>
       <BrowserRouter>
         <Routes>
           {/* Public */}
@@ -81,10 +86,14 @@ export default function App() {
           <Route path="/auditor/documents"    element={<ProtectedRoute allowedRoles={[4]}><WithLayout><DocumentsAuditorPage /></WithLayout></ProtectedRoute>} />
           <Route path="/auditor/validation"   element={<ProtectedRoute allowedRoles={[4]}><WithLayout><ValidationPage readOnly /></WithLayout></ProtectedRoute>} />
 
+          {/* Centro de ayuda — todos los perfiles */}
+          <Route path="/ayuda" element={<ProtectedRoute><WithLayout><HelpPage /></WithLayout></ProtectedRoute>} />
+
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
+      </FeedbackProvider>
     </AuthProvider>
   );
 }

@@ -1,10 +1,10 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { api } from '../../api/client';
+import { api, MEDIA_BASE } from '../../api/client';
 import { ArrowLeftIcon, DownloadIcon, EyeIcon, FolderIcon } from '../../components/common/ActionIcons';
+import UniversityLogo from '../../components/common/UniversityLogo';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
-const MEDIA_BASE = 'http://127.0.0.1:8000';
 const FILE_ICONS = { PDF: '📄', XLSX: '📊', DOCX: '📝', CSV: '📋', URL: '🔗' };
 
 const MONTHS = [
@@ -13,37 +13,6 @@ const MONTHS = [
   { v: 7, l: 'Julio' }, { v: 8, l: 'Agosto' },  { v: 9, l: 'Septiembre' },
   { v: 10, l: 'Octubre' }, { v: 11, l: 'Noviembre' }, { v: 12, l: 'Diciembre' },
 ];
-
-function ComplianceBadge({ status }) {
-  if (status === 'aprobado') return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
-      color: 'var(--success)', background: 'var(--success-subtle)',
-    }}>✅ Cumple</span>
-  );
-  if (status === 'rechazado') return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
-      color: 'var(--danger)', background: 'var(--danger-subtle)',
-    }}>✗ No cumple</span>
-  );
-  if (status === 'inconsistente') return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
-      color: 'var(--warning)', background: 'var(--warning-subtle)',
-    }}>⚠️ Inconsistente</span>
-  );
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
-      color: 'var(--text-main)', background: 'var(--bg-tertiary)',
-    }}>⏳ Pendiente</span>
-  );
-}
 
 export default function DocumentsAuditorPage() {
   const [docs, setDocs]           = useState([]);
@@ -54,7 +23,7 @@ export default function DocumentsAuditorPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [filterUniv, setFilterUniv] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
-  const [tab, setTab]             = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [folderPath, setFolderPath] = useState([]);
 
   const loadDocs = useCallback(async () => {
@@ -77,30 +46,6 @@ export default function DocumentsAuditorPage() {
     api.universities.list().then(r => setUniversities(r.data)).catch(() => {});
   }, [loadDocs]);
 
-  const displayed = tab === 'all'
-    ? docs
-    : tab === 'cumple'
-      ? docs.filter(d => d.validation_status === 'aprobado')
-      : tab === 'no_cumple'
-        ? docs.filter(d => d.validation_status === 'rechazado')
-        : tab === 'inconsistente'
-          ? docs.filter(d => d.validation_status === 'inconsistente')
-          : docs.filter(d => d.validation_status === 'pendiente');
-
-  const counts = {
-    all:       docs.length,
-    cumple:    docs.filter(d => d.validation_status === 'aprobado').length,
-    no_cumple: docs.filter(d => d.validation_status === 'rechazado').length,
-    inconsistente: docs.filter(d => d.validation_status === 'inconsistente').length,
-    pendiente: docs.filter(d => d.validation_status === 'pendiente').length,
-  };
-
-  // % cumplimiento
-  const totalReviewed = counts.cumple + counts.no_cumple;
-  const compliancePct = totalReviewed > 0
-    ? Math.round((counts.cumple / totalReviewed) * 100)
-    : 0;
-
   const getYear = (doc) => doc.year ? String(doc.year) : 'Sin periodo';
   const getMonthName = (doc) => {
     const m = doc.month || (doc.uploaded_at ? parseInt(doc.uploaded_at.split('-')[1], 10) : null);
@@ -112,6 +57,19 @@ export default function DocumentsAuditorPage() {
     const name = doc.indicator_name || doc.title || 'Sin literal';
     return `${code} - ${name}`;
   };
+
+  const normalizedSearch = searchTerm.trim().toLocaleLowerCase('es');
+  const displayed = normalizedSearch
+    ? docs.filter((doc) => [
+      doc.title,
+      doc.indicator_code,
+      doc.indicator_name,
+      doc.university_name,
+      doc.file_type,
+      getYear(doc),
+      getMonthName(doc),
+    ].some((value) => String(value || '').toLocaleLowerCase('es').includes(normalizedSearch)))
+    : docs;
 
   let currentDocs = displayed;
   if (folderPath.length > 0) currentDocs = currentDocs.filter(d => (d.university_name || 'Universidad') === folderPath[0]);
@@ -133,7 +91,12 @@ export default function DocumentsAuditorPage() {
       if (!groups[key]) groups[key] = [];
       groups[key].push(d);
     });
-    itemsToRender = Object.keys(groups).sort().map(k => ({ type: 'folder', name: k, count: groups[k].length }));
+    itemsToRender = Object.keys(groups).sort().map(k => {
+      const university = universities.find(u => String(u.id) === String(groups[k][0]?.university_id))
+        || universities.find(u => u.name === k || u.full_name === k)
+        || { name: k, logo_initials: k };
+      return { type: 'folder', name: k, count: groups[k].length, university };
+    });
   } else if (viewType === 'years') {
     const groups = {};
     currentDocs.forEach(d => {
@@ -210,72 +173,21 @@ export default function DocumentsAuditorPage() {
       {/* Header */}
       <div className="page-header">
         <div className="page-header-info">
-          <h1>Documentos de Transparencia</h1>
-          <p>Lista de evidencias LOTAIP — estado de cumplimiento por indicador</p>
+          <h1>Documentos LOTAIP</h1>
+          <p>Explora los documentos por universidad, período, mes y literal</p>
         </div>
       </div>
-
-      {/* Stats de cumplimiento */}
-      <div className="stat-grid" style={{ marginBottom: 20 }}>
-        <div className="stat-card" style={{ '--color': 'var(--primary)' }}>
-          <div className="stat-icon-wrap">📁</div>
-          <div className="stat-value">{counts.all}</div>
-          <div className="stat-label">Total Documentos</div>
-        </div>
-        <div className="stat-card" style={{ '--color': 'var(--success)' }}>
-          <div className="stat-icon-wrap">✅</div>
-          <div className="stat-value">{counts.cumple}</div>
-          <div className="stat-label">Cumplen</div>
-        </div>
-        <div className="stat-card" style={{ '--color': 'var(--danger)' }}>
-          <div className="stat-icon-wrap">✗</div>
-          <div className="stat-value">{counts.no_cumple}</div>
-          <div className="stat-label">No Cumplen</div>
-        </div>
-        <div className="stat-card" style={{ '--color': 'var(--warning)' }}>
-          <div className="stat-icon-wrap">⚠️</div>
-          <div className="stat-value">{counts.inconsistente}</div>
-          <div className="stat-label">Inconsistentes</div>
-        </div>
-        <div className="stat-card" style={{ '--color': compliancePct >= 70 ? 'var(--success)' : 'var(--warning)' }}>
-          <div className="stat-icon-wrap">📊</div>
-          <div className="stat-value">{compliancePct}%</div>
-          <div className="stat-label">Cumplimiento</div>
-        </div>
-      </div>
-
-      {/* Barra de progreso de cumplimiento */}
-      {false && totalReviewed > 0 && (
-        <div style={{
-          background: 'var(--surface-elevated)', borderRadius: 12,
-          padding: '16px 20px', marginBottom: 20,
-          border: '1px solid var(--border-subtle)',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem' }}>
-            <span style={{ fontWeight: 600 }}>Índice de Transparencia LOTAIP</span>
-            <span style={{ fontWeight: 700, color: compliancePct >= 70 ? 'var(--success)' : 'var(--warning)' }}>
-              {compliancePct}%
-            </span>
-          </div>
-          <div style={{ height: 12, background: 'var(--border-subtle)', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 6,
-              background: compliancePct >= 70
-                ? 'linear-gradient(90deg, var(--success), #22c55e)'
-                : 'linear-gradient(90deg, var(--warning), #f59e0b)',
-              width: `${compliancePct}%`,
-              transition: 'width 0.6s ease',
-            }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-            <span>{counts.cumple} cumplen</span>
-            <span>{counts.no_cumple} no cumplen</span>
-          </div>
-        </div>
-      )}
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <input
+          className="form-input"
+          style={{ minWidth: 240, flex: 2 }}
+          type="search"
+          placeholder="Buscar por documento, literal, universidad o período"
+          value={searchTerm}
+          onChange={e => { setSearchTerm(e.target.value); setFolderPath([]); }}
+        />
         <select className="form-input" style={{ maxWidth: 220, flex: 1 }}
           value={filterUniv} onChange={e => { setFilterUniv(e.target.value); setFolderPath([]); }}>
           <option value="">Todas las universidades</option>
@@ -286,23 +198,8 @@ export default function DocumentsAuditorPage() {
           <option value="">Todos los meses</option>
           {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
         </select>
-        <button className="btn btn-secondary" onClick={loadDocs}>🔍 Filtrar</button>
-        <button className="btn btn-secondary" onClick={() => { setFilterUniv(''); setFilterMonth(''); }}>✕ Limpiar</button>
-      </div>
-
-      {/* Tabs */}
-      <div className="tabs">
-        {[
-          ['all',       `Todos (${counts.all})`],
-          ['cumple',    `✅ Cumplen (${counts.cumple})`],
-          ['no_cumple', `✗ No Cumplen (${counts.no_cumple})`],
-          ['inconsistente', `⚠️ Inconsistentes (${counts.inconsistente})`],
-          ['pendiente', `⏳ Pendientes (${counts.pendiente})`],
-        ].map(([k, l]) => (
-          <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => { setTab(k); setFolderPath([]); }}>
-            {l}
-          </button>
-        ))}
+        <button className="btn btn-secondary" onClick={loadDocs}>Actualizar</button>
+        <button className="btn btn-secondary" onClick={() => { setSearchTerm(''); setFilterUniv(''); setFilterMonth(''); setFolderPath([]); }}>✕ Limpiar</button>
       </div>
 
       {folderPath.length > 0 && (
@@ -336,7 +233,9 @@ export default function DocumentsAuditorPage() {
               if (item.type === 'folder') {
                 return (
                   <div key={`folder-${idx}`} className="doc-status-row" style={{ cursor: 'pointer' }} onClick={() => setFolderPath(p => [...p, item.name])}>
-                    <div className="doc-icon" title="Carpeta"><FolderIcon /></div>
+                    {viewType === 'universities'
+                      ? <UniversityLogo university={item.university} name={item.name} />
+                      : <div className="doc-icon" title="Carpeta"><FolderIcon /></div>}
                     <div className="doc-info">
                       <div className="doc-name">{item.name}</div>
                       <div className="doc-meta">
@@ -377,7 +276,6 @@ export default function DocumentsAuditorPage() {
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <ComplianceBadge status={doc.validation_status} />
                   <button className="btn btn-secondary btn-sm" title="Vista previa"
                     onClick={() => openPreview(doc)}><EyeIcon /></button>
                   <button className="btn btn-secondary btn-sm" title="Descargar"
@@ -447,12 +345,9 @@ export default function DocumentsAuditorPage() {
               )}
             </div>
             <div className="modal-footer">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <ComplianceBadge status={previewDoc.validation_status} />
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-                  {previewDoc.indicator_code} · {previewDoc.university_name}
-                </span>
-              </div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+                {previewDoc.indicator_code} · {previewDoc.university_name}
+              </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 {previewDoc.indicator_template_url && (
                   <a href={`${MEDIA_BASE}${previewDoc.indicator_template_url}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ background: 'var(--info)', border: 'none' }}>

@@ -55,5 +55,5 @@ convenciones del proyecto, no escalas adicionales establecidas por este instruct
 ## Validación técnica
 
 - Migraciones: `core.0009_lotaip_rubric` y `core.0010_add_no_verificable_status`.
-- Pruebas: `backend/.venv/Scripts/python.exe backend/manage.py test core.test_lotaip_rubric`.
+- Pruebas: `backend/.venv/Scripts/python.exe backend/manage.py test core.tests.test_lotaip_rubric`.
 - Frontend: `npm run build` dentro de `frontend`.

@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import ErrorNotice from '../../components/common/ErrorNotice';
+import { useToast } from '../../context/FeedbackContext';
+
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client';
 import transparencyLogo from '../../assets/transparency-logo.jpg';
@@ -155,11 +159,11 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError('');
     Promise.all([
       api.stats(),
       api.universities.list(),
@@ -172,38 +176,42 @@ export default function ReportsPage() {
         setIndicators(indicatorsRes.data || []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.response?.data?.error || 'No se pudieron cargar los datos reales del reporte.');
+        if (!cancelled) setError(err);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     if (reportType !== 'documents') return;
 
     let cancelled = false;
-    setLoading(true);
-    setError('');
-
     const params = {};
     if (universityId !== 'all') params.university_id = universityId;
     if (month) params.month = month;
 
-    api.evidences.list(params)
+    // El indicador de carga se activa de forma asíncrona para no encadenar renders.
+    Promise.resolve()
+      .then(() => {
+        if (cancelled) return null;
+        setLoading(true);
+        setError('');
+        return api.evidences.list(params);
+      })
       .then((res) => {
-        if (!cancelled) setEvidences(res.data || []);
+        if (!cancelled && res) setEvidences(res.data || []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.response?.data?.error || 'No se pudieron cargar las evidencias del reporte.');
+        if (!cancelled) setError(err);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [month, reportType, universityId]);
+  }, [month, reportType, universityId, reloadKey]);
 
   const filteredEvidences = useMemo(() => evidences.filter((item) => {
     const matchesUniversity = universityId === 'all' || String(item.university_id || item.university?.id) === String(universityId);
@@ -230,7 +238,7 @@ export default function ReportsPage() {
         Universidad: item.university_name || item.university || item.university_acronym,
         Indicador: item.indicator_code || item.indicator,
         Titulo: item.title,
-        Mes: item.month,
+        Mes: MONTH_NAMES[(item.month || 0) - 1] || item.month,
         Periodo: item.period_name || item.period || item.year,
         Estado: STATUS_LABELS[item.validation_status] || item.validation_status,
         Formato: item.file_type,
@@ -264,12 +272,12 @@ export default function ReportsPage() {
       {
         Indicador: 'Documentos evaluados',
         Valor: stats?.evaluated_documents || 0,
-        Detalle: 'Evidencias con evaluacion LOTAIP',
+        Detalle: 'Evidencias con evaluación LOTAIP',
       },
       {
         Indicador: 'Indice nacional promedio',
         Valor: `${stats?.avg_transparency || 0}%`,
-        Detalle: 'Promedio de evaluacion nacional LOTAIP',
+        Detalle: 'Promedio de evaluación nacional LOTAIP',
       },
       {
         Indicador: 'Indice nacional + internacional',
@@ -290,10 +298,11 @@ export default function ReportsPage() {
   const handleExport = () => {
     if (!reportRows.length) return;
     setExporting(true);
+    try {
     const fileName = buildFileName(reportType, format);
     const subtitle = [
       selectedUniversity ? `Universidad: ${selectedUniversity.name || selectedUniversity.acronym}` : 'Universidad: Todas',
-      month ? `Mes: ${month}` : 'Mes: Todos',
+      month ? `Mes: ${MONTH_NAMES[month - 1]}` : 'Mes: Todos',
       `Generado: ${new Date().toLocaleString('es-EC')}`,
     ].join(' | ');
 
@@ -324,47 +333,63 @@ export default function ReportsPage() {
         downloadBlob(html, fileName, 'text/html;charset=utf-8');
       }
     }
-    setTimeout(() => setExporting(false), 400);
+    toast.success({
+      title: 'Reporte generado',
+      message: `${selectedType?.title || 'Reporte'} · ${reportRows.length} filas · ${format}${format === 'PDF' ? ' (se abrió el diálogo de impresión; elige «Guardar como PDF»)' : ` · archivo ${fileName}`}`,
+    });
+    } catch (err) {
+      toast.apiError(err, 'No se pudo generar el archivo del reporte.', handleExport);
+    } finally {
+      setTimeout(() => setExporting(false), 400);
+    }
   };
+
+  const filterSummary = [
+    selectedType?.title,
+    selectedUniversity ? `${selectedUniversity.acronym || selectedUniversity.name}` : 'Todas las universidades',
+    month ? MONTH_NAMES[month - 1] : 'Todos los meses',
+  ].filter(Boolean).join(' · ');
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
       <div className="page-header">
         <div className="page-header-info">
           <h1>Reportes</h1>
-          <p>Generacion y exportacion con datos reales del sistema</p>
+          <p>Generación y exportación con datos reales del sistema. Elige el tipo, los filtros y el formato; revisa la vista previa y exporta.</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary" onClick={() => window.location.reload()} disabled={loading}>Actualizar</button>
-          <button className="btn btn-primary" onClick={handleExport} disabled={loading || exporting || reportRows.length === 0}>
-            {exporting ? 'Exportando...' : `Exportar ${format}`}
+          <button className="btn btn-secondary" onClick={() => setReloadKey((k) => k + 1)} disabled={loading} title="Vuelve a cargar los datos sin perder los filtros">↻ Actualizar</button>
+          <button className="btn btn-primary" onClick={handleExport} disabled={loading || exporting || reportRows.length === 0}
+            title={reportRows.length === 0 ? 'No hay datos para los filtros seleccionados' : `Descargar ${filterSummary} en ${format}`}>
+            {exporting ? 'Exportando...' : `⬇ Exportar ${format}`}
           </button>
         </div>
       </div>
 
-      {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
+      <ErrorNotice error={error} fallback="No se pudieron cargar los datos del reporte." onRetry={() => setReloadKey((k) => k + 1)} onDismiss={() => setError('')} />
 
       <div className="stat-grid" style={{ marginBottom: 20 }}>
         <StatBox label="Universidades" value={stats?.total_universities || 0} />
         <StatBox label="Documentos" value={stats?.total_documents || 0} />
         <StatBox label="Evaluados" value={stats?.evaluated_documents || 0} />
-        <StatBox label="Indice nacional" value={`${stats?.avg_transparency || 0}%`} />
-        <StatBox label="Índice final ITI" value={`${stats?.avg_transparency_integrated || 0}%`} />
+        <StatBox label="Índice nacional (promedio)" value={`${stats?.avg_transparency || 0}%`} />
+        <StatBox label="Índice final ITI (promedio)" value={`${stats?.avg_transparency_integrated || 0}%`} />
       </div>
 
       <div className="grid-12">
         <div className="card">
-          <div className="card-title" style={{ marginBottom: 14 }}>Configuracion del reporte</div>
+          <div className="card-title" style={{ marginBottom: 14 }}>1 · Configuración del reporte</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="form-group">
-              <label className="form-label">Tipo de reporte</label>
-              <div style={{ display: 'grid', gap: 8 }}>
+              <span className="form-label" id="report-type-label">Tipo de reporte</span>
+              <div style={{ display: 'grid', gap: 8 }} role="group" aria-labelledby="report-type-label">
                 {REPORT_TYPES.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     className={`btn ${reportType === item.id ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => setReportType(item.id)}
+                    aria-pressed={reportType === item.id}
                     style={{ justifyContent: 'flex-start', textAlign: 'left', height: 'auto', padding: '12px 14px' }}
                   >
                     <span>
@@ -377,8 +402,8 @@ export default function ReportsPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Universidad</label>
-              <select className="form-input" value={universityId} onChange={(e) => setUniversityId(e.target.value)}>
+              <label className="form-label" htmlFor="rep-univ">Universidad</label>
+              <select id="rep-univ" className="form-input" value={universityId} onChange={(e) => setUniversityId(e.target.value)}>
                 <option value="all">Todas las universidades</option>
                 {universities.map((item) => (
                   <option key={item.id} value={item.id}>{item.acronym || item.name} - {item.name}</option>
@@ -387,20 +412,22 @@ export default function ReportsPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Mes</label>
-              <select className="form-input" value={month} onChange={(e) => setMonth(e.target.value)}>
+              <label className="form-label" htmlFor="rep-month">Mes</label>
+              <select id="rep-month" className="form-input" value={month} onChange={(e) => setMonth(e.target.value)}
+                disabled={reportType !== 'documents'} title={reportType !== 'documents' ? 'El mes solo aplica al reporte de documentos' : undefined}>
                 <option value="">Todos los meses</option>
-                {Array.from({ length: 12 }, (_, index) => index + 1).map((item) => (
-                  <option key={item} value={item}>{item}</option>
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>{name}</option>
                 ))}
               </select>
+              {reportType !== 'documents' && <div className="field-hint">El filtro de mes solo aplica al reporte de documentos.</div>}
             </div>
 
             <div className="form-group">
-              <label className="form-label">Formato</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <span className="form-label" id="report-format-label">Formato de exportación</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="group" aria-labelledby="report-format-label">
                 {FORMATS.map((item) => (
-                  <button key={item} className={`btn ${format === item ? 'btn-primary' : 'btn-secondary'} btn-sm`} onClick={() => setFormat(item)}>
+                  <button key={item} type="button" aria-pressed={format === item} className={`btn ${format === item ? 'btn-primary' : 'btn-secondary'} btn-sm`} onClick={() => setFormat(item)}>
                     {item}
                   </button>
                 ))}
@@ -411,16 +438,22 @@ export default function ReportsPage() {
 
         <div className="card">
           <div className="card-header" style={{ marginBottom: 12 }}>
-            <span className="card-title">Vista previa real</span>
+            <span className="card-title">2 · Vista previa</span>
             <span className="tag">{reportRows.length} filas</span>
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+            Filtros aplicados: <strong style={{ color: 'var(--text)' }}>{filterSummary}</strong> · Formato: <strong style={{ color: 'var(--text)' }}>{format}</strong>
           </div>
 
           {loading ? (
-            <div className="empty-state"><h4>Cargando datos reales...</h4></div>
+            <div className="empty-state" aria-busy="true"><div className="spinner" style={{ width: 28, height: 28, margin: '0 auto 12px' }} /><h4>Cargando datos del reporte...</h4></div>
           ) : reportRows.length === 0 ? (
             <div className="empty-state">
-              <h4>Sin datos para el filtro seleccionado</h4>
-              <p>Cambia el tipo de reporte, universidad o mes.</p>
+              <h4>Sin datos para los filtros seleccionados</h4>
+              <p>No hay registros para {filterSummary}. Cambia la universidad, el mes o el tipo de reporte.</p>
+              {(universityId !== 'all' || month) && (
+                <button className="btn btn-secondary btn-sm" onClick={() => { setUniversityId('all'); setMonth(''); }}>✕ Quitar filtros</button>
+              )}
             </div>
           ) : (
             <div className="table-wrapper" style={{ maxHeight: 520, overflow: 'auto' }}>
@@ -443,7 +476,7 @@ export default function ReportsPage() {
 
           {reportRows.length > 25 && (
             <div style={{ marginTop: 10, color: 'var(--text-subtle)', fontSize: '0.8125rem' }}>
-              Mostrando 25 de {reportRows.length} filas. La exportacion incluye todo el resultado filtrado.
+              Mostrando 25 de {reportRows.length} filas. La exportación incluye todo el resultado filtrado.
             </div>
           )}
         </div>

@@ -1,64 +1,43 @@
-import { Fragment, useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
+import ErrorNotice from '../../components/common/ErrorNotice';
+import { useConfirm, useToast } from '../../context/FeedbackContext';
 import { validationApi } from '../../api/validation';
 import { useAuth } from '../../context/AuthContext';
-import LotaipCriteriaTable from '../../components/LotaipCriteriaTable';
 import LotaipLinkReviewQueue from '../../components/LotaipLinkReviewQueue';
-import { formatLotaipPercent, getLotaipDashboard } from '../../utils/lotaipDashboard';
+import IndexSummary from '../../components/evaluation/IndexSummary';
+import LotaipPanel from '../../components/evaluation/LotaipPanel';
+import InternationalPanel from '../../components/evaluation/InternationalPanel';
+import '../../components/evaluation/evaluation.css';
+import { getLotaipDashboard } from '../../utils/lotaipDashboard';
 import { groupLotaipPackages, pendingLotaipPackages } from '../../utils/lotaipPackages';
 
-/* ── Mapa de estado → badge ───────────────────────────────────────── */
-const STATUS_CONFIG = {
-  PENDIENTE_REVISION: { label: 'Pendiente de comprobación', badge: 'badge-warning', icon: '◷', color: 'var(--warning)' },
-  NO_VERIFICABLE:     { label: 'No verificable automáticamente', badge: 'badge-warning', icon: '◷', color: 'var(--warning)' },
-  CUMPLE:              { label: 'Cumple',              badge: 'badge-success', icon: '✅', color: 'var(--success)' },
-  CUMPLE_PARCIALMENTE: { label: 'Cumple parcialmente', badge: 'badge-warning', icon: '⚠️', color: 'var(--warning)' },
-  INCOMPLETO:          { label: 'Incompleto',          badge: 'badge-info',    icon: '📋', color: 'var(--info)' },
-  NO_CUMPLE:           { label: 'No cumple',           badge: 'badge-danger',  icon: '❌', color: 'var(--danger)' },
-  NO_PRESENTADO:       { label: 'No presentado',       badge: 'badge-subtle',  icon: '🔲', color: 'var(--text-subtle)' },
-  ERROR_PROCESAMIENTO: { label: 'Error',               badge: 'badge-danger',  icon: '⛔', color: 'var(--danger)' },
-};
+const SCOPE_LABEL = { lotaip: 'Evaluación nacional LOTAIP', international: 'Evaluación internacional', pending: 'Reintento de comprobaciones pendientes' };
 
-const INTEGRATED_STATUS = {
-  CUMPLE: { label: 'Cumple', badge: 'badge-success' },
-  PARCIAL: { label: 'Cumple parcialmente', badge: 'badge-warning' },
-  NO_CUMPLE: { label: 'No cumple', badge: 'badge-danger' },
-  NO_APLICA: { label: 'No aplica', badge: 'badge-subtle' },
-  SIN_EVIDENCIA: { label: 'Sin evidencia verificable', badge: 'badge-warning' },
-  PENDIENTE: { label: 'Pendiente', badge: 'badge-warning' },
-  ERROR_TECNICO: { label: 'Error técnico', badge: 'badge-danger' },
-};
-
-function ScoreBar({ score, max = 100, color }) {
-  if (score == null) return <span>No verificable con los datos disponibles</span>;
-  const pct = Math.min(100, Math.round((score / max) * 100));
+/* Resultado del último proceso: permanece visible hasta que el usuario lo oculta (H1.1, H1.3, H9.2). */
+function RunStatusBanner({ run, onRetry, onDismiss }) {
+  if (!run) return null;
+  const map = {
+    completed: { cls: 'alert-success', icon: '✅', title: 'completada' },
+    cancelled: { cls: 'alert-warning', icon: '⏹', title: 'detenida' },
+    failed: { cls: 'alert-danger', icon: '⚠️', title: 'fallida' },
+  };
+  const meta = map[run.status];
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
-      <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: color || 'var(--primary)', transition: 'width 0.5s ease' }} />
+    <div className={`alert ${meta.cls} run-status`} role={run.status === 'failed' ? 'alert' : 'status'}>
+      <span aria-hidden="true" style={{ fontSize: '1.3rem' }}>{meta.icon}</span>
+      <div className="run-status-text">
+        <strong>{SCOPE_LABEL[run.scope] || 'Evaluación'} {meta.title}</strong>
+        <span>{run.message}</span>
+        {run.hint && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>¿Qué hacer? {run.hint}</span>}
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{run.context} · {run.at.toLocaleTimeString('es-EC')}</span>
       </div>
-      <span style={{ fontSize: '0.8125rem', fontWeight: 700, minWidth: 36, textAlign: 'right', color: color || 'var(--text)' }}>{score}</span>
-    </div>
-  );
-}
-
-function TransparencyGauge({ value = 0, label = 'Indice' }) {
-  if (value == null) return <div style={{ textAlign: 'center' }}><strong>{label} pendiente</strong><p>Completa la evaluación correspondiente para obtener esta calificación.</p></div>;
-  const r = 58, stroke = 8, c = 2 * Math.PI * r;
-  const offset = c - (value / 100) * c;
-  const color = value >= 90 ? 'var(--success)' : value >= 70 ? 'var(--warning)' : value >= 40 ? 'var(--info)' : 'var(--danger)';
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <svg width={140} height={140} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={70} cy={70} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
-        <circle cx={70} cy={70} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 1s ease, stroke 0.5s ease' }} />
-      </svg>
-      <div style={{ position: 'absolute', marginTop: 42, textAlign: 'center' }}>
-        <div style={{ fontSize: '1.75rem', fontWeight: 800, color }}>{formatLotaipPercent(value)}</div>
-        <div style={{ fontSize: '0.6875rem', color: 'var(--text-subtle)' }}>{label}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {run.status !== 'completed' && onRetry && (
+          <button type="button" className="btn btn-primary btn-sm" onClick={onRetry}>↻ {run.status === 'failed' ? 'Reintentar' : 'Volver a ejecutar'}</button>
+        )}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onDismiss}>Ocultar</button>
       </div>
     </div>
   );
@@ -74,7 +53,10 @@ function EvaluationProgressPanel({ scope, progress, activeRunId, stopping, onSto
           <span className="spinner evaluation-progress-spinner" aria-hidden="true" />
           <div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{scopeLabel}</div>
-            <div className="evaluation-progress-phase">{progress.phase || 'Procesando evaluación'}</div>
+            <div className="evaluation-progress-phase">
+              <span className="badge badge-info" style={{ marginRight: 8 }}>En curso</span>
+              {progress.phase || 'Procesando evaluación'}
+            </div>
             <div className="evaluation-progress-message">{progress.msg}</div>
           </div>
         </div>
@@ -112,12 +94,16 @@ function EvaluationProgressPanel({ scope, progress, activeRunId, stopping, onSto
 
 export default function ValidationPage({ readOnly = false }) {
   const { user } = useAuth();
+  const toast = useToast();
+  const confirmAction = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
   const lockUniversitySelect = false;
   const [universities, setUniversities] = useState([]);
   const [periods, setPeriods] = useState([]);
-  const [selectedUniv, setSelectedUniv] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedUniv, setSelectedUniv] = useState(searchParams.get('university_id') || '');
+  const [selectedPeriod, setSelectedPeriod] = useState(searchParams.get('period_id') || '');
+  const [selectedMonth, setSelectedMonth] = useState(searchParams.get('month') || '');
+  const [lastRun, setLastRun] = useState(null);
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validationScope, setValidationScope] = useState(null);
@@ -128,9 +114,7 @@ export default function ValidationPage({ readOnly = false }) {
   const [summary, setSummary] = useState(null);
   const [results, setResults] = useState([]);
   const [numerals, setNumerals] = useState([]);
-  const [expandedRow, setExpandedRow] = useState(null);
   const [activeTab, setActiveTab] = useState('lotaip');
-  const [expandedInternationalFolders, setExpandedInternationalFolders] = useState({});
   const [retryingIndicator, setRetryingIndicator] = useState(null);
   const [clearingDimension, setClearingDimension] = useState(null);
   const [error, setError] = useState(null);
@@ -166,10 +150,47 @@ export default function ValidationPage({ readOnly = false }) {
           periodMap[ev.period_id] = { id: ev.period_id, year: ev.year };
         }
       });
-      setPeriods(Object.values(periodMap).sort((a, b) => b.year - a.year));
-    }).catch(() => {});
-  }, []);
+      const list = Object.values(periodMap).sort((a, b) => b.year - a.year);
+      setPeriods(list);
+      // Si se llega desde un índice o ranking sin período, se preselecciona el más reciente.
+      setSelectedPeriod((current) => current || (searchParams.get('university_id') && list[0] ? String(list[0].id) : current));
+    }).catch((err) => toast.apiError(err, 'No se pudieron cargar los períodos disponibles.'));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // La selección se refleja en la URL: se puede volver, recargar o compartir el enlace sin perderla (H3.1, H7.2).
+  useEffect(() => {
+    const next = {};
+    if (selectedUniv) next.university_id = selectedUniv;
+    if (selectedPeriod) next.period_id = selectedPeriod;
+    if (selectedMonth) next.month = selectedMonth;
+    setSearchParams(next, { replace: true });
+  }, [selectedUniv, selectedPeriod, selectedMonth, setSearchParams]);
+
+  const selectedUniversity = universities.find((u) => String(u.id) === String(selectedUniv));
+  const selectedPeriodObj = periods.find((p) => String(p.id) === String(selectedPeriod));
+  const contextLabel = [
+    selectedUniversity ? `${selectedUniversity.name} — ${selectedUniversity.full_name}` : null,
+    selectedPeriodObj ? `Año ${selectedPeriodObj.year}` : null,
+    selectedMonth ? MONTHS.find((m) => String(m.value) === String(selectedMonth))?.label : (selectedPeriod ? 'Todos los meses' : null),
+  ].filter(Boolean).join(' · ');
+
+  const loadResults = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await validationApi.getSummary(selectedUniv, selectedPeriod, selectedMonth);
+      setSummary(res.data.summary);
+      setResults(res.data.results || []);
+      setNumerals(res.data.numerals || []);
+    } catch (e) {
+      setError(e);
+      setSummary(null);
+      setResults([]);
+      setNumerals([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedUniv, selectedPeriod, selectedMonth]);
 
   // Load existing results when university/period/month change
   useEffect(() => {
@@ -179,7 +200,7 @@ export default function ValidationPage({ readOnly = false }) {
       return;
     }
     loadResults();
-  }, [selectedUniv, selectedPeriod, selectedMonth]);
+  }, [selectedUniv, selectedPeriod, loadResults]);
 
   useEffect(() => {
     if (!selectedUniv || !selectedPeriod) {
@@ -208,30 +229,14 @@ export default function ValidationPage({ readOnly = false }) {
     return () => { cancelled = true; };
   }, [selectedUniv, selectedPeriod, selectedMonth]);
 
-  const loadResults = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await validationApi.getSummary(selectedUniv, selectedPeriod, selectedMonth);
-      setSummary(res.data.summary);
-      setResults(res.data.results || []);
-      setNumerals(res.data.numerals || []);
-    } catch (e) {
-      setError(e.response?.data?.error || 'No se pudieron cargar las evaluaciones.');
-      setSummary(null);
-      setResults([]);
-      setNumerals([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleValidate = async (scope) => {
     if (!selectedUniv || !selectedPeriod) return;
     if (scope === 'lotaip' && documentCount === 0) {
-      setError('No hay documentos para la universidad, periodo o mes seleccionado. No se puede realizar la evaluacion.');
+      setError('No hay documentos para la universidad, período o mes seleccionado. Carga o importa los documentos en «Documentos LOTAIP» antes de evaluar.');
       return;
     }
+    setLastRun(null);
     setActiveTab(scope === 'international' ? 'international' : 'lotaip');
     setValidating(true);
     setValidationScope(scope);
@@ -277,12 +282,20 @@ export default function ValidationPage({ readOnly = false }) {
       }, { signal: validationController.current.signal, scope });
       if (final?.status === 'cancelled') {
         setProgress((current) => ({ ...current, msg: '⏹ Evaluación detenida' }));
+        setLastRun({ status: 'cancelled', scope, at: new Date(), context: contextLabel,
+          message: 'La evaluación se detuvo antes de terminar. Los resultados anteriores se conservan.' });
         return;
       }
       setProgress({ pct: 100, msg: scope === 'international' ? '✅ Evaluación internacional completada' : '✅ Evaluación LOTAIP completada', phase: 'Completada', detail: '', activity: [] });
       await loadResults();
+      setLastRun({ status: 'completed', scope, at: new Date(), context: contextLabel,
+        message: 'Los resultados y el Índice de Transparencia Institucional se actualizaron. Revisa el detalle en las pestañas inferiores.' });
+      toast.success({ title: `${SCOPE_LABEL[scope]} completada`, message: contextLabel });
     } catch (e) {
-      if (e.name !== 'AbortError') {
+      if (e.name === 'AbortError') {
+        setLastRun({ status: 'cancelled', scope, at: new Date(), context: contextLabel,
+          message: 'La evaluación se detuvo antes de terminar. Los resultados anteriores se conservan.' });
+      } else {
         if (e.status === 409 && e.runId) {
           attachedToExistingRun = true;
           setActiveRunId(e.runId);
@@ -298,7 +311,14 @@ export default function ValidationPage({ readOnly = false }) {
           });
           setError(`${e.message} Usa “Detener evaluación” si la ejecución anterior ya no continúa.`);
         } else {
-          setError(e.message || 'Error durante la validación');
+          const technical = !e.status || e.status >= 500;
+          setLastRun({
+            status: 'failed', scope, at: new Date(), context: contextLabel,
+            message: e.message || 'La evaluación se interrumpió por un error.',
+            hint: technical
+              ? 'Es un error técnico de procesamiento (conexión, portal externo o servicio de IA), no un incumplimiento de la universidad. Pulsa «Reintentar».'
+              : 'Revisa la selección de universidad, período y documentos y vuelve a intentarlo.',
+          });
         }
       }
     } finally {
@@ -314,12 +334,21 @@ export default function ValidationPage({ readOnly = false }) {
 
   const handleStopValidation = async () => {
     if (!activeRunId || stopping) return;
+    const ok = await confirmAction({
+      title: 'Detener evaluación',
+      message: 'Se detendrá la evaluación en curso. Los resultados ya guardados se conservan y podrás volver a ejecutarla cuando quieras.',
+      confirmLabel: 'Detener evaluación',
+      cancelLabel: 'Continuar evaluando',
+    });
+    if (!ok) return;
     setStopping(true);
     setError(null);
     setProgress((current) => ({ ...current, msg: 'Deteniendo evaluación...' }));
     try {
       await validationApi.cancelRun(activeRunId);
       setProgress((current) => ({ ...current, msg: '⏹ Evaluación detenida' }));
+      setLastRun({ status: 'cancelled', scope: validationScope || 'lotaip', at: new Date(), context: contextLabel,
+        message: 'Detuviste la evaluación. Los resultados anteriores se conservan.' });
       validationController.current?.abort();
       setValidating(false);
       setActiveRunId(null);
@@ -327,7 +356,7 @@ export default function ValidationPage({ readOnly = false }) {
       setValidationScope(null);
       validationController.current = null;
     } catch (e) {
-      setError(e.response?.data?.error || 'No se pudo detener la evaluación.');
+      toast.apiError(e, 'No se pudo detener la evaluación.', handleStopValidation);
       setStopping(false);
     }
   };
@@ -341,8 +370,9 @@ export default function ValidationPage({ readOnly = false }) {
         selectedUniv, indicatorCode, selectedPeriod, selectedMonth,
       );
       await loadResults();
+      toast.success({ title: 'Indicador reevaluado', message: `${indicatorCode} se volvió a evaluar.` });
     } catch (e) {
-      setError(e.response?.data?.error || `No se pudo reevaluar ${indicatorCode}.`);
+      toast.apiError(e, `No se pudo reevaluar ${indicatorCode}.`, () => handleRetryInternational(indicatorCode));
     } finally {
       setRetryingIndicator(null);
     }
@@ -350,6 +380,12 @@ export default function ValidationPage({ readOnly = false }) {
 
   const handleClearInternationalCache = async (dimensionCode) => {
     if (clearingDimension || !selectedUniv || !selectedPeriod) return;
+    const ok = await confirmAction({
+      title: `Invalidar caché de ${dimensionCode}`,
+      message: `Se descartará la evidencia web guardada de ${dimensionCode}; la próxima evaluación internacional volverá a buscarla (consume créditos de búsqueda).`,
+      confirmLabel: 'Invalidar caché',
+    });
+    if (!ok) return;
     setClearingDimension(dimensionCode);
     setError(null);
     try {
@@ -357,8 +393,9 @@ export default function ValidationPage({ readOnly = false }) {
         selectedUniv, dimensionCode, selectedPeriod, selectedMonth,
       );
       await loadResults();
+      toast.success({ title: 'Caché invalidada', message: `La próxima evaluación volverá a buscar evidencia para ${dimensionCode}.` });
     } catch (e) {
-      setError(e.response?.data?.error || `No se pudo invalidar la caché de ${dimensionCode}.`);
+      toast.apiError(e, `No se pudo invalidar la caché de ${dimensionCode}.`);
     } finally {
       setClearingDimension(null);
     }
@@ -368,8 +405,9 @@ export default function ValidationPage({ readOnly = false }) {
     try {
       await validationApi.validateDocument(evidenceId);
       await loadResults();
+      toast.success({ title: 'Documento evaluado', message: 'El resultado del literal se actualizó.' });
     } catch (e) {
-      setError(e.response?.data?.message || e.response?.data?.error || 'Error al validar documento');
+      toast.apiError(e, 'No se pudo evaluar el documento.', () => handleValidateOne(evidenceId));
     }
   };
 
@@ -396,37 +434,17 @@ export default function ValidationPage({ readOnly = false }) {
       await loadResults();
       setProgress({ pct: 100, msg: 'Reintento finalizado. Los casos no resueltos permanecen pendientes.',
         phase: 'Reintento finalizado', detail: '', activity: [] });
-      if (failures) setError(`No se pudo completar el reintento de ${failures} literal(es). Puedes volver a intentarlo.`);
+      setLastRun(failures
+        ? { status: 'failed', scope: 'pending', at: new Date(), context: contextLabel,
+          message: `No se pudo completar el reintento de ${failures} de ${pending.length} literal(es).`,
+          hint: 'Suele deberse a enlaces caídos o servicios externos no disponibles (error técnico). Pulsa «Reintentar» más tarde.' }
+        : { status: 'completed', scope: 'pending', at: new Date(), context: contextLabel,
+          message: `Se reintentaron ${pending.length} literal(es). Los casos que no pudieron confirmarse siguen como «Pendiente de comprobación».` });
     } finally {
       setValidating(false);
     }
   };
 
-  const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.NO_PRESENTADO;
-  const getScoreColor = (score) => score >= 90 ? 'var(--success)' : score >= 70 ? 'var(--warning)' : score >= 40 ? 'var(--info)' : 'var(--danger)';
-  const getObservationConfig = (observation = '') => {
-    const text = String(observation);
-    if (text.startsWith('✅')) return { label: 'Correcto', color: 'var(--success)', bg: 'var(--success-subtle)' };
-    if (text.startsWith('⚠️') || text.startsWith('⚠')) return { label: 'Revisar', color: 'var(--warning)', bg: 'var(--warning-subtle)' };
-    if (text.startsWith('❌')) return { label: 'Falta', color: 'var(--danger)', bg: 'var(--danger-subtle)' };
-    if (text.startsWith('📋')) return { label: 'Detalle', color: 'var(--info)', bg: 'var(--info-subtle)' };
-    return { label: 'Info', color: 'var(--primary)', bg: 'var(--primary-subtle)' };
-  };
-  const cleanObservation = (observation = '') =>
-    String(observation).replace(/^(✅|⚠️|⚠|❌|📋)\s*/u, '');
-  const getDocumentKind = (documento = '') => {
-    const lower = documento.toLowerCase();
-    if (lower.includes('conjunto')) return 'Conjunto de datos';
-    if (lower.includes('metadato')) return 'Metadatos';
-    if (lower.includes('diccionario')) return 'Diccionario';
-    return 'Documento';
-  };
-  const toggleInternationalFolder = (literal) => {
-    setExpandedInternationalFolders((prev) => ({
-      ...prev,
-      [literal]: !(prev[literal] ?? true),
-    }));
-  };
   const lotaipPackages = groupLotaipPackages(results);
   const pendingPackages = pendingLotaipPackages(results);
   const integrated = summary?.integrated || null;
@@ -434,20 +452,7 @@ export default function ValidationPage({ readOnly = false }) {
   const nationalComponent = componentScores.national || null;
   const internationalComponent = componentScores.international || null;
   const webIndicators = (integrated?.indicators || []).filter((indicator) => indicator.classification !== 'NACIONAL');
-  const internationalGroups = Object.values(
-    webIndicators.reduce((acc, indicator) => {
-      const key = indicator.dimension || 'SIN_DIMENSION';
-      if (!acc[key]) {
-        acc[key] = {
-          code: key,
-          name: indicator.dimension_name,
-          indicators: [],
-        };
-      }
-      acc[key].indicators.push(indicator);
-      return acc;
-    }, {})
-  );
+  const canReview = [1, 4].includes(Number(user?.role_id));
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -455,525 +460,178 @@ export default function ValidationPage({ readOnly = false }) {
       <div className="page-header">
         <div className="page-header-info">
           <h1>🔍 Evaluación de transparencia</h1>
-          <p>{readOnly ? 'Consulta separada de resultados nacionales e internacionales' : 'Evalúa por separado LOTAIP y los complementos internacionales antes de calcular el ITI'}</p>
+          <p>{readOnly ? 'Consulta separada de resultados nacionales e internacionales' : 'Evalúa por separado LOTAIP y los complementos internacionales antes de calcular el ITI'}
+            <Link to="/ayuda#indice" className="info-button" title="¿Qué es el ITI y cómo se calcula?" aria-label="Ayuda: qué es el ITI">?</Link>
+          </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="search-bar">
-        <select className="form-input" style={{ maxWidth: 280 }}
-          value={selectedUniv} onChange={e => setSelectedUniv(e.target.value)} disabled={lockUniversitySelect || validating}>
-          <option value="">Seleccionar universidad...</option>
-          {universities.map(u => (
-            <option key={u.id} value={u.id}>{u.name} — {u.full_name}</option>
-          ))}
-        </select>
-        <select className="form-input" style={{ maxWidth: 200 }}
-          value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)} disabled={validating}>
-          <option value="">Seleccionar período...</option>
-          {periods.map(p => (
-            <option key={p.id} value={p.id}>{p.year}</option>
-          ))}
-        </select>
-        <select className="form-input" style={{ maxWidth: 200 }}
-          value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} disabled={validating}>
-          <option value="">Todos los meses</option>
-          {MONTHS.map(m => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
+      <div className="search-bar" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="filter-field" style={{ flex: '2 1 260px', maxWidth: 360 }}>
+          <label htmlFor="val-univ">Universidad</label>
+          <select id="val-univ" className="form-input"
+            value={selectedUniv} onChange={e => setSelectedUniv(e.target.value)} disabled={lockUniversitySelect || validating}>
+            <option value="">— Selecciona una universidad —</option>
+            {universities.map(u => (
+              <option key={u.id} value={u.id}>{u.name} — {u.full_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-field" style={{ flex: '1 1 150px', maxWidth: 200 }}>
+          <label htmlFor="val-period">Período (año)</label>
+          <select id="val-period" className="form-input"
+            value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)} disabled={validating}>
+            <option value="">— Selecciona el año —</option>
+            {periods.map(p => (
+              <option key={p.id} value={p.id}>Año {p.year}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-field" style={{ flex: '1 1 150px', maxWidth: 200 }}>
+          <label htmlFor="val-month">Mes (opcional)</label>
+          <select id="val-month" className="form-input"
+            value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} disabled={validating}>
+            <option value="">Todos los meses</option>
+            {MONTHS.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
         {selectedUniv && selectedPeriod && (
-          <span className="tag" style={{ alignSelf: 'center' }}>
+          <span className={`tag${documentCount === 0 && !documentsLoading ? ' tag-warning' : ''}`} style={{ alignSelf: 'center' }} aria-live="polite">
             {documentsLoading ? 'Verificando documentos...' : `${documentCount || 0} documentos disponibles`}
           </span>
         )}
         {results.length > 0 && (
           <button className="btn btn-secondary" onClick={loadResults} disabled={loading}>
-            🔄 Actualizar
+            ↻ Actualizar
           </button>
         )}
+        {validating && <span className="field-hint" style={{ alignSelf: 'center' }}>Los filtros se bloquean mientras la evaluación está en curso.</span>}
       </div>
 
+      {selectedUniv && selectedPeriod && (
+        <div className="eval-context" style={{ marginBottom: 16, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          Mostrando: <strong style={{ color: 'var(--text)' }}>{contextLabel}</strong>
+          {selectedUniv && (
+            <Link to={`${user?.role_id === 1 ? '/admin' : user?.role_id === 4 ? '/auditor' : '/university'}/documents?university_id=${selectedUniv}`}
+              style={{ marginLeft: 12, fontWeight: 600 }}>
+              Ver documentos de esta universidad →
+            </Link>
+          )}
+        </div>
+      )}
+
+      <RunStatusBanner run={!validating ? lastRun : null} onDismiss={() => setLastRun(null)}
+        onRetry={lastRun?.scope === 'pending' ? handleRetryPending : (lastRun && !readOnly ? () => handleValidate(lastRun.scope) : null)} />
 
       {activeTab === 'lotaip' && selectedUniv && selectedPeriod && !documentsLoading && documentCount === 0 && (
         <div className="alert alert-warning" style={{ marginBottom: 24, padding: '12px 16px', borderRadius: 'var(--radius)' }}>
-          No hay documentos para la universidad, periodo o mes seleccionado. No se puede realizar la evaluacion.
+          <strong>Sin evidencias:</strong> no hay documentos para la universidad, período o mes seleccionado, por lo que no se puede ejecutar la evaluación LOTAIP.
+          {!readOnly && <> Cárgalos o impórtalos en <Link to={`${user?.role_id === 1 ? '/admin' : '/university'}/documents?university_id=${selectedUniv}`}>Documentos LOTAIP</Link>.</>}
         </div>
       )}
 
-      {/* Error banner */}
-      {error && (
-        <div className="alert alert-danger" style={{ marginBottom: 24, padding: '12px 16px', background: 'var(--danger-subtle)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius)', color: 'var(--danger)' }}>
-          ⚠️ {error}
-        </div>
-      )}
+      <ErrorNotice error={error} fallback="No se pudieron cargar las evaluaciones."
+        onRetry={typeof error === 'string' ? null : loadResults} onDismiss={() => setError(null)} style={{ marginBottom: 24 }} />
 
-      {/* No selection state */}
       {!selectedUniv || !selectedPeriod ? (
         <div className="card">
           <div className="empty-state">
             <div className="empty-icon">🏛️</div>
-            <h4>Selecciona una universidad y período</h4>
-            <p>Elige una universidad y un período de evaluación para ver o ejecutar la validación de documentos LOTAIP.</p>
+            <h4>Selecciona una universidad y un período</h4>
+            <p>Elige la universidad y el año en los filtros superiores para {readOnly ? 'consultar' : 'consultar o ejecutar'} su evaluación nacional (LOTAIP) e internacional.</p>
+            <p style={{ fontSize: '0.8rem' }}>Consejo: pulsa <kbd>Ctrl</kbd> + <kbd>K</kbd> para buscar una universidad por nombre o siglas.</p>
           </div>
         </div>
       ) : loading ? (
         <div className="card">
           <div className="empty-state">
-            <div className="empty-icon" style={{ animation: 'spin 1s linear infinite' }}>⏳</div>
-            <h4>Cargando resultados...</h4>
+            <div className="spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} aria-hidden="true" />
+            <h4>Cargando resultados de {contextLabel}…</h4>
           </div>
         </div>
       ) : (
         <>
-          {/* Summary Cards */}
           {summary && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 24 }}>
-              {/* Calificacion oficial del Motor LOTAIP */}
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', paddingTop: 32, paddingBottom: 32 }}>
-                <TransparencyGauge value={lotaip?.sita ?? null} label="SITA LOTAIP" />
-                {lotaip && <>
-                  <div className={lotaip.isProvisional ? 'badge badge-warning' : 'badge badge-success'} style={{ marginTop: 58 }}>{lotaip.status}</div>
-                  <div style={{ marginTop: 10, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Motor: {lotaip.engineVersion}</div>
-                  <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 16 }}>
-                    {[['CTA', lotaip.cta], ['ETA', lotaip.eta], ['RP', lotaip.rp], ['CI', lotaip.ci]].map(([label, value]) => (
-                      <div key={label} style={{ padding: '8px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', textAlign: 'center' }}>
-                        <strong>{label}</strong> {formatLotaipPercent(value)}{label === 'CI' && lotaip.isProvisional ? ' — PROVISIONAL' : ''}
-                      </div>
-                    ))}
-                  </div>
-                  {lotaip.isProvisional && <p style={{ textAlign: 'center', fontSize: '0.8125rem', marginBottom: 0 }}>Resultado histórico provisional. Ejecuta nuevamente la evaluación automática.</p>}
-                  {lotaip.sitaMin != null && lotaip.sitaMax != null && <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Rango provisional: {formatLotaipPercent(lotaip.sitaMin)} – {formatLotaipPercent(lotaip.sitaMax)}</div>}
-                </>}
-                <div style={{ marginTop: 20, width: '100%', display: 'grid', gap: 8 }}>
-                  <div style={{ textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                    {results.length} documentos disponibles · {lotaip?.formats ?? summary.sita?.formatos ?? 0} formatos
-                  </div>
-                  {nationalComponent?.score != null && <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Componente nacional normalizado del ITI: {Number(nationalComponent.score).toFixed(2)}%</div>}
-                </div>
-              </div>
-
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', paddingTop: 32, paddingBottom: 32 }}>
-                <TransparencyGauge value={internationalComponent?.score ?? null} label="Componente internacional" />
-                <div className={internationalComponent?.is_provisional ? 'badge badge-warning' : 'badge badge-success'} style={{ marginTop: internationalComponent?.score == null ? 18 : 58 }}>
-                  {internationalComponent?.is_provisional ? 'PENDIENTE' : 'DEFINITIVO'}
-                </div>
-                <div style={{ marginTop: 12, textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                  {internationalComponent?.resolved || 0}/{internationalComponent?.total || 34} indicadores internacionales resueltos
-                </div>
-                {integrated?.international_year && <div style={{ marginTop: 4, textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Evaluación anual {integrated.international_year}</div>}
-                {!!internationalComponent?.technical_errors && <div style={{ marginTop: 6, color: 'var(--danger)', fontSize: '0.75rem' }}>{internationalComponent.technical_errors} errores técnicos</div>}
-                {!!internationalComponent?.no_evidence && <div style={{ marginTop: 6, color: 'var(--warning)', fontSize: '0.75rem' }}>{internationalComponent.no_evidence} sin evidencia publicada (puntúan 0 en la nota)</div>}
-              </div>
-
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', paddingTop: 32, paddingBottom: 32 }}>
-                <TransparencyGauge value={integrated?.index_percent ?? null} label="Índice final ITI" />
-                <div className={integrated?.is_provisional ? 'badge badge-warning' : 'badge badge-success'} style={{ marginTop: integrated?.index_percent == null ? 18 : 58 }}>
-                  {integrated?.is_provisional ? 'ESPERANDO AMBAS EVALUACIONES' : 'ITI DEFINITIVO'}
-                </div>
-                <div style={{ marginTop: 12, textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                  {integrated?.coverage?.resolved || 0}/{integrated?.coverage?.total || 58} indicadores totales resueltos
-                </div>
-              </div>
-
-              {/* Counters */}
-              <div className="card" style={{ gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 600, marginBottom: 4 }}>📄 Estado de documentos</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>Estadísticas documentales; no modifican el SITA LOTAIP.</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                  {[
-                    { label: 'Cumple', val: summary.indicators_compliant, color: 'var(--success)', bg: 'var(--success-subtle)' },
-                    { label: 'Parcial', val: summary.indicators_partial, color: 'var(--warning)', bg: 'var(--warning-subtle)' },
-                    { label: 'Incompleto', val: summary.indicators_incomplete, color: 'var(--info)', bg: 'var(--info-subtle)' },
-                    { label: 'No cumple', val: summary.indicators_non_compliant, color: 'var(--danger)', bg: 'var(--danger-subtle)' },
-                    { label: 'Con datos no verificables', val: results.filter((r) => ['PENDIENTE_REVISION', 'NO_VERIFICABLE'].includes(r.estado_cumplimiento)).length, color: 'var(--warning)', bg: 'var(--warning-subtle)' },
-                    { label: 'No presentado', val: summary.indicators_not_presented, color: 'var(--text-subtle)', bg: 'var(--bg-tertiary)' },
-                  ].map((item, i) => (
-                    <div key={i} style={{ padding: '14px 16px', borderRadius: 'var(--radius)', background: item.bg, border: `1px solid ${item.color}22`, textAlign: 'center' }}>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: item.color }}>{item.val}</div>
-                      <div style={{ fontSize: '0.75rem', color: item.color, fontWeight: 500 }}>{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* General observations */}
-                {summary.general_observations?.length > 0 && (
-                  <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>Observaciones generales:</div>
-                    {summary.general_observations.map((o, i) => (
-                      <div key={i} style={{ fontSize: '0.8125rem', color: 'var(--text)', marginBottom: 4 }}>{o}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            <IndexSummary lotaip={lotaip} summary={summary} national={nationalComponent}
+              international={internationalComponent} integrated={integrated} documentTotal={results.length} />
           )}
 
-          {selectedUniv && selectedPeriod && (
+          <div className="eval-tabs-row">
             <div className="tabs">
-              <button
-                className={`tab ${activeTab === 'lotaip' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('lotaip'); setExpandedRow(null); }}
-              >
-                Nacionales · LOTAIP
+              <button className={`tab ${activeTab === 'lotaip' ? 'active' : ''}`} onClick={() => setActiveTab('lotaip')} aria-pressed={activeTab === 'lotaip'}
+                title="Componente nacional: 24 numerales del art. 19 de la LOTAIP">
+                Nacional · LOTAIP<span className="eval-tab-count">{lotaipPackages.length}</span>
               </button>
-              <button
-                className={`tab ${activeTab === 'international' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('international'); setExpandedRow(null); }}
-              >
-                Internacionales
+              <button className={`tab ${activeTab === 'international' ? 'active' : ''}`} onClick={() => setActiveTab('international')} aria-pressed={activeTab === 'international'}
+                title="Componente complementario: indicadores de referentes internacionales">
+                Internacional<span className="eval-tab-count">{webIndicators.length}</span>
               </button>
             </div>
-          )}
+          </div>
 
-          {!readOnly && activeTab === 'lotaip' && (
+          {activeTab === 'lotaip' && (
             <Fragment>
-              <div className="card" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 800 }}>Evaluación nacional LOTAIP</div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 4 }}>Evalúa únicamente los documentos y criterios nacionales; no consume créditos de búsqueda internacional.</div>
+              {!readOnly && (
+                <div className="card eval-section eval-action-bar">
+                  <div>
+                    <div className="eval-section-title">Evaluación nacional LOTAIP</div>
+                    <div className="eval-section-sub">Evalúa únicamente los documentos y criterios nacionales; no consume créditos de búsqueda internacional.</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="btn btn-secondary" onClick={handleRetryPending}
+                      title={!pendingPackages.length ? 'No hay literales pendientes de comprobación' : 'Vuelve a consultar enlaces, extracción e IA de los literales pendientes'}
+                      disabled={!selectedUniv || !selectedPeriod || validating || loading || documentsLoading || !pendingPackages.length}>
+                      Actualizar pendientes ({pendingPackages.length})
+                    </button>
+                    <button className="btn btn-primary" onClick={() => handleValidate('lotaip')}
+                      title={documentCount === 0 ? 'No hay documentos para evaluar en esta selección' : validating ? 'Ya hay una evaluación en curso' : undefined}
+                      disabled={!selectedUniv || !selectedPeriod || validating || documentsLoading || documentCount === 0}>
+                      {validating && validationScope === 'lotaip' ? '⏳ Evaluando LOTAIP...' : '📄 Evaluar solo LOTAIP'}
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button className="btn btn-secondary" onClick={handleRetryPending}
-                    disabled={!selectedUniv || !selectedPeriod || validating || loading || documentsLoading || !pendingPackages.length}>
-                    Actualizar pendientes ({pendingPackages.length})
-                  </button>
-                  <button className="btn btn-primary" onClick={() => handleValidate('lotaip')}
-                    disabled={!selectedUniv || !selectedPeriod || validating || documentsLoading || documentCount === 0}>
-                    {validating && validationScope === 'lotaip' ? '⏳ Evaluando LOTAIP...' : '📄 Evaluar solo LOTAIP'}
-                  </button>
-                </div>
-              </div>
-              {validating && validationScope === 'lotaip' && <EvaluationProgressPanel
+              )}
+              {!readOnly && validating && validationScope === 'lotaip' && <EvaluationProgressPanel
                 scope="lotaip" progress={progress} activeRunId={activeRunId}
                 stopping={stopping} onStop={handleStopValidation}
               />}
-              {!validating && [1, 4].includes(Number(user?.role_id)) && <LotaipLinkReviewQueue
+              {!readOnly && !validating && canReview && <LotaipLinkReviewQueue
                 universityId={selectedUniv} periodId={selectedPeriod} month={selectedMonth}
                 refreshKey={results} onDecided={loadResults}
               />}
+              <LotaipPanel packages={lotaipPackages} numerals={numerals} summary={summary} readOnly={readOnly}
+                canReview={canReview} onValidateOne={handleValidateOne} onSaved={loadResults}
+                emptyText={readOnly ? 'No hay resultados LOTAIP para la selección actual.' : 'Haz clic en “Evaluar solo LOTAIP” para ejecutar la evaluación nacional.'} />
             </Fragment>
           )}
 
-          {!readOnly && activeTab === 'international' && (
+          {activeTab === 'international' && (
             <Fragment>
-              <div className="card" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 800 }}>Evaluación internacional anual{integrated?.international_year ? ` ${integrated.international_year}` : ''}</div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 4 }}>Evalúa una vez por año los 22 complementos mixtos y 12 indicadores internacionales mediante evidencia web verificable. El resultado se aplica a todos los meses del año.</div>
+              {!readOnly && (
+                <div className="card eval-section eval-action-bar">
+                  <div>
+                    <div className="eval-section-title">Evaluación internacional anual{integrated?.international_year ? ` ${integrated.international_year}` : ''}</div>
+                    <div className="eval-section-sub">22 complementos mixtos y 12 indicadores internacionales con evidencia verificable; el resultado se aplica a todos los meses del año.</div>
+                  </div>
+                  <button className="btn btn-primary" onClick={() => handleValidate('international')}
+                    title={validating ? 'Ya hay una evaluación en curso' : 'Busca y verifica evidencia web con apoyo de IA (puede tardar varios minutos)'}
+                    disabled={!selectedUniv || !selectedPeriod || validating}>
+                    {validating && validationScope === 'international' ? '⏳ Evaluando internacionales...' : '🌐 Evaluar solo internacionales'}
+                  </button>
                 </div>
-                <button className="btn btn-primary" onClick={() => handleValidate('international')}
-                  disabled={!selectedUniv || !selectedPeriod || validating}>
-                  {validating && validationScope === 'international' ? '⏳ Evaluando internacionales...' : '🌐 Evaluar solo internacionales'}
-                </button>
-              </div>
-              {validating && validationScope === 'international' && <EvaluationProgressPanel
+              )}
+              {!readOnly && validating && validationScope === 'international' && <EvaluationProgressPanel
                 scope="international" progress={progress} activeRunId={activeRunId}
                 stopping={stopping} onStop={handleStopValidation}
               />}
+              <InternationalPanel indicators={webIndicators} dimensions={internationalComponent?.dimensions}
+                readOnly={readOnly} retrying={retryingIndicator} validating={validating}
+                clearingDimension={clearingDimension} onRetry={handleRetryInternational} onClearCache={handleClearInternationalCache}
+                emptyText={readOnly ? 'No hay indicadores internacionales evaluados para esta selección.' : 'Haz clic en “Evaluar solo internacionales” para buscar y verificar evidencia web.'} />
             </Fragment>
-          )}
-
-          {/* Results Table */}
-          {results.length === 0 && activeTab === 'lotaip' ? (
-            <div className="card">
-              <div className="empty-state">
-                <div className="empty-icon">📄</div>
-                <h4>Sin resultados nacionales</h4>
-                <p>{readOnly ? 'No hay resultados LOTAIP para la selección actual.' : 'Haz clic en “Evaluar solo LOTAIP” para ejecutar la evaluación nacional.'}</p>
-              </div>
-            </div>
-          ) : results.length > 0 && activeTab === 'lotaip' && (
-            <>
-            <div className="card" style={{ marginBottom: 16, padding: 16 }}>
-              <div style={{ fontWeight: 800, marginBottom: 10 }}>Cobertura de los 24 numerales</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8 }}>
-                {numerals.map((item) => <div key={item.number} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
-                  <strong>{item.number}. {item.name}</strong>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: 4 }}>
-                    {item.formats.length ? `${item.formats.length} archivo(s) · evaluado` : 'Sin formato evaluado para este período'}
-                  </div>
-                </div>)}
-              </div>
-            </div>
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 600 }}>📋 Detalle por Literal LOTAIP</span>
-                <span className="tag">{lotaipPackages.length} paquetes evaluados</span>
-              </div>
-              <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Literal</th>
-                      <th>Requisito</th>
-                      <th>Documentos del literal</th>
-                      <th>Formato</th>
-                      <th>Período</th>
-                      <th>SITA del literal</th>
-                      <th>Estado</th>
-                      <th style={{ display: readOnly ? 'none' : undefined }}>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lotaipPackages.map((r, idx) => {
-                      const sc = getStatusConfig(r.estado_cumplimiento);
-                      const isExpanded = expandedRow === idx;
-
-                      return (
-                        <Fragment key={r.packageKey}>
-                          <tr key={idx} style={{ cursor: 'pointer' }} onClick={() => setExpandedRow(isExpanded ? null : idx)}>
-                            <td>
-                              <span style={{ fontWeight: 700, color: 'var(--primary-light)' }}>{r.literal}</span>
-                            </td>
-                            <td>
-                              <div style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
-                                {r.literal_name}
-                              </div>
-                            </td>
-                            <td>
-                              <div style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
-                                {r.rubrica_lotaip?.documentos_presentes?.join(', ') || r.documents.map(d => getDocumentKind(d.documento)).join(', ')}
-                              </div>
-                            </td>
-                            <td><span className="tag">{[...new Set(r.documents.map(d => d.file_type))].join(', ')}</span></td>
-                            <td style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{r.periodo}</td>
-                            <td>
-                              <ScoreBar score={r.puntaje_total ?? r.sita?.resultado_automatico?.puntaje} color={getScoreColor(r.puntaje_total ?? r.sita?.resultado_automatico?.puntaje)} />
-                              {r.puntaje_total == null && r.sita?.resultado_automatico?.puntaje != null && <small>Automático provisional</small>}
-                            </td>
-                            <td>
-                              <span className={`badge ${sc.badge}`}>{r.requiere_revalidacion ? 'Histórica: revalidar' : r.puntaje_total == null && r.sita?.resultado_automatico?.puntaje != null ? 'Evaluada · resultado parcial' : `${sc.icon} ${sc.label}`}</span>
-                            </td>
-                            <td style={{ display: readOnly ? 'none' : undefined }}>
-                              <button className="btn btn-sm btn-secondary" style={{ display: readOnly ? 'none' : undefined }} onClick={(e) => { e.stopPropagation(); handleValidateOne(r.evidence_id); }}
-                                title="Consultar o evaluar el paquete completo del literal">
-                                🔄
-                              </button>
-                            </td>
-                          </tr>
-                          {/* Expanded detail row */}
-                          {isExpanded && (
-                            <tr key={`detail-${idx}`}>
-                              <td colSpan={8} style={{ padding: 0, background: 'var(--bg-tertiary)' }}>
-                                <div style={{ padding: '16px 20px' }}>
-                                  <p>Una sola nota SITA para el literal y mes. El diccionario se usa únicamente para interpretar variables y notas aclaratorias; no recibe una evaluación propia.</p>
-                                  <ul>{r.documents.map(d => <li key={d.evidence_id}>{d.documento}</li>)}</ul>
-                                  {!!r.rubrica_lotaip?.documentos_faltantes?.length && <p>Faltan: {r.rubrica_lotaip.documentos_faltantes.join(', ')}.</p>}
-                                  <LotaipCriteriaTable result={r} canReview={[1, 4].includes(Number(user?.role_id))} onSaved={loadResults} />
-
-                                  {/* Observations */}
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                                    <div>
-                                      <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--text)' }}>
-                                        Observaciones
-                                      </div>
-                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-                                        Hallazgos de la validacion automatica
-                                      </div>
-                                    </div>
-                                    <span className="tag">{(r.observaciones || []).length} registros</span>
-                                  </div>
-                                  <div style={{ display: 'grid', gap: 8 }}>
-                                    {(r.observaciones || []).map((obs, oi) => {
-                                      const config = getObservationConfig(obs);
-                                      return (
-                                        <div key={oi} style={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 12, alignItems: 'start', padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderLeft: `4px solid ${config.color}`, borderRadius: 8 }}>
-                                          <span style={{ justifySelf: 'start', padding: '3px 9px', borderRadius: 999, background: config.bg, color: config.color, fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
-                                            {config.label}
-                                          </span>
-                                          <div style={{ fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
-                                            {cleanObservation(obs)}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            </>
-          )}
-
-          {activeTab === 'international' && integrated && (
-            <div style={{ display: 'grid', gap: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-                {(internationalComponent?.dimensions || []).map((item) => (
-                  <div key={item.code} className="card-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginBottom: 4 }}>{item.code} · {item.name}</div>
-                        <div style={{ fontSize: '1.375rem', fontWeight: 800, color: item.score == null ? 'var(--warning)' : getScoreColor(item.score) }}>
-                          {item.score == null ? 'Pendiente' : `${Number(item.score).toFixed(2)}%`}
-                        </div>
-                      </div>
-                      <span className="tag">{item.indicator_count} indicadores</span>
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: '0.7rem', color: 'var(--text-subtle)' }}>{item.pending || 0} pendientes de {item.indicator_count}</div>
-                  </div>
-                ))}
-              </div>
-
-              {webIndicators.length === 0 ? (
-                <div className="card">
-                  <div className="empty-state">
-                    <div className="empty-icon">🌐</div>
-                    <h4>Sin resultados internacionales</h4>
-                    <p>{readOnly ? 'No hay indicadores internacionales evaluados para esta selección.' : 'Haz clic en “Evaluar solo internacionales” para buscar y verificar evidencia web.'}</p>
-                  </div>
-                </div>
-              ) : <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 600 }}>Evidencia web de indicadores mixtos e internacionales</span>
-                  <span className="tag">{webIndicators.length} indicadores</span>
-                </div>
-                <div style={{ display: 'grid', gap: 10, padding: 14, background: 'var(--bg-secondary)' }}>
-                  {internationalGroups.map((group) => {
-                    const isOpen = expandedInternationalFolders[group.code] ?? true;
-                    return (
-                      <div key={group.code} style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)', overflow: 'hidden' }}>
-                        <button
-                          type="button"
-                          onClick={() => toggleInternationalFolder(group.code)}
-                          style={{
-                            width: '100%',
-                            border: 'none',
-                            background: 'transparent',
-                            padding: '14px 18px',
-                            display: 'grid',
-                            gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
-                            gap: 12,
-                            alignItems: 'center',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <span style={{ fontSize: '1.1rem', color: 'var(--primary-light)' }}>{isOpen ? '▾' : '▸'}</span>
-                          <span>
-                            <span style={{ display: 'block', fontWeight: 800, color: 'var(--primary-light)' }}>{group.code} · {group.name}</span>
-                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              Complementos comprobados en la web institucional
-                            </span>
-                          </span>
-                          <span className="tag">{group.indicators.length} indicadores</span>
-                          <span className="tag">{group.indicators.filter((item) => item.status === 'CUMPLE').length} cumplen</span>
-                        </button>
-
-                        {isOpen && (
-                          <div style={{ display: 'grid', gap: 12, padding: '0 14px 14px' }}>
-                            {!readOnly && (
-                              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  disabled={clearingDimension === group.code || validating}
-                                  onClick={() => handleClearInternationalCache(group.code)}
-                                  title="Elimina las búsquedas y páginas guardadas de esta dimensión; la próxima evaluación consultará nuevamente la web."
-                                >
-                                  {clearingDimension === group.code ? '⏳ Invalidando...' : `↻ Invalidar caché de ${group.code}`}
-                                </button>
-                              </div>
-                            )}
-                            {group.indicators.map((indicator) => {
-                              const status = INTEGRATED_STATUS[indicator.status] || INTEGRATED_STATUS.PENDIENTE;
-                              const scorePercent = indicator.score == null ? null : indicator.score * 100;
-                              const supportingSources = (indicator.metadata?.supporting_sources || [])
-                                .filter((source) => source?.source_url && source.source_url !== indicator.source_url);
-                              return (
-                                <div key={indicator.code} style={{ border: '1px solid var(--border-light)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-primary)' }}>
-                                  <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-light)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 12, alignItems: 'center' }}>
-                                    <div>
-                                      <div style={{ fontWeight: 800, color: 'var(--text)' }}>{indicator.code} · {indicator.statement}</div>
-                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: 4 }}>{indicator.family_code} · {indicator.family_name}</div>
-                                    </div>
-                                    <span className="tag">{indicator.classification_label}</span>
-                                    <span className={`badge ${status.badge}`}>{status.label}{scorePercent == null ? '' : ` · ${scorePercent}%`}</span>
-                                  </div>
-                                  <div style={{ display: 'grid', gap: 10, padding: 14 }}>
-                                    <div>
-                                      <strong style={{ fontSize: '0.75rem' }}>Por qué {indicator.status === 'CUMPLE' ? 'cumple' : 'se asignó este resultado'}</strong>
-                                      <div style={{ marginTop: 4, fontSize: '0.8125rem', lineHeight: 1.5 }}>{indicator.justification || 'Todavía no existe una justificación verificable.'}</div>
-                                    </div>
-                                    {!!indicator.metadata?.covered_elements?.length && (
-                                      <div style={{ fontSize: '0.78rem' }}>
-                                        <strong>Elementos comprobados:</strong> {indicator.metadata.covered_elements.join(' · ')}
-                                      </div>
-                                    )}
-                                    {!!indicator.metadata?.missing_elements?.length && (
-                                      <div style={{ fontSize: '0.78rem', color: 'var(--warning)' }}>
-                                        <strong>Elementos pendientes:</strong> {indicator.metadata.missing_elements.join(' · ')}
-                                      </div>
-                                    )}
-                                    {indicator.source_url ? (
-                                      <div style={{ padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: 5 }}>Ubicación exacta en la web</div>
-                                        <span className={`badge ${indicator.metadata?.selected_source_official ? 'badge-success' : 'badge-info'}`} style={{ marginBottom: 8 }}>
-                                          {indicator.metadata?.selected_source_kind || (indicator.metadata?.selected_source_official ? 'Fuente oficial' : 'Fuente externa')}
-                                          {indicator.metadata?.selected_source_domain ? ` · ${indicator.metadata.selected_source_domain}` : ''}
-                                        </span>
-                                        <a href={indicator.source_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-light)', overflowWrap: 'anywhere', fontWeight: 700 }}>{indicator.source_title || indicator.source_url}</a>
-                                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 6 }}>{indicator.source_location || 'La fuente no indicó una sección exacta.'}</div>
-                                        {indicator.evidence_excerpt && <blockquote style={{ margin: '10px 0 0', padding: '8px 12px', borderLeft: '3px solid var(--primary)', color: 'var(--text)', background: 'var(--bg-card)', fontSize: '0.8125rem' }}>“{indicator.evidence_excerpt}”</blockquote>}
-                                      </div>
-                                    ) : (
-                                      <div style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>Sin fuente web confirmada. Consulta realizada: {indicator.search_query || 'no disponible'}.</div>
-                                    )}
-                                    {!!supportingSources.length && (
-                                      <div style={{ display: 'grid', gap: 8 }}>
-                                        <strong style={{ fontSize: '0.75rem' }}>Otras fuentes verificadas</strong>
-                                        {supportingSources.map((source, index) => (
-                                          <div key={`${source.source_url}-${index}`} style={{ padding: 10, border: '1px solid var(--border-light)', borderRadius: 8 }}>
-                                            <a href={source.source_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-light)', overflowWrap: 'anywhere', fontWeight: 700, fontSize: '0.78rem' }}>
-                                              {source.source_title || source.source_url}
-                                            </a>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{source.source_location}</div>
-                                            {source.evidence_excerpt && <blockquote style={{ margin: '7px 0 0', padding: '7px 10px', borderLeft: '3px solid var(--primary)', fontSize: '0.75rem' }}>“{source.evidence_excerpt}”</blockquote>}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {indicator.classification === 'MIXTO' && <div style={{ fontSize: '0.72rem', color: 'var(--warning)' }}>Este resultado califica únicamente el complemento internacional; la parte LOTAIP se mantiene en la evaluación nacional.</div>}
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
-                                      <span className="tag">IA: {indicator.metadata?.evaluation_mode || 'sin dato'}</span>
-                                      <span className="tag">Documentos: {indicator.metadata?.documents_analyzed ?? 0}</span>
-                                      <span className="tag">Oficiales: {indicator.metadata?.official_documents ?? 0}</span>
-                                      <span className="tag">Externos: {indicator.metadata?.external_documents ?? 0}</span>
-                                      <span className="tag">Caché web: {indicator.metadata?.evidence_cache_hits ?? 0}</span>
-                                      {(indicator.metadata?.search_engines || []).map((engine) => <span className="tag" key={engine}>Motor: {engine}</span>)}
-                                      {indicator.metadata?.source_fetched_at && <span>Fuente descargada: {new Date(indicator.metadata.source_fetched_at).toLocaleString()}</span>}
-                                    </div>
-                                    {!readOnly && (
-                                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                        <button
-                                          type="button"
-                                          className="btn btn-secondary"
-                                          disabled={Boolean(retryingIndicator) || validating}
-                                          onClick={() => handleRetryInternational(indicator.code)}
-                                        >
-                                          {retryingIndicator === indicator.code ? '⏳ Reevaluando...' : '↻ Reevaluar indicador'}
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>}
-            </div>
           )}
         </>
       )}

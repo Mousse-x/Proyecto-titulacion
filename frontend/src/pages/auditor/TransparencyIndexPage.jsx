@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import ScoreLegend from '../../components/common/ScoreLegend';
 import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
@@ -7,9 +8,6 @@ import { validationApi } from '../../api/validation';
 import { getScoreColor, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 import {
-  Bar,
-  BarChart,
-  Cell,
   CartesianGrid,
   Legend,
   Line,
@@ -46,19 +44,6 @@ function EvolutionTooltip({ active, payload, label }) {
           <strong>{Number(item.value || 0).toFixed(2)}%</strong>
         </div>
       ))}
-    </div>
-  );
-}
-
-function InternationalTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  const value = Number(payload[0].value || 0);
-  return (
-    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', boxShadow: 'var(--shadow-sm)' }}>
-      <div style={{ fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>{label}</div>
-      <div style={{ color: getScoreColor(value), fontSize: '0.8125rem' }}>
-        Cumplimiento: <strong>{value.toFixed(2)}%</strong>
-      </div>
     </div>
   );
 }
@@ -135,7 +120,11 @@ export default function TransparencyIndexPage() {
     return () => { cancelled = true; };
   }, [selectedId]);
 
+  const { pathname } = useLocation();
+  const rolePrefix = pathname.startsWith('/auditor') ? '/auditor' : '/university';
   const selected = rankings.find((u) => String(u.id) === String(selectedId)) || rankings[0];
+  const internationalScore = integratedResult?.component_scores?.international?.score ?? null;
+  const breakdownUrl = `${rolePrefix}/validation?university_id=${selected?.id || selectedId}${selectedPeriod ? `&period_id=${selectedPeriod}` : ''}`;
   const selectedUniversity = universities.find((u) => String(u.id) === String(selectedId)) || selected || {};
   const national = selected?.transparency_score || 0;
   const integrated = integratedResult?.index_percent ?? selected?.integrated_transparency_score ?? null;
@@ -176,6 +165,8 @@ export default function TransparencyIndexPage() {
   }, [evolutionResults]);
 
   const dimensionData = useMemo(() => (integratedResult?.dimension_scores || []).map((dimension) => ({
+    code: dimension.code,
+    name: dimension.name,
     subject: `${dimension.code} · ${dimension.name}`,
     score: dimension.score == null ? 0 : Number(dimension.score),
     pending: dimension.pending || 0,
@@ -186,11 +177,16 @@ export default function TransparencyIndexPage() {
     <div style={{ animation: 'slideIn 0.3s ease' }}>
       <div className="page-header">
         <div className="page-header-info">
-          <h1>Indice de Transparencia Institucional</h1>
-          <p>Un único resultado ponderado a partir de LOTAIP y los complementos internacionales verificables</p>
+          <h1>Índice de Transparencia Institucional</h1>
+          <p>Un único resultado ponderado a partir de LOTAIP y los complementos internacionales verificables
+            <Link to="/ayuda#indice" className="info-button" title="¿Cómo se calcula el ITI?" aria-label="Ayuda: cómo se calcula el ITI">?</Link>
+          </p>
         </div>
-        <div className="page-header-actions">
+        <div className="page-header-actions" style={{ alignItems: 'flex-end' }}>
+          <div className="filter-field">
+          <label htmlFor="index-univ">Universidad</label>
           <select
+            id="index-univ"
             className="form-input"
             value={selectedId}
             onChange={(e) => {
@@ -203,16 +199,22 @@ export default function TransparencyIndexPage() {
               <option key={u.id} value={u.id}>{u.name} - {u.full_name}</option>
             ))}
           </select>
+          </div>
+          {selected && (
+            <Link to={breakdownUrl} className="btn btn-primary link-button" title="Ver cada indicador, su calificación, fuente y evidencia">
+              🔍 Ver desglose de indicadores y evidencias
+            </Link>
+          )}
         </div>
       </div>
 
       {loading ? (
-        <div className="card"><div className="empty-state"><h4>Cargando indices...</h4></div></div>
+        <div className="card"><div className="empty-state" aria-busy="true"><div className="spinner" style={{ width: 28, height: 28, margin: '0 auto 12px' }} /><h4>Cargando índices...</h4></div></div>
       ) : !selected ? (
         <div className="card">
           <div className="empty-state">
             <h4>Sin evaluaciones calculadas</h4>
-            <p>Ejecuta la evaluacion LOTAIP para generar indices reales.</p>
+            <p>Aún no hay resultados. El administrador debe ejecutar la evaluación LOTAIP en «Evaluación de transparencia» para generar los índices.</p>
           </div>
         </div>
       ) : (
@@ -225,11 +227,12 @@ export default function TransparencyIndexPage() {
               <div style={{ flex: 1 }}>
                 <h2 style={{ margin: 0 }}>{selected.full_name}</h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                  {evaluatedDocs} documentos evaluados
+                  {evaluatedDocs} documentos evaluados{selectedPeriod && integratedResult?.international_year ? ` · Año ${integratedResult.international_year}` : ''}
                 </p>
+                <div style={{ marginTop: 8 }}><ScoreLegend /></div>
               </div>
               <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
-                <ScoreCard score={national} size={90} label="Indice nacional" />
+                <ScoreCard score={national} size={90} label="Nacional (LOTAIP)" />
                 {integrated == null ? (
                   <div style={{ width: 110, textAlign: 'center', color: 'var(--warning)', fontWeight: 800 }}>
                     <div style={{ fontSize: '1rem' }}>Pendiente</div>
@@ -267,7 +270,7 @@ export default function TransparencyIndexPage() {
 
               <div style={{ display: 'grid', gap: 14 }}>
                 <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 4 }}>Pagina web</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 4 }}>Página web</div>
                   {institutionWebsite ? (
                     <a href={institutionWebsite} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none', overflowWrap: 'anywhere' }}>
                       {institutionWebsite.replace(/^https?:\/\//, '')}
@@ -289,7 +292,7 @@ export default function TransparencyIndexPage() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 4 }}>Ubicacion</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 4 }}>Ubicación</div>
                   <div style={{ color: institutionLocation ? 'var(--text)' : 'var(--text-subtle)', fontWeight: 700 }}>
                     {institutionLocation || 'No registrada'}
                   </div>
@@ -298,7 +301,8 @@ export default function TransparencyIndexPage() {
                 <div>
                   <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 8 }}>Indicadores actuales</div>
                   {[
-                    { label: 'Indice nacional', score: national },
+                    { label: 'Nacional (LOTAIP · SITA)', score: national },
+                    { label: 'Complementario internacional', score: internationalScore == null ? null : Number(Number(internationalScore).toFixed(2)) },
                     { label: 'Índice final ITI', score: integrated },
                   ].map((item) => (
                     <div key={item.label} style={{ marginBottom: 12 }}>
@@ -320,20 +324,20 @@ export default function TransparencyIndexPage() {
                   </div>
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated) }}>{integrated == null ? 'Pendiente' : getScoreLabel(integrated)}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontWeight: 700 }}>Clasificacion</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontWeight: 700 }}>Clasificación</div>
                   </div>
                 </div>
               </div>
             </div>
             <div className="chart-card">
-              <div className="chart-title">Evolucion de calificacion de documentos</div>
+              <div className="chart-title">Evolución de la calificación de documentos (nacional)</div>
               {evolutionLoading ? (
                 <div className="empty-state" style={{ minHeight: 300 }}>
-                  <h4>Cargando evolucion...</h4>
+                  <h4>Cargando evolución...</h4>
                 </div>
               ) : evolutionData.length === 0 ? (
                 <div className="empty-state" style={{ minHeight: 300 }}>
-                  <h4>Sin datos de evolucion</h4>
+                  <h4>Sin datos de evolución</h4>
                   <p>No hay documentos validados para construir la serie temporal.</p>
                 </div>
               ) : (
@@ -344,7 +348,7 @@ export default function TransparencyIndexPage() {
                     <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-subtle)', fontSize: 11 }} axisLine={false} tickLine={false} />
                     <Tooltip content={<EvolutionTooltip />} />
                     <Legend wrapperStyle={{ paddingTop: 12, fontSize: '0.8125rem' }} />
-                    <Line name="Indice nacional" type="monotone" dataKey="nacional" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, strokeWidth: 0, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
+                    <Line name="Índice nacional" type="monotone" dataKey="nacional" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, strokeWidth: 0, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -357,57 +361,55 @@ export default function TransparencyIndexPage() {
             </div>
           </div>
 
-          <div className="grid-21" style={{ marginBottom: 24 }}>
-            <div className="chart-card">
-              <div className="chart-title">Resultado por dimensión integrada</div>
+          <div className="transparency-dimensions" style={{ marginBottom: 24 }}>
+            <div className="chart-card transparency-dimension-chart">
+              <div className="chart-title" style={{ marginBottom: 4 }}>Resultado por dimensión integrada</div>
+              <p className="transparency-chart-description">
+                Puntaje obtenido en cada dimensión del Índice de Transparencia Institucional (0–100 %). Pasa el cursor sobre una barra para ver su valor y peso.
+                {' '}<Link to="/ayuda#dimensiones">¿Qué mide cada dimensión?</Link>
+              </p>
               {evolutionLoading ? (
-                <div className="empty-state" style={{ minHeight: 300 }}>
+                <div className="empty-state" style={{ minHeight: 360 }}>
                   <h4>Cargando dimensiones…</h4>
                 </div>
               ) : dimensionData.length === 0 ? (
-                <div className="empty-state" style={{ minHeight: 300 }}>
+                <div className="empty-state" style={{ minHeight: 360 }}>
                   <h4>Sin resultado integrado</h4>
                   <p>Ejecuta la evaluación para calcular las ocho dimensiones.</p>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={dimensionData} layout="vertical" margin={{ top: 8, right: 34, bottom: 8, left: 28 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border-light)" />
-                    <XAxis type="number" domain={[0, 100]} tick={{ fill: 'var(--text-subtle)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="subject" width={138} tick={{ fill: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<InternationalTooltip />} />
-                    <Bar dataKey="score" radius={[0, 8, 8, 0]} barSize={28}>
-                      {dimensionData.map((item) => (
-                        <Cell key={item.subject} fill={getScoreColor(item.score)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            <div className="card">
-              <div className="card-title" style={{ marginBottom: 14 }}>Dimensiones y ponderaciones</div>
-              {dimensionData.map((item) => (
-                <div key={item.subject} style={{ marginBottom: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, gap: 12 }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{item.subject}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 800, color: getScoreColor(item.score) }}>{item.score}%</span>
-                      <Badge status={item.pending ? `${item.pending} pendientes` : getScoreLabel(item.score)} />
+                <div className="dimension-bars" role="list" aria-label="Puntajes por dimensión integrada">
+                  <div className="dimension-scale" aria-hidden="true">
+                    <span />
+                    <div><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+                    <span />
+                  </div>
+                  {dimensionData.map((item) => (
+                    <div className="dimension-bar-row" role="listitem" key={item.subject}>
+                      <div className="dimension-bar-label">
+                        <strong>{item.code}</strong>
+                        <span>{item.name}</span>
+                      </div>
+                      <div className="dimension-bar-track" title={`${item.subject}: ${item.score}%${item.weight != null ? ` · peso ${item.weight}% en el ITI` : ''}${item.pending ? ` · ${item.pending} indicador(es) pendiente(s)` : ''}`}>
+                        <div
+                          className="dimension-bar-fill"
+                          style={{ width: `${Math.max(0, Math.min(item.score, 100))}%`, background: getScoreColor(item.score) }}
+                        />
+                      </div>
+                      <strong className="dimension-bar-score" style={{ color: getScoreColor(item.score) }}>
+                        {Number(item.score).toFixed(1).replace('.0', '')}%
+                      </strong>
                     </div>
-                  </div>
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${item.score}%`, background: getScoreColor(item.score) }} />
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
           <div className="card">
             <div className="card-header">
               <span className="card-title">Detalle institucional</span>
-              <span className="tag">{evaluatedDocs} documentos evaluados</span>
+              <Link to={breakdownUrl} className="btn btn-secondary btn-sm link-button">Ver indicadores y evidencias →</Link>
             </div>
             <div className="table-wrapper">
               <table className="table">
@@ -425,7 +427,12 @@ export default function TransparencyIndexPage() {
                     <td><Badge status={getScoreLabel(national)} /></td>
                   </tr>
                   <tr>
-                    <td>Índice de Transparencia Institucional (resultado único)</td>
+                    <td>Componente complementario internacional</td>
+                    <td><span style={{ fontWeight: 800, color: internationalScore == null ? 'var(--warning)' : getScoreColor(internationalScore) }}>{internationalScore == null ? 'Pendiente' : `${Number(internationalScore).toFixed(2)}%`}</span></td>
+                    <td><Badge status={internationalScore == null ? 'Pendiente' : getScoreLabel(internationalScore)} /></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Índice de Transparencia Institucional (resultado único)</strong></td>
                     <td><span style={{ fontWeight: 800, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated) }}>{integrated == null ? 'Pendiente' : `${integrated}%`}</span></td>
                     <td><Badge status={integrated == null ? 'Provisional' : getScoreLabel(integrated)} /></td>
                   </tr>

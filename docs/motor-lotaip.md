@@ -51,6 +51,33 @@ parser o fuente externa no disponible se registra como `TECHNICAL_ERROR`; no se 
 en cero. Cuando acceso y legibilidad son comprobables pero la correspondencia no puede
 decidirse de forma determinista, el caso requiere revisión.
 
+### Verificables sin revisión manual (Tabla 6)
+
+Cuando un enlace verificable no puede comprobarse a la primera, el motor sigue esta
+cadena automática antes de decidir:
+
+1. **Reintento espaciado** (`LOTAIP_LINK_RETRY_DELAY_SECONDS`) ante cortes de red, 429 o 5xx.
+   Un desafío anti-bots no se reintenta ni se intenta superar.
+2. **Copia de Wayback Machine**: si el acceso sigue indeterminado (anti-bots, 403, 5xx o
+   timeout), se analiza la última copia HTTP 200 archivada del mismo enlace. La evidencia
+   registra la fecha y la URL de la copia (`archived_copy`).
+3. **SharePoint/OneDrive** que exige iniciar sesión o niega el acceso anónimo se califica
+   **NO**: el verificable no es de libre acceso.
+4. **IA**: una respuesta inválida del modelo (sin citas literales o truncada) se repite para
+   ese registro solo; si persiste, un identificador único del registro (código, número de
+   resolución o de proceso) que aparece literalmente en el documento confirma la
+   correspondencia. Este respaldo sólo puede confirmar, nunca marcar NO.
+5. **Sustitución en la muestra** (nota 3): una fila que sigue sin poder verificarse se
+   reemplaza por la siguiente del sorteo reproducible (`LOTAIP_SAMPLE_REPLACEMENTS`, 6 por
+   defecto). El resumen indica las filas sustituidas.
+6. Lo que aún no puede verificarse queda como **SIN EVALUACIÓN** con `unverifiable=true`:
+   se excluye del denominador, no acredita cumplimiento ni incumplimiento y no bloquea el
+   índice. En la siguiente evaluación se vuelve a intentar.
+
+Sólo quedan **PENDIENTE** las fallas técnicas que un reintento sí resuelve: límite de tiempo
+de la ejecución, OCR o extracción fallidos, servicio de IA caído y Wayback Machine sin
+respuesta. Así una caída de un servicio nunca excluye criterios en silencio.
+
 Cada evaluación conserva además el SHA-256 de `schemas_2024.json`. Así, la versión
 `DPE-053-2024-v2` queda vinculada de forma reproducible con el esquema exacto usado,
 sin modificar evaluaciones históricas.
@@ -60,7 +87,7 @@ sin modificar evaluaciones históricas.
 Desde `backend/`:
 
 ```powershell
-.\.venv\Scripts\python.exe manage.py test core.test_lotaip_rubric core.test_lotaip_engine
+.\.venv\Scripts\python.exe manage.py test core.tests.test_lotaip_rubric core.tests.test_lotaip_engine
 .\.venv\Scripts\python.exe manage.py check
 ```
 

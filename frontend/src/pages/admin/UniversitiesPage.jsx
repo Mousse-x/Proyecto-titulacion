@@ -5,10 +5,31 @@ import Badge from '../../components/common/Badge';
 import { ScoreCard } from '../../components/common/StatCard';
 import { api } from '../../api/client';
 import { getUniversityLogo } from '../../data/universityLogos';
+import ErrorNotice from '../../components/common/ErrorNotice';
+import { useToast } from '../../context/FeedbackContext';
 
 const normalizeUniversityType = (value = 'Pública') => String(value)
   .replaceAll('PÃºblica', 'Pública')
   .replaceAll('Publica', 'Pública');
+
+const URL_RE = /^https?:\/\/[^\s.]+\.[^\s]{2,}$/i;
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+function validateUniversity(form, others) {
+  const errors = {};
+  const acronym = (form.name || '').trim();
+  if (!acronym) errors.name = 'Las siglas son obligatorias.';
+  else if (acronym.length > 20) errors.name = 'Usa como máximo 20 caracteres (ej.: ESPOCH).';
+  else if (others.some((u) => String(u.name).trim().toLowerCase() === acronym.toLowerCase())) errors.name = 'Ya existe otra universidad con estas siglas.';
+  if (!(form.full_name || '').trim()) errors.full_name = 'El nombre completo es obligatorio.';
+  if (form.website && !URL_RE.test(form.website.trim())) errors.website = 'Formato inválido. Debe empezar con http:// o https:// (ej.: https://www.espoch.edu.ec).';
+  if (form.dpe_entity_id && !/^\d+$/.test(String(form.dpe_entity_id))) errors.dpe_entity_id = 'El ID DPE solo admite números (ej.: 1365).';
+  if (form.logo_file) {
+    if (!LOGO_TYPES.includes(form.logo_file.type)) errors.logo_file = 'Formato no permitido. Usa PNG, JPG o WEBP.';
+    else if (form.logo_file.size > 2 * 1024 * 1024) errors.logo_file = 'El logo no debe superar 2 MB.';
+  }
+  return errors;
+}
 
 const EMPTY = { name: '', full_name: '', city: '', province: '', type: 'Pública', website: '', dpe_entity_id: '', logo_file: null, logo_url: '', is_active: true };
 
@@ -23,6 +44,9 @@ export default function UniversitiesPage() {
   const [detailView, setDetail] = useState(null);
   const [saving, setSaving]     = useState(false);
   const [dpeHelpOpen, setDpeHelpOpen] = useState(false);
+  const [initialForm, setInitialForm] = useState(EMPTY);
+  const [touched, setTouched] = useState(false);
+  const toast = useToast();
 
   const fetchUnivs = useCallback(async () => {
     setLoading(true);
@@ -31,7 +55,7 @@ export default function UniversitiesPage() {
       const res = await api.universities.list({ include_inactive: 1 });
       setUnivs(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar universidades. ¿Está el servidor activo?');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -39,8 +63,17 @@ export default function UniversitiesPage() {
 
   useEffect(() => { fetchUnivs(); }, [fetchUnivs]);
 
-  const openCreate = () => { setSelected(null); setForm(EMPTY); setModal(true); };
-  const openEdit   = (u)  => { setSelected(u); setForm({ name: u.name, full_name: u.full_name, city: u.city || '', province: u.province || '', type: normalizeUniversityType(u.type || 'Pública'), website: u.website || '', dpe_entity_id: u.dpe_entity_id || '', logo_file: null, logo_url: u.logo_url || '', is_active: u.is_active }); setModal(true); };
+  const openCreate = () => { setSelected(null); setForm(EMPTY); setInitialForm(EMPTY); setTouched(false); setModal(true); };
+  const openEdit   = (u)  => {
+    const next = { name: u.name, full_name: u.full_name, city: u.city || '', province: u.province || '', type: normalizeUniversityType(u.type || 'Pública'), website: u.website || '', dpe_entity_id: u.dpe_entity_id || '', logo_file: null, logo_url: u.logo_url || '', is_active: u.is_active };
+    setSelected(u); setForm(next); setInitialForm(next); setTouched(false); setModal(true);
+  };
+
+  const others = univs.filter((u) => u.id !== selected?.id);
+  const fieldErrors = validateUniversity(form, others);
+  const hasErrors = Object.keys(fieldErrors).length > 0;
+  const isDirty = JSON.stringify({ ...form, logo_file: form.logo_file?.name || null }) !== JSON.stringify({ ...initialForm, logo_file: initialForm.logo_file?.name || null });
+  const showError = (key) => (touched || (form[key] && form[key] !== initialForm[key])) && fieldErrors[key];
 
   const extractDpeId = (value = '') => {
     const match = String(value).match(/(?:entidades\/)?(\d+)/);
@@ -48,34 +81,43 @@ export default function UniversitiesPage() {
   };
 
   const handleSave = async () => {
+    setTouched(true);
+    if (hasErrors) {
+      toast.warning({ title: 'Revisa el formulario', message: 'Hay campos obligatorios vacíos o con formato inválido; están marcados en rojo.' });
+      return;
+    }
     setSaving(true);
     try {
+      const payload = { ...form, name: form.name.trim(), full_name: form.full_name.trim(), website: (form.website || '').trim() };
       if (selected) {
-        await api.universities.update(selected.id, form);
+        await api.universities.update(selected.id, payload);
       } else {
-        await api.universities.create(form);
+        await api.universities.create(payload);
       }
       setModal(false);
+      toast.success({ title: selected ? 'Universidad actualizada' : 'Universidad registrada', message: `${payload.name} — ${payload.full_name} se guardó correctamente.` });
       await fetchUnivs();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al guardar. Intente de nuevo.');
+      toast.apiError(err, 'No se pudo guardar la universidad. Tus datos siguen en el formulario.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id) => {
+    const target = univs.find((u) => u.id === id);
     try {
       await api.universities.remove(id);
       setConfirm({ open: false, id: null });
+      toast.success({ title: 'Universidad eliminada', message: `${target?.name || 'La universidad'} y sus datos asociados se eliminaron.` });
       await fetchUnivs();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al eliminar universidad.');
+      toast.apiError(err, 'No se pudo eliminar la universidad.');
     }
   };
 
   const columns = [
-    { key: 'name', label: 'InstituciÃ³n', render: (v, row) => {
+    { key: 'name', label: 'Institución', render: (v, row) => {
       const logo = getUniversityLogo(row);
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -90,7 +132,7 @@ export default function UniversitiesPage() {
       );
     }},
     { key: 'type', label: 'Tipo', render: (v) => <Badge status={normalizeUniversityType(v)} /> },
-    { key: 'transparency_score', label: 'Ãndice', sortable: true,
+    { key: 'transparency_score', label: 'Índice', sortable: true,
       render: (v) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ScoreCard score={v} size={44} />
@@ -100,9 +142,9 @@ export default function UniversitiesPage() {
     { key: 'is_active', label: 'Estado', render: (v) => <Badge status={v ? 'Activo' : 'Inactivo'} /> },
     { key: 'id', label: 'Acciones', sortable: false, render: (_, row) => (
       <div className="table-actions">
-        <button className="btn btn-secondary btn-sm" onClick={() => setDetail(row)}>Ver</button>
-        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(row)}>Editar</button>
-        <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: row.id })}>Eliminar</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setDetail(row)} title={`Ver detalle de ${row.name}`}>Ver</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(row)} title={`Editar ${row.name}`}>Editar</button>
+        <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ open: true, id: row.id })} title={`Eliminar ${row.name}`}>Eliminar</button>
       </div>
     )},
   ];
@@ -115,8 +157,8 @@ export default function UniversitiesPage() {
           <p>{loading ? 'Cargando...' : `${univs.length} instituciones registradas en el sistema`}</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary" onClick={fetchUnivs} disabled={loading}>Actualizar</button>
-          <button className="btn btn-primary" onClick={openCreate}>+ Agregar Universidad</button>
+          <button className="btn btn-secondary" onClick={fetchUnivs} disabled={loading}>↻ Actualizar</button>
+          <button className="btn btn-primary" onClick={openCreate}>+ Agregar universidad</button>
         </div>
       </div>
 
@@ -127,15 +169,15 @@ export default function UniversitiesPage() {
             Cargando universidades...
           </div>
         ) : error ? (
-          <div className="alert alert-danger" style={{ margin: 24 }}>Alerta: {error}</div>
+          <ErrorNotice error={error} fallback="No se pudieron cargar las universidades." onRetry={fetchUnivs} style={{ margin: 24 }} />
         ) : univs.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 12 }}>UN</div>
+            <div style={{ fontSize: '2rem', marginBottom: 12 }}>🏛️</div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>No hay universidades registradas</div>
-            <div style={{ fontSize: '0.875rem' }}>Agrega la primera institucion con el boton "+ Agregar Universidad"</div>
+            <div style={{ fontSize: '0.875rem' }}>Agrega la primera institución con el botón «+ Agregar universidad».</div>
           </div>
         ) : (
-          <DataTable columns={columns} data={univs} searchKeys={['name', 'full_name', 'city', 'province']} />
+          <DataTable columns={columns} data={univs} searchKeys={['name', 'full_name', 'city', 'province']} searchPlaceholder="Buscar por siglas, nombre, ciudad o provincia" emptyMessage="No hay universidades registradas" />
         )}
       </div>
 
@@ -146,7 +188,7 @@ export default function UniversitiesPage() {
             {[
               ['Siglas', detailView.name],
               ['Nombre completo', detailView.full_name],
-              ['Tipo', detailView.type],
+              ['Tipo', normalizeUniversityType(detailView.type)],
               ['Ciudad', detailView.city],
               ['Provincia', detailView.province],
               ['Sitio web', detailView.website],
@@ -160,29 +202,33 @@ export default function UniversitiesPage() {
             ))}
           </div>
           <div style={{ marginTop: 20, padding: '16px', background: 'var(--primary-subtle)', borderRadius: 'var(--radius)', border: '1px solid rgba(99,102,241,0.2)', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Indice de Transparencia</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Índice de Transparencia (nacional, %)</div>
             <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary-light)', letterSpacing: '-0.04em' }}>{detailView.transparency_score ?? 0}</div>
           </div>
         </Modal>
       )}
 
       {/* Edit/Create modal */}
-      <Modal isOpen={modal} onClose={() => setModal(false)}
-        title={selected ? 'Editar Universidad' : '+ Nueva Universidad'}
-        footer={<><button className="btn btn-secondary" onClick={() => setModal(false)} disabled={saving}>Cancelar</button><button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button></>}
+      <Modal isOpen={modal} onClose={() => setModal(false)} dirty={isDirty} busy={saving}
+        title={selected ? `Editar universidad · ${selected.name}` : 'Nueva universidad'}
+        footer={<><button className="btn btn-secondary" onClick={() => setModal(false)} disabled={saving}>Cancelar</button><button className="btn btn-primary" onClick={handleSave} disabled={saving || (selected && !isDirty)} title={selected && !isDirty ? 'No hay cambios por guardar' : undefined}>{saving ? 'Guardando...' : selected ? 'Guardar cambios' : 'Registrar universidad'}</button></>}
         size="lg"
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <p className="form-legend">Los campos marcados con <span className="required-mark">*</span> son obligatorios.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
           {[
-            ['name', 'Siglas (ej: ESPOCH)', 'text'],
-            ['full_name', 'Nombre completo', 'text'],
-            ['city', 'Ciudad', 'text'],
-            ['province', 'Provincia', 'text'],
-            ['website', 'Sitio web', 'url'],
-          ].map(([k, l, t]) => (
+            ['name', 'Siglas', 'text', true, 'Ej.: ESPOCH'],
+            ['full_name', 'Nombre completo', 'text', true, 'Ej.: Escuela Superior Politécnica de Chimborazo'],
+            ['city', 'Ciudad', 'text', false, 'Ej.: Riobamba'],
+            ['province', 'Provincia', 'text', false, 'Ej.: Chimborazo'],
+            ['website', 'Sitio web', 'url', false, 'https://www.institucion.edu.ec'],
+          ].map(([k, l, t, req, ph]) => (
             <div className="form-group" key={k}>
-              <label className="form-label">{l}</label>
-              <input className="form-input" type={t} value={form[k] || ''} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
+              <label className="form-label" htmlFor={`univ-${k}`}>{l}{req && <span className="required-mark" aria-hidden="true">*</span>}</label>
+              <input id={`univ-${k}`} className={`form-input${showError(k) ? ' is-invalid' : ''}`} type={t} value={form[k] || ''}
+                placeholder={ph} required={req} aria-invalid={!!showError(k)} aria-describedby={showError(k) ? `univ-${k}-err` : undefined}
+                onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
+              {showError(k) && <div className="field-error" id={`univ-${k}-err`}>{fieldErrors[k]}</div>}
             </div>
           ))}
           <div className="form-group">
@@ -194,20 +240,22 @@ export default function UniversitiesPage() {
             </div>
             <input
               id="univ-dpe-id"
-              className="form-input"
+              className={`form-input${showError('dpe_entity_id') ? ' is-invalid' : ''}`}
               type="text"
               placeholder="Ej: 1365 o https://transparencia.dpe.gob.ec/entidades/1365"
               value={form.dpe_entity_id || ''}
               onChange={e => setForm(p => ({ ...p, dpe_entity_id: extractDpeId(e.target.value) }))}
             />
             <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--text-subtle)', lineHeight: 1.4 }}>
-              Puedes pegar el enlace completo del portal DPE; el sistema tomara solo el numero.
+              Puedes pegar el enlace completo del portal DPE; el sistema tomará solo el número.
             </div>
+            {showError('dpe_entity_id') && <div className="field-error">{fieldErrors.dpe_entity_id}</div>}
           </div>
           <div className="form-group">
-            <label className="form-label">Logo de la universidad</label>
+            <label className="form-label" htmlFor="univ-logo">Logo de la universidad</label>
             <input
-              className="form-input"
+              id="univ-logo"
+              className={`form-input${fieldErrors.logo_file ? ' is-invalid' : ''}`}
               type="file"
               accept="image/png,image/jpeg,image/webp"
               onChange={e => {
@@ -225,10 +273,13 @@ export default function UniversitiesPage() {
                 </span>
               </div>
             )}
+            {fieldErrors.logo_file
+              ? <div className="field-error">{fieldErrors.logo_file}</div>
+              : <div className="field-hint">PNG, JPG o WEBP · máximo 2 MB.</div>}
           </div>
           <div className="form-group">
-            <label className="form-label">Tipo</label>
-            <select className="form-input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
+            <label className="form-label" htmlFor="univ-type">Tipo</label>
+            <select id="univ-type" className="form-input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
               <option>Pública</option>
               <option>Particular cofinanciada</option>
               <option>Particular autofinanciada</option>
@@ -241,18 +292,18 @@ export default function UniversitiesPage() {
         </div>
       </Modal>
 
-      <Modal isOpen={dpeHelpOpen} onClose={() => setDpeHelpOpen(false)} title="Como encontrar el ID DPE" size="lg">
+      <Modal isOpen={dpeHelpOpen} onClose={() => setDpeHelpOpen(false)} title="Cómo encontrar el ID DPE" size="lg">
         <div style={{ display: 'grid', gap: 16, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           <p>
-            El ID DPE es el numero que aparece al final de la pagina de transparencia de cada institucion en el portal de la Defensoria del Pueblo.
+            El ID DPE es el número que aparece al final de la página de transparencia de cada institución en el portal de la Defensoría del Pueblo.
           </p>
           <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
             <div style={{ fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>Pasos</div>
             <ol style={{ margin: 0, paddingLeft: 20 }}>
               <li>Ingresa al portal de transparencia DPE.</li>
-              <li>Busca la universidad o institucion.</li>
+              <li>Busca la universidad o institución.</li>
               <li>Abre su ficha de transparencia.</li>
-              <li>Copia el numero que esta despues de <strong>/entidades/</strong> en la URL.</li>
+              <li>Copia el número que está después de <strong>/entidades/</strong> en la URL.</li>
             </ol>
           </div>
           <div style={{ background: 'var(--primary-subtle)', border: '1px solid rgba(99,102,241,0.24)', borderRadius: 8, padding: 14 }}>
@@ -273,7 +324,8 @@ export default function UniversitiesPage() {
       <ConfirmModal
         isOpen={confirm.open} onClose={() => setConfirm({ open: false, id: null })}
         onConfirm={() => handleDelete(confirm.id)}
-        title="Eliminar universidad" message="Â¿Eliminar esta universidad? TambiÃ©n se eliminarÃ¡n todos sus documentos, validaciones y archivos asociados." danger
+        title="Eliminar universidad" confirmLabel="Eliminar universidad"
+        message={`¿Eliminar ${univs.find((u) => u.id === confirm.id)?.full_name || 'esta universidad'}? También se eliminarán todos sus documentos, evaluaciones y archivos asociados. Si solo quieres ocultarla, edítala y desmarca «Universidad activa».`} danger
       />
     </div>
   );

@@ -52,6 +52,101 @@ def _request_cookie_header(jar, host, path, secure):
     return "; ".join(values)
 
 
+_AIA_CACHE = {}
+_AIA_MAX_DEPTH = 3
+
+
+def _aia_issuer_urls(der):
+    from cryptography import x509
+    from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
+    try:
+        cert = x509.load_der_x509_certificate(der)
+        access = cert.extensions.get_extension_for_oid(ExtensionOID.AUTHORITY_INFORMATION_ACCESS).value
+    except (ValueError, x509.ExtensionNotFound):
+        return []
+    return [d.access_location.value for d in access
+            if d.access_method == AuthorityInformationAccessOID.CA_ISSUERS
+            and str(d.access_location.value).startswith("http://")]
+
+
+def _download_issuer(url):
+    """Certificado emisor publicado en la AIA (DER o PKCS#7), como lo descargan los navegadores."""
+    if url in _AIA_CACHE:
+        return _AIA_CACHE[url]
+    from cryptography import x509
+    from cryptography.hazmat.primitives.serialization import Encoding, pkcs7
+    response = fetch_public(url)
+    certs = []
+    if response.get("status") == 200 and response.get("body"):
+        body = response["body"]
+        for loader in (lambda b: [x509.load_der_x509_certificate(b)], pkcs7.load_der_pkcs7_certificates,
+                       lambda b: [x509.load_pem_x509_certificate(b)]):
+            try:
+                certs = [c.public_bytes(Encoding.DER) for c in loader(body)]
+                break
+            except ValueError:
+                continue
+    _AIA_CACHE[url] = certs
+    return certs
+
+
+def _intermediates_from_aia(leaf_der):
+    """Sigue la AIA del certificado del servidor cuando este no envía la cadena completa."""
+    chain, pending = [], [leaf_der]
+    for _ in range(_AIA_MAX_DEPTH):
+        if not pending:
+            break
+        current = pending.pop()
+        for url in _aia_issuer_urls(current)[:2]:
+            issuers = [der for der in _download_issuer(url) if der not in chain]
+            chain += issuers
+            pending += issuers[:1]
+    return chain
+
+
+def _tls_socket(address, port, hostname):
+    """Socket TLS validado; completa con AIA una cadena intermedia ausente.
+
+    Los intermedios descargados sólo ayudan a construir la cadena: se desactiva
+    la verificación parcial para que la confianza termine siempre en una raíz
+    del almacén del sistema, nunca en el intermedio obtenido de la red.
+    """
+    sock = socket.create_connection((address, port), timeout=6)
+    try:
+        return ssl.create_default_context().wrap_socket(sock, server_hostname=hostname)
+    except ssl.SSLCertVerificationError as exc:
+        sock.close()
+        if "local issuer" not in str(exc):
+            raise
+        error = exc
+    probe_context = ssl.create_default_context()
+    probe_context.check_hostname = False
+    probe_context.verify_mode = ssl.CERT_NONE
+    with probe_context.wrap_socket(socket.create_connection((address, port), timeout=6),
+                                   server_hostname=hostname) as probe:
+        leaf = probe.getpeercert(binary_form=True)
+    intermediates = _intermediates_from_aia(leaf) if leaf else []
+    if not intermediates:
+        raise error
+    context = ssl.create_default_context()
+    context.verify_flags &= ~getattr(ssl, "VERIFY_X509_PARTIAL_CHAIN", 0)
+    context.load_verify_locations(cadata=b"".join(intermediates))
+    sock = socket.create_connection((address, port), timeout=6)
+    try:
+        return context.wrap_socket(sock, server_hostname=hostname)
+    except Exception:
+        sock.close()
+        raise
+
+
+def _host_header(parsed):
+    host = parsed.hostname
+    if ":" in host:
+        host = f"[{host}]"
+    default_port = 443 if parsed.scheme == "https" else 80
+    return host if not parsed.port or parsed.port == default_port else f"{host}:{parsed.port}"
+
+
 def fetch_public(url):
     """GET sin credenciales; IP pública fijada, TLS validado y redirecciones limitadas."""
     cookie_jar = {}
@@ -69,19 +164,19 @@ def fetch_public(url):
             if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
                 raise ValueError("El destino no es una dirección pública")
             # La conexión usa exactamente la IP comprobada, sin una segunda resolución DNS.
-            sock = socket.create_connection((addresses[0][4][0], port), timeout=6)
-            try:
-                if parsed.scheme == "https":
-                    sock = ssl.create_default_context().wrap_socket(sock, server_hostname=parsed.hostname)
-            except Exception:
-                sock.close()
-                raise
+            if parsed.scheme == "https":
+                sock = _tls_socket(addresses[0][4][0], port, parsed.hostname)
+            else:
+                sock = socket.create_connection((addresses[0][4][0], port), timeout=6)
             conn = http.client.HTTPConnection(parsed.hostname, port, timeout=6)
             conn.sock = sock
             target = parsed.path or "/"
             if parsed.query:
                 target += "?" + parsed.query
+            # HTTPConnection añadiría «:443» al Host en HTTPS; algunos servidores
+            # redirigen entonces a la misma URL sin puerto y se forma un bucle.
             headers = {
+                "Host": _host_header(parsed),
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/pdf,*/*;q=0.8",
                 "Accept-Language": "es-EC,es;q=0.9,en;q=0.8",

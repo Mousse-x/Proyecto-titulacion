@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function DataTable({ columns, data, searchable = true, searchKeys = [], emptyMessage = "No hay registros" }) {
+export default function DataTable({ columns, data, searchable = true, searchKeys = [], emptyMessage = "No hay registros", searchPlaceholder = "Buscar..." }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -32,13 +32,18 @@ export default function DataTable({ columns, data, searchable = true, searchKeys
       {searchable && (
         <div className="search-bar" style={{ marginBottom: 16 }}>
           <div className="search-input-wrap">
-            <span className="search-icon">🔍</span>
+            <span className="search-icon" aria-hidden="true">🔍</span>
             <input
-              placeholder="Buscar..."
+              type="search"
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          {search && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSearch('')}>✕ Limpiar búsqueda</button>
+          )}
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>
             {sorted.length} resultado{sorted.length !== 1 ? 's' : ''}
           </span>
@@ -53,6 +58,8 @@ export default function DataTable({ columns, data, searchable = true, searchKeys
                   key={col.key}
                   onClick={col.sortable !== false ? () => handleSort(col.key) : undefined}
                   style={{ cursor: col.sortable !== false ? 'pointer' : 'default', userSelect: 'none' }}
+                  title={col.sortable !== false ? 'Ordenar por esta columna' : undefined}
+                  aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
                 >
                   {col.label}
                   {sortKey === col.key && (
@@ -70,7 +77,8 @@ export default function DataTable({ columns, data, searchable = true, searchKeys
                 <td colSpan={columns.length}>
                   <div className="empty-state" style={{ padding: '32px 16px' }}>
                     <div className="empty-icon">📭</div>
-                    <h4>{emptyMessage}</h4>
+                    <h4>{search ? `Sin resultados para «${search}»` : emptyMessage}</h4>
+                    {search && <p>Revisa la ortografía o pulsa «Limpiar búsqueda».</p>}
                   </div>
                 </td>
               </tr>

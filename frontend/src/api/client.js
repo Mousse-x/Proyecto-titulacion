@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+// En producción VITE_API_URL=/api (mismo dominio que el frontend, ver .env.production).
+export const API_BASE = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
+// Origen de los archivos /media/...: vacío (mismo dominio) cuando API_BASE es relativo.
+export const MEDIA_BASE = API_BASE.replace(/\/api$/, '');
 
 const client = axios.create({
   baseURL: API_BASE,
@@ -129,6 +132,8 @@ export const api = {
   },
   transparencyModel: {
     get: () => client.get('/transparency-model/'),
+    createIndicator: (data) => client.post('/transparency-model/', data),
+    deleteIndicator: (id) => client.delete(`/transparency-model/indicators/${id}/`),
     updateWeights: (data) => client.put('/transparency-model/', data),
   },
   evidences: {
@@ -150,11 +155,16 @@ export const api = {
   scraper: {
     espoch: (data) => client.post('/scraper/espoch/', data),
   },
-  stats:  (options = {})    => options.force ? client.get('/stats/').then((res) => {
-    statsCache = res.data;
-    statsCacheTime = Date.now();
-    return res;
-  }) : getCachedStats(),
+  // Sin período, el backend elige el que tiene más universidades evaluadas.
+  stats:  (options = {})    => {
+    const { force, ...params } = options;
+    if (Object.keys(params).length) return client.get('/stats/', { params });
+    return force ? client.get('/stats/').then((res) => {
+      statsCache = res.data;
+      statsCacheTime = Date.now();
+      return res;
+    }) : getCachedStats();
+  },
   roles:  ()    => client.get('/roles/'),
   feedback: {
     submit: (data) => client.post('/feedback/', data),

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../../api/client';
 import client from '../../api/client';
 
 // Helpers para formatear fechas

@@ -9,9 +9,12 @@ export default function Badge({ status }) {
     "Aprobado":    "success", "Activo":      "success", "Resuelta":    "success",
     "En revisión": "warning", "En proceso":  "info",    "Pendiente":   "warning",
     "Rechazado":   "danger",  "Inactivo":    "danger",
-    "LOTAIP":      "primary", "OGP":         "info",    "OCDE":        "primary",
+    "LOTAIP":      "primary", "Mixto":       "warning", "Complementario": "info",
+    "OGP":         "info",    "OCDE":        "primary",
     "ODS":         "success", "Alta":        "danger",  "Media":       "warning",
     "Baja":        "info",    "Pública":     "primary", "Particular cofinanciada": "info",
+    "Alto": "success", "Medio": "warning", "Bajo": "info", "Crítico": "danger", "Critico": "danger",
+    "Provisional": "warning", "Definitivo": "success", "Particular autofinanciada": "info",
   };
   const cls = map[label] || 'subtle';
   return <span className={`badge badge-${cls}`}>{label}</span>;

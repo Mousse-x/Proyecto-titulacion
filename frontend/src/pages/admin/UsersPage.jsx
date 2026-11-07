@@ -4,6 +4,10 @@ import Modal, { ConfirmModal } from '../../components/common/Modal';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import ErrorNotice from '../../components/common/ErrorNotice';
+import { useConfirm, useToast } from '../../context/FeedbackContext';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const EMPTY = { full_name: '', email: '', role_id: 4, is_active: true };
 
@@ -27,6 +31,10 @@ export default function UsersPage() {
   const [editing, setEditing]   = useState(null);
   const [form, setForm]         = useState(EMPTY);
   const [saving, setSaving]     = useState(false);
+  const [initialForm, setInitialForm] = useState(EMPTY);
+  const [touched, setTouched]   = useState(false);
+  const toast = useToast();
+  const confirmAction = useConfirm();
 
   // ── Conteo de admins (role_id=1) para controlar el límite de 2 ──
   const adminCount = users.filter(u => u.role_id === 1).length;
@@ -39,7 +47,7 @@ export default function UsersPage() {
       const res = await api.users.list();
       setUsers(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar usuarios. ¿Está el servidor activo?');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -57,14 +65,34 @@ export default function UsersPage() {
   const isSuperadmin  = (u) => u.is_superadmin === true;
   const isProtected   = (u) => isSelf(u) || isSuperadmin(u);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY); setModal(true); };
+  const openCreate = () => { setEditing(null); setForm(EMPTY); setInitialForm(EMPTY); setTouched(false); setModal(true); };
   const openEdit   = (u)  => {
+    const next = { full_name: u.full_name, email: u.email, role_id: u.role_id, is_active: u.is_active };
     setEditing(u);
-    setForm({ full_name: u.full_name, email: u.email, role_id: u.role_id, is_active: u.is_active });
+    setForm(next);
+    setInitialForm(next);
+    setTouched(false);
     setModal(true);
   };
 
+  const fieldErrors = {};
+  if (!form.full_name.trim()) fieldErrors.full_name = 'El nombre completo es obligatorio.';
+  else if (form.full_name.trim().split(/\s+/).length < 2) fieldErrors.full_name = 'Escribe al menos un nombre y un apellido.';
+  if (!editing) {
+    if (!form.email.trim()) fieldErrors.email = 'El correo electrónico es obligatorio.';
+    else if (!EMAIL_RE.test(form.email.trim())) fieldErrors.email = 'Formato inválido. Ejemplo: usuario@institucion.edu.ec';
+    else if (users.some((u) => String(u.email).toLowerCase() === form.email.trim().toLowerCase())) fieldErrors.email = 'Ya existe un usuario con este correo.';
+  }
+  const hasErrors = Object.keys(fieldErrors).length > 0;
+  const isDirty = JSON.stringify(form) !== JSON.stringify(initialForm);
+  const showError = (key) => (touched || form[key] !== initialForm[key]) && fieldErrors[key];
+
   const handleSave = async () => {
+    setTouched(true);
+    if (hasErrors) {
+      toast.warning({ title: 'Revisa el formulario', message: 'Hay campos obligatorios vacíos o con formato inválido; están marcados en rojo.' });
+      return;
+    }
     setSaving(true);
     try {
       if (editing) {
@@ -73,12 +101,13 @@ export default function UsersPage() {
           _requester_id: currentUser?.id,  // ← identificador del actor
         });
       } else {
-        await api.users.create({ ...form, password: 'admin123' });
+        await api.users.create({ ...form, full_name: form.full_name.trim(), email: form.email.trim(), password: 'admin123' });
       }
       setModal(false);
+      toast.success({ title: editing ? 'Usuario actualizado' : 'Usuario creado', message: `${form.full_name.trim()} se guardó correctamente.` });
       await fetchUsers();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al guardar. Intente de nuevo.');
+      toast.apiError(err, 'No se pudo guardar el usuario. Tus datos siguen en el formulario.');
     } finally {
       setSaving(false);
     }
@@ -86,23 +115,34 @@ export default function UsersPage() {
 
   const handleDelete = async (id) => {
     try {
+      const target = users.find((u) => u.id === id);
       await api.users.remove(id);
       setConfirm({ open: false, id: null });
+      toast.success({ title: 'Usuario eliminado', message: `${target?.full_name || 'El usuario'} ya no tiene acceso al sistema.` });
       await fetchUsers();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al eliminar usuario.');
+      toast.apiError(err, 'No se pudo eliminar el usuario.');
     }
   };
 
   const handleToggle = async (u) => {
+    if (u.is_active) {
+      const ok = await confirmAction({
+        title: 'Desactivar cuenta',
+        message: `${u.full_name} no podrá iniciar sesión hasta que vuelvas a activar su cuenta. Sus datos se conservan.`,
+        confirmLabel: 'Desactivar cuenta',
+      });
+      if (!ok) return;
+    }
     try {
       await api.users.update(u.id, {
         is_active: !u.is_active,
         _requester_id: currentUser?.id,
       });
+      toast.success({ title: u.is_active ? 'Cuenta desactivada' : 'Cuenta activada', message: u.full_name });
       await fetchUsers();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al cambiar el estado del usuario.');
+      toast.apiError(err, 'No se pudo cambiar el estado del usuario.');
     }
   };
 
@@ -165,24 +205,27 @@ export default function UsersPage() {
               onClick={() => !protected_ && openEdit(row)}
               disabled={protected_}
               title={getEditTooltip(row)}
+              aria-label={getEditTooltip(row)}
               style={protected_ ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-            >✏️</button>
+            >✏️ Editar</button>
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => !protected_ && handleToggle(row)}
               disabled={protected_}
               title={getToggleTooltip(row)}
+              aria-label={getToggleTooltip(row)}
               style={protected_ ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
             >
-              {row.is_active ? '🔒' : '🔓'}
+              {row.is_active ? '🔒 Desactivar' : '🔓 Activar'}
             </button>
             <button
               className="btn btn-danger btn-sm"
               onClick={() => !cannotDelete && setConfirm({ open: true, id: row.id })}
               disabled={cannotDelete}
               title={getDeleteTooltip(row)}
+              aria-label={getDeleteTooltip(row)}
               style={cannotDelete ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-            >🗑️</button>
+            >🗑️ Eliminar</button>
           </div>
         );
       }
@@ -204,8 +247,8 @@ export default function UsersPage() {
           <p>{loading ? 'Cargando...' : `${users.length} usuarios registrados en el sistema`}</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary" onClick={fetchUsers} disabled={loading}>🔄</button>
-          <button className="btn btn-primary" onClick={openCreate}>+ Nuevo Usuario</button>
+          <button className="btn btn-secondary" onClick={fetchUsers} disabled={loading} title="Volver a cargar la lista">↻ Actualizar</button>
+          <button className="btn btn-primary" onClick={openCreate}>+ Nuevo usuario</button>
         </div>
       </div>
 
@@ -236,15 +279,15 @@ export default function UsersPage() {
             Cargando usuarios...
           </div>
         ) : error ? (
-          <div className="alert alert-danger" style={{ margin: 24 }}>⚠️ {error}</div>
+          <ErrorNotice error={error} fallback="No se pudieron cargar los usuarios." onRetry={fetchUsers} style={{ margin: 24 }} />
         ) : users.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
             <div style={{ fontSize: '2rem', marginBottom: 12 }}>👥</div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>No hay usuarios registrados</div>
-            <div style={{ fontSize: '0.875rem' }}>Crea el primer usuario con el botón "+ Nuevo Usuario"</div>
+            <div style={{ fontSize: '0.875rem' }}>Crea el primer usuario con el botón «+ Nuevo usuario».</div>
           </div>
         ) : (
-          <DataTable columns={columns} data={users} searchKeys={['full_name', 'email', 'role_name']} />
+          <DataTable columns={columns} data={users} searchKeys={['full_name', 'email', 'role_name']} searchPlaceholder="Buscar por nombre, correo o rol" emptyMessage="No hay usuarios registrados" />
         )}
       </div>
 
@@ -252,28 +295,38 @@ export default function UsersPage() {
       <Modal
         isOpen={modal}
         onClose={() => setModal(false)}
-        title={editing ? '✏️ Editar Usuario' : '➕ Nuevo Usuario'}
+        dirty={isDirty}
+        busy={saving}
+        title={editing ? `Editar usuario · ${editing.full_name}` : 'Nuevo usuario'}
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setModal(false)} disabled={saving}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving || (editing && !isDirty)} title={editing && !isDirty ? 'No hay cambios por guardar' : undefined}>
               {saving ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Guardando...</> : (editing ? 'Guardar cambios' : 'Crear usuario')}
             </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p className="form-legend">Los campos marcados con <span className="required-mark">*</span> son obligatorios.</p>
           <div className="form-group">
-            <label className="form-label">Nombre completo *</label>
-            <input className="form-input" value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} placeholder="Nombre Apellido" />
+            <label className="form-label" htmlFor="user-name">Nombre completo<span className="required-mark" aria-hidden="true">*</span></label>
+            <input id="user-name" className={`form-input${showError('full_name') ? ' is-invalid' : ''}`} value={form.full_name} required
+              aria-invalid={!!showError('full_name')} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} placeholder="Nombre Apellido" />
+            {showError('full_name') && <div className="field-error">{fieldErrors.full_name}</div>}
           </div>
           <div className="form-group">
-            <label className="form-label">Correo electrónico *</label>
-            <input className="form-input" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="usuario@institucion.edu.ec" disabled={!!editing} />
+            <label className="form-label" htmlFor="user-email">Correo electrónico<span className="required-mark" aria-hidden="true">*</span></label>
+            <input id="user-email" className={`form-input${showError('email') ? ' is-invalid' : ''}`} type="email" value={form.email} required
+              aria-invalid={!!showError('email')} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="usuario@institucion.edu.ec" disabled={!!editing} />
+            {showError('email')
+              ? <div className="field-error">{fieldErrors.email}</div>
+              : editing && <div className="field-hint">El correo identifica la cuenta y no se puede modificar.</div>}
           </div>
           <div className="form-group">
-            <label className="form-label">Rol *</label>
+            <label className="form-label" htmlFor="user-role">Rol<span className="required-mark" aria-hidden="true">*</span></label>
             <select
+              id="user-role"
               className="form-input"
               value={form.role_id}
               onChange={e => setForm(p => ({ ...p, role_id: Number(e.target.value) }))}
@@ -314,7 +367,8 @@ export default function UsersPage() {
         onClose={() => setConfirm({ open: false, id: null })}
         onConfirm={() => handleDelete(confirm.id)}
         title="Eliminar usuario"
-        message="¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar usuario"
+        message={`¿Eliminar a ${users.find((u) => u.id === confirm.id)?.full_name || 'este usuario'}? Perderá el acceso al sistema. Si solo quieres impedir temporalmente su acceso, usa «Desactivar».`}
         danger
       />
     </div>

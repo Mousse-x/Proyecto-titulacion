@@ -1,0 +1,35 @@
+# Dependencias del backend (Python 3.14). Windows: instalar en backend/.venv:
+#   (Linux/servidor: ver docs/DESPLIEGUE.md)
+#   python -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+#   .venv\Scripts\python.exe -m playwright install chromium
+# El OCR requiere además Tesseract instalado en el sistema (idioma spa).
+
+# Framework y API
+Django==6.0.3
+djangorestframework==3.16.1
+django-cors-headers==4.9.0
+PyJWT==2.12.1
+argon2-cffi==25.1.0
+cryptography==46.0.7
+
+# Base de datos PostgreSQL
+psycopg[binary]==3.3.3
+
+# Lectura de documentos y evidencias
+openpyxl==3.1.5
+pandas==3.0.3
+python-docx==1.2.0
+pdfplumber==0.11.9
+python-magic-bin==0.4.14; sys_platform == "win32"
+python-magic==0.4.27; sys_platform != "win32"   # Linux: requiere apt install libmagic1
+RapidFuzz==3.14.5
+
+# Scraping de portales de transparencia
+playwright==1.59.0
+
+# Motor LOTAIP: extracción de texto y OCR
+-r requirements-lotaip.txt
+
+# Servidor de aplicación en producción (Linux)
+gunicorn==23.0.0; sys_platform != "win32"

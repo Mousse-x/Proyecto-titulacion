@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../api/client';
+import PeriodSelect, { SimulatedNotice } from '../../components/common/PeriodSelect';
+import useDashboardStats from '../../hooks/useDashboardStats';
 import { getUniversityLogo } from '../../data/universityLogos';
 import FeedbackForm from '../../components/common/FeedbackForm';
 
@@ -33,17 +34,8 @@ function UniversityMark({ university }) {
 
 export default function AuditorDashboard() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState(EMPTY_STATS);
-  const [loading, setLoading] = useState(true);
+  const { stats, loading, periodId, selectPeriod } = useDashboardStats(EMPTY_STATS);
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState('general');
-
-  useEffect(() => {
-    api.stats()
-      .then((res) => setStats({ ...EMPTY_STATS, ...res.data }))
-      .catch(() => setStats(EMPTY_STATS))
-      .finally(() => setLoading(false));
-  }, []);
 
   const rankings = useMemo(() => {
     const base = stats.ranking || [];
@@ -51,31 +43,27 @@ export default function AuditorDashboard() {
       .filter((item) => {
         const text = `${item.name || ''} ${item.full_name || ''}`.toLowerCase();
         const matchesSearch = text.includes(query.trim().toLowerCase());
-        if (!matchesSearch) return false;
-        if (tab === 'publicas') return true;
-        if (tab === 'privadas') return false;
-        return true;
+        return matchesSearch;
       })
       .map((item, index) => ({
         ...item,
         position: index + 1,
         indicatorTotal: stats.indicators_active || item.evaluated_documents || 0,
       }));
-  }, [query, stats.indicators_active, stats.ranking, tab]);
+  }, [query, stats.indicators_active, stats.ranking]);
 
   return (
     <div className="auditor-ranking-page" style={{ animation: 'slideIn 0.3s ease' }}>
       <div className="auditor-ranking-hero">
         <h1>Universidades</h1>
+        {stats.period && <p style={{ marginTop: 6 }}>Ranking del período {stats.period.name}</p>}
       </div>
 
       <div className="auditor-ranking-shell">
-        <div className="auditor-ranking-tabs">
-          <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
-          <button className={tab === 'publicas' ? 'active' : ''} onClick={() => setTab('publicas')}>Publicas</button>
-          <button className={tab === 'privadas' ? 'active' : ''} onClick={() => setTab('privadas')}>Privada</button>
+        <SimulatedNotice stats={stats} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <PeriodSelect stats={stats} value={periodId} onChange={selectPeriod} />
         </div>
-
         <div className="auditor-ranking-card">
           <div className="auditor-ranking-search">
             <input

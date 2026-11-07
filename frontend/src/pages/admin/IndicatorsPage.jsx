@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import DataTable from '../../components/common/DataTable';
 import Modal, { ConfirmModal } from '../../components/common/Modal';
 import Badge from '../../components/common/Badge';
-import { api } from '../../api/client';
+import { api, MEDIA_BASE } from '../../api/client';
 import { useRef } from 'react';
 
-const MEDIA_BASE = 'http://127.0.0.1:8000';
 const FRAMEWORKS = ['LOTAIP', 'OGP', 'OCDE', 'ODS'];
 const EMPTY = { code: '', name: '', article: '', category: '', weight: 3.0, description: '', is_active: true };
 
@@ -73,7 +72,7 @@ export default function IndicatorsPage() {
       const res = await api.indicators.uploadTemplate(editing.id, formData);
       setForm(p => ({ ...p, template_url: res.data.url, template_name: res.data.name }));
       await fetchIndicators();
-    } catch (err) {
+    } catch {
       alert('Error al subir la plantilla');
     } finally {
       setSaving(false);
@@ -88,7 +87,7 @@ export default function IndicatorsPage() {
       await api.indicators.deleteTemplate(editing.id);
       setForm(p => ({ ...p, template_url: null, template_name: null }));
       await fetchIndicators();
-    } catch (err) {
+    } catch {
       alert('Error al eliminar la plantilla');
     } finally {
       setSaving(false);

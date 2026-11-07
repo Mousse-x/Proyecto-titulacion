@@ -10,7 +10,7 @@ const CustomTooltip = ({ active, payload, label }) => {
       <div style={{ background:'var(--bg-secondary)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 14px' }}>
         <div style={{ color:'var(--text)', fontWeight:600, marginBottom:4 }}>{label}</div>
         <div style={{ color:'var(--primary-light)', fontSize:'0.875rem' }}>
-          Score: <strong>{payload[0].value}</strong> / 100
+          Puntaje: <strong>{payload[0].value}%</strong> de 100 %
         </div>
       </div>
     );
@@ -18,8 +18,9 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export default function RankingBar({ data, height = 300 }) {
+export default function RankingBar({ data, height = 300, label = 'Gráfico de barras de puntajes por universidad' }) {
   return (
+    <div role="img" aria-label={`${label}: ${data.map((d) => `${d.name} ${d.transparency_score}%`).join(', ')}`}>
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 20, right: 20, bottom: 5, left: 0 }} barSize={32}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -34,5 +35,6 @@ export default function RankingBar({ data, height = 300 }) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 }

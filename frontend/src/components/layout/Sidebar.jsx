@@ -1,5 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirm } from '../../context/FeedbackContext';
+import { DASHBOARD_BY_ROLE, NAV_BY_ROLE } from './navConfig';
 
 function StatisticsIcon() {
   return (
@@ -7,6 +9,21 @@ function StatisticsIcon() {
       <path
         fill="currentColor"
         d="M12.906-.031a1 1 0 0 0-.125.031A1 1 0 0 0 12 1v1H3a3 3 0 0 0-3 3v13c0 1.656 1.344 3 3 3h9v.375l-5.438 2.719a1.006 1.006 0 0 0 .875 1.812L12 23.625V24a1 1 0 1 0 2 0v-.375l4.563 2.281a1.006 1.006 0 0 0 .875-1.812L14 21.375V21h9c1.656 0 3-1.344 3-3V5a3 3 0 0 0-3-3h-9V1a1 1 0 0 0-1.094-1.031M2 5h22v13H2zm18.875 1a1 1 0 0 0-.594.281L17 9.563L14.719 7.28a1 1 0 0 0-1.594.219l-2.969 5.188l-1.219-3.063a1 1 0 0 0-1.656-.344l-3 3a1.016 1.016 0 1 0 1.439 1.44l1.906-1.906l1.438 3.562a1 1 0 0 0 1.812.125l3.344-5.844l2.062 2.063a1 1 0 0 0 1.438 0l4-4A1 1 0 0 0 20.875 6"
+      />
+    </svg>
+  );
+}
+
+function HomeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+        d="m3 11l9-8l9 8M5 10v11h14V10M9 21v-7h6v7"
       />
     </svg>
   );
@@ -127,7 +144,24 @@ function ObservationIcon() {
   );
 }
 
+function HelpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" d="M12 21a9 9 0 1 0 0-18a9 9 0 0 0 0 18m-2.5-11.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M15 4h4v16h-4M10 8l-4 4l4 4M6 12h10" />
+    </svg>
+  );
+}
+
 const ICONS = {
+  HO: HomeIcon,
   DA: StatisticsIcon,
   US: UserIcon,
   UN: UniversityIcon,
@@ -144,71 +178,31 @@ const ICONS = {
   CO: CompareIcon,
   OB: ObservationIcon,
   FB: ObservationIcon,
+  HE: HelpIcon,
 };
 
-const ADMIN_NAV = [
-  { section: 'General' },
-  { label: 'Dashboard', icon: 'DA', to: '/admin/dashboard' },
-  { section: 'Gestion' },
-  { label: 'Usuarios', icon: 'US', to: '/admin/users' },
-  { label: 'Universidades', icon: 'UN', to: '/admin/universities' },
-  { section: 'Evaluacion' },
-  { label: 'Indicadores', icon: 'IN', to: '/admin/indicators' },
-  { label: 'Ponderaciones', icon: 'PO', to: '/admin/weightings' },
-  { section: 'Documentos' },
-  { label: 'Gestion Documental', icon: 'GD', to: '/admin/documents' },
-  { label: 'Evaluación de transparencia', icon: 'EV', to: '/admin/validation' },
-  { section: 'Resultados' },
-  { label: 'Rankings', icon: 'RK', to: '/admin/rankings' },
-  { label: 'Reportes', icon: 'RP', to: '/admin/reports' },
-  { section: 'Sistema' },
-  { label: 'Comentarios', icon: 'FB', to: '/admin/feedback' },
-  { label: 'Auditoria', icon: 'AU', to: '/admin/audit' },
-];
-
-const UNIV_NAV = [
-  { section: 'General' },
-  { label: 'Mi Dashboard', icon: 'DA', to: '/university/dashboard' },
-  { label: 'Universidades', icon: 'UN', to: '/university/universities' },
-  { section: 'Analisis' },
-  { label: 'Indice de Transparencia', icon: 'IT', to: '/university/index' },
-  { label: 'Comparativas', icon: 'CO', to: '/university/comparatives' },
-  { label: 'Rankings', icon: 'RK', to: '/university/rankings' },
-  { label: 'Reportes', icon: 'RP', to: '/university/reports' },
-  { section: 'Cumplimiento' },
-  { label: 'Documentos', icon: 'DO', to: '/university/documents' },
-  { label: 'Evaluación de transparencia', icon: 'EV', to: '/university/validation' },
-  { label: 'Comentarios', icon: 'FB', to: '/university/feedback' },
-];
-
-const AUDITOR_NAV = [
-  { section: 'General' },
-  { label: 'Dashboard', icon: 'DA', to: '/auditor/dashboard' },
-  { section: 'Analisis' },
-  { label: 'Indice de Transparencia', icon: 'IT', to: '/auditor/index' },
-  { label: 'Comparativas', icon: 'CO', to: '/auditor/comparatives' },
-  { label: 'Rankings', icon: 'RK', to: '/auditor/rankings' },
-  { label: 'Reportes', icon: 'RP', to: '/auditor/reports' },
-  { section: 'Documentos' },
-  { label: 'Lista de Cumplimiento', icon: 'LC', to: '/auditor/documents' },
-  { label: 'Evaluación de transparencia', icon: 'EV', to: '/auditor/validation' },
-];
-
-const navsByRole = { 1: ADMIN_NAV, 2: UNIV_NAV, 3: UNIV_NAV, 4: AUDITOR_NAV };
 const titleByRole = {
-  1: { title: 'SisTransp', sub: 'Sistema Admin' },
-  2: { title: 'SisTransp', sub: 'Univ. Admin' },
-  3: { title: 'SisTransp', sub: 'Evaluador' },
+  1: { title: 'SisTransp', sub: 'Administrador del Sistema' },
+  2: { title: 'SisTransp', sub: 'Administrador Universitario' },
+  3: { title: 'SisTransp', sub: 'Responsable de Unidad' },
   4: { title: 'SisTransp', sub: 'Auditor' },
 };
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onNavigate }) {
   const { user, logout } = useAuth();
+  const confirm = useConfirm();
   const navigate = useNavigate();
-  const nav = navsByRole[user?.role_id] || [];
+  const nav = NAV_BY_ROLE[user?.role_id] || [];
   const brand = titleByRole[user?.role_id] || { title: 'SisTransp', sub: '' };
+  const dashboardPath = DASHBOARD_BY_ROLE[user?.role_id] || '/';
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Cerrar sesión',
+      message: '¿Deseas cerrar tu sesión? Los datos ya guardados se conservan; los formularios abiertos sin guardar se perderán.',
+      confirmLabel: 'Cerrar sesión',
+    });
+    if (!ok) return;
     logout();
     navigate('/login');
   };
@@ -220,16 +214,25 @@ export default function Sidebar() {
     .join('') || '?';
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' open' : ''}`} id="app-sidebar" aria-label="Menú principal">
       <div className="sidebar-logo">
-        <div className="logo-icon">ST</div>
+        <div className="logo-icon" aria-hidden="true">ST</div>
         <div className="logo-text">
           <h3>{brand.title}</h3>
           <span>{brand.sub}</span>
         </div>
+        <NavLink
+          to={dashboardPath}
+          className={({ isActive }) => `sidebar-home-button${isActive ? ' active' : ''}`}
+          aria-label="Ir al inicio"
+          title="Ir al inicio (Alt + I)"
+          onClick={onNavigate}
+        >
+          <HomeIcon />
+        </NavLink>
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Módulos">
         {nav.map((item, i) => {
           if (item.section) {
             return <div key={`sec-${i}`} className="nav-section-label">{item.section}</div>;
@@ -240,6 +243,7 @@ export default function Sidebar() {
               key={item.to}
               to={item.to}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              onClick={onNavigate}
             >
               <span className="nav-icon" aria-hidden="true">
                 <Icon />
@@ -252,13 +256,17 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="user-card" onClick={handleLogout} title="Cerrar sesion">
-          <div className="user-avatar">{initials}</div>
+        <div className="user-card" style={{ cursor: 'default' }}>
+          <div className="user-avatar" aria-hidden="true">{initials}</div>
           <div className="user-info">
             <div className="user-name">{user?.full_name}</div>
-            <div className="user-role">{user?.role_name} - Salir</div>
+            <div className="user-role">{user?.role_name}</div>
           </div>
-          <span style={{ color: 'var(--text-subtle)', fontSize: '1rem' }}>-&gt;</span>
+          <button type="button" className="btn btn-secondary btn-sm logout-button" onClick={handleLogout}
+            title="Cerrar sesión" aria-label="Cerrar sesión">
+            <LogoutIcon />
+            <span>Salir</span>
+          </button>
         </div>
       </div>
     </aside>

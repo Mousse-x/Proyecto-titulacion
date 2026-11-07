@@ -327,7 +327,19 @@ def sync_national_results(university_id, period_id, month=None):
     ):
         rows = [row for numeral in indicator.lotaip_numerals for row in grouped.get(int(numeral), [])]
         scores = [row['score'] for row in rows if row['score'] is not None]
-        if not rows or len(scores) != len(rows):
+        if not rows and grouped:
+            # Ya existe la evaluación LOTAIP del período, pero la institución no
+            # publicó ningún formato de estos numerales: «0: no publicada».
+            values = {
+                'score': Decimal('0'),
+                'status': IntegratedIndicatorResult.Status.NON_COMPLIANT,
+                'source_url': '', 'source_title': '',
+                'source_location': 'Inventario LOTAIP del período seleccionado.',
+                'justification': (f"El numeral {', '.join(str(n) for n in indicator.lotaip_numerals)} "
+                                  'no fue publicado en el período evaluado (0: no publicada).'),
+                'metadata': {'origin': 'LOTAIP', 'formats': 0, 'not_published': True},
+            }
+        elif not rows or len(scores) != len(rows):
             values = {
                 'score': None,
                 'status': IntegratedIndicatorResult.Status.PENDING,

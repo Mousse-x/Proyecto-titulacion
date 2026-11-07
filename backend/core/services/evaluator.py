@@ -148,7 +148,7 @@ def evaluar_documento(evidence_id, network_cache=None, retry_pending=False, reev
     if saved_uses_current_content_policy and not reevaluate:
         pending = any(c.get('aplica') and c.get('calificacion') is None for c in saved.lotaip_rubric.get('criterios', []))
         if not (retry_pending and pending):
-            from core.validation_views import _validation_result_to_dict
+            from core.views.validation_views import _validation_result_to_dict
             cached = _validation_result_to_dict(saved)
             cached.update(evidence_id=evidence.id, documento=evidence.title, resultado_guardado=True)
             if saved.evidence_id != evidence.id and not EvidenceValidationResult.objects.filter(evidence_id=evidence.id).exists():

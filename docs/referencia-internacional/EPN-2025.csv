@@ -1,0 +1,32 @@
+codigo,estado_esperado,tambien_valido,url_evidencia,nota
+IND-02,CUMPLE,,https://www.epn.edu.ec/nosotros,Misión y visión completas en /nosotros; cronología desde 1869 en /historia.
+IND-03,PARCIAL,CUMPLE,https://www.epn.edu.ec/autoridades/rectorado,"El rector tiene página con dirección y teléfono; vicerrectores y decanos solo tienen perfil, sin contacto."
+IND-04,PARCIAL,,https://www.epn.edu.ec/resoluciones,Resoluciones del Consejo Politécnico y reglamentos; no hay una página con la composición vigente ni las competencias.
+IND-05,CUMPLE,,https://www.epn.edu.ec/resoluciones,Sección pública de resoluciones y repositorio ATENEA.
+IND-06,PARCIAL,,https://www.epn.edu.ec/wp-content/uploads/2014/08/Estatuto-EPN-Tech-EP-1.pdf,Estatuto publicado de la empresa pública EPN-TECH EP (2014); no hay una página actual con las entidades vinculadas.
+IND-11,CUMPLE,,https://www.epn.edu.ec/codigo-de-etica-2,Código de Ética (resolución RCP-153-2025) que instaura el Comité de Ética.
+IND-12,PARCIAL,,https://webhistorico.epn.edu.ec/wp-content/uploads/2022/07/PROTOCOLOde_prevenciOn_y_actuaciOn_frente_a_casos_de_acoso_sexual.pdf,Canal de denuncias de violencia y acoso en Bienestar Politécnico con protección de la intimidad; no hay un canal ético general con su procedimiento.
+IND-13,PARCIAL,,https://atenea.epn.edu.ec/bitstream/25000/1783/1/Plan_Igualdad_EPN_2024-2026.pdf,Plan de Igualdad 2024-2026 y menciones de sostenibilidad en la rendición de cuentas 2025; no hay un informe de responsabilidad social ni de sostenibilidad.
+IND-14,SIN_EVIDENCIA,,,No se publican cartas de servicio; concepto poco usado en las universidades ecuatorianas.
+IND-20,PARCIAL,,https://www.epn.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025_narrativo_compressed.pdf,Personal por categoría (académico y apoyo académico) en las rendiciones de cuentas 2024 y 2025; el desglose por género solo se publica para estudiantes.
+IND-21,CUMPLE,,https://webhistorico.epn.edu.ec/wp-content/uploads/2025/04/Publicacion-de-resultados-finales-1.pdf,Convocatorias y resultados finales del concurso de méritos y oposición.
+IND-22,PARCIAL,,https://www.epn.edu.ec/docentes,"Tablero público con la formación del profesorado por nivel (PhD, magíster); no se verificó un desglose por unidad académica."
+IND-25,CUMPLE,,https://www.epn.edu.ec/oferta-de-grado,"24 carreras de grado, 4 de tecnología superior, modalidad dual y una página de posgrado."
+IND-26,CUMPLE,PARCIAL,https://www.epn.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025_narrativo_compressed.pdf,"Rendición de cuentas 2025, págs. 22-24: 3.990 cupos, 16.550 inscritos, 3.594 aspirantes que aceptaron cupo, 52 % de postulantes de posgrado admitidos y matrícula por carrera."
+IND-27,CUMPLE,PARCIAL,https://www.epn.edu.ec/becas-2-2,"Manual, catálogo y guía de trámite de becas."
+IND-28,CUMPLE,,https://ciencias.epn.edu.ec/index.php/menu-estudiantes/preguntas-frecuentes/tutorias-academicas,"Tutorías académicas y orientación; representación estudiantil ante el Consejo Politécnico, el Consejo de Docencia y los consejos de facultad."
+IND-29,PARCIAL,,https://webhistorico.epn.edu.ec/poli-sin-violencia/habla-con-nosotros,Atención en Bienestar Politécnico y ruta frente a la violencia; no hay una defensoría o mecanismo general de defensa de derechos estudiantiles.
+IND-37,PARCIAL,,https://atenea.epn.edu.ec/bitstream/25000/2474/1/INFORME%20DE%20EJECUCI%C3%93N%20PRESUPUESTARIA%20ENE-DIC%202025-signed.pdf,Ejecución presupuestaria anual y por tipo de gasto; no se publica el detalle de las reformas presupuestarias.
+IND-38,SIN_EVIDENCIA,,,No se encontraron estados financieros publicados.
+IND-39,SIN_EVIDENCIA,,,No se publican indicadores financieros y patrimoniales.
+IND-40,SIN_EVIDENCIA,PARCIAL,https://www.epn.edu.ec/comunicado,Solo un comunicado sobre la constatación física de bienes; no se publica el inventario ni el patrimonio.
+IND-41,CUMPLE,,https://www.epn.edu.ec/investiga,Producción científica (más de 4.500 artículos en Scopus) y proyectos de investigación.
+IND-42,PARCIAL,,https://www.epn.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025_narrativo_compressed.pdf,"Tasas de aprobación de nivelación (37 % en 2025, 43 % en 2024); sin abandono ni duración de estudios."
+IND-43,CUMPLE,PARCIAL,https://www.epn.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025_narrativo_compressed.pdf,"Rendición de cuentas 2025: nivel de satisfacción de bienestar de la comunidad politécnica (79 %), un servicio universitario; la encuesta de retroalimentación docente se aplicó pero sin resultados publicados."
+IND-44,PARCIAL,,https://www.epn.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025_narrativo_compressed.pdf,"Seguimiento a graduados con encuestas de 2025 sobre inserción laboral, sin publicar resultados; encuestas con cifras solo de 2014."
+IND-45,CUMPLE,,https://www.epn.edu.ec/wp-content/uploads/2026/05/diagramacion_RC_2025_narrativo_compressed.pdf,"USD 900.286,92 para proyectos de la Convocatoria 2024 y convocatorias de investigación con y sin financiamiento."
+IND-50,PARCIAL,,https://www.epn.edu.ec/elecciones-estudiantes-fim,Participación estudiantil por elecciones de representantes; no hay mecanismos de consulta pública a grupos de interés.
+IND-51,SIN_EVIDENCIA,,,El buzón de sugerencias exige iniciar sesión con la cuenta institucional; la página del sitio antiguo no tiene contenido.
+IND-52,PARCIAL,CUMPLE,https://www.epn.edu.ec/wp-content/uploads/2026/06/Acta-compromiso-aportes-ciudadanos-2025.pdf,Deliberación anual de rendición de cuentas con acta de compromisos; no se publica el seguimiento de esos compromisos.
+IND-53,PARCIAL,,https://www.epn.edu.ec/wp-content/uploads/2020/06/Literal-F2-Formato-para-solicitudes-de-acceso-a-la-informacio%CC%81n-pu%CC%81blica-1.pdf,Derecho de acceso y formato de solicitud; sin estadísticas generales propias.
+IND-56,CUMPLE,,https://www.epn.edu.ec/lotaip,LOTAIP con archivo de 2020 a 2025 y rendición de cuentas desde 2011.

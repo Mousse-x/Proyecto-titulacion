@@ -17,12 +17,11 @@ class SchemaAwareTestRunner(DiscoverRunner):
         # backend/.env tenga claves configuradas.
         from django.conf import settings
         settings.SEARCH_DIRECT_ENABLED = False
+        settings.LOTAIP_LINK_RETRY_DELAY_SECONDS = 0
 
     def build_suite(self, test_labels=None, **kwargs):
-        # Sin etiquetas, limitar el descubrimiento a la aplicación Django.
-        # Los scripts administrativos históricos de la raíz (test_dpe*.py,
-        # test_scrape*.py) realizan red y descargas al importarse y sólo deben
-        # ejecutarse explícitamente como scripts, nunca como pruebas.
+        # Sin etiquetas, limitar el descubrimiento a la aplicación Django para
+        # que los scripts de ``scripts/`` nunca se importen como pruebas.
         return super().build_suite(test_labels or ["core"], **kwargs)
 
     def setup_databases(self, **kwargs):

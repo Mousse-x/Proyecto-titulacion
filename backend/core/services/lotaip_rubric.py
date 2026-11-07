@@ -46,9 +46,12 @@ def _read_csv(evidence):
     path = Path(settings.MEDIA_ROOT) / str(evidence.file_path or "")
     if not evidence.file_path or not path.is_file():
         return {"error": "Archivo local no disponible."}
-    if path.suffix.lower() != ".csv":
-        return {"error": f"Formato {path.suffix or 'desconocido'}: no es CSV delimitado por comas.", "not_csv": True}
     raw = path.read_bytes()
+    wrong_extension = path.suffix.lower() != ".csv"
+    # Un archivo de texto tabular con otra extensión se lee para calificar su
+    # contenido (CTA); ETA lo penaliza porque no es un CSV publicado como tal.
+    if wrong_extension and (b"\x00" in raw[:4096] or raw[:4] in {b"%PDF", b"PK\x03\x04"}):
+        return {"error": f"Formato {path.suffix or 'desconocido'}: no es CSV delimitado por comas.", "not_csv": True}
     # latin-1 nunca falla: recupera CSV con bytes fuera de cp1252 (p. ej. 0x81)
     # en lugar de declarar ilegible un archivo publicado.
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
@@ -67,8 +70,10 @@ def _read_csv(evidence):
         if widths:
             common_width, common_count = widths.most_common(1)[0]
             # Favorecer una tabla consistente y con más columnas; evita confundir
-            # comas decimales con el delimitador real.
-            candidates.append(((common_count / sum(widths.values()), common_width), delimiter, parsed))
+            # comas decimales con el delimitador real. Una sola columna significa
+            # que ese carácter no separa campos (p. ej. CSV con punto y coma).
+            candidates.append(((common_width >= 2, common_count / sum(widths.values()), common_width),
+                               delimiter, parsed))
     if not candidates:
         return {"error": "CSV vacío o estructura/delimitador no verificable."}
     _, delimiter, rows = max(candidates, key=lambda item: item[0])
@@ -81,7 +86,8 @@ def _read_csv(evidence):
     empty = sum(not cell.strip() for row in rows for cell in row)
     ragged = sum(len(row) != width for row in rows)
     return {"rows": rows, "delimiter": delimiter, "empty": empty,
-            "ragged": ragged, "text": text}
+            "ragged": ragged, "text": text, "wrong_extension": wrong_extension,
+            "extension": path.suffix or "sin extensión"}
 
 
 def _required_empty_values(data, schema):
@@ -152,6 +158,10 @@ def evaluate_package(evidence, siblings, check_online=False, fetch=None, previou
             if allowed_empty:
                 empty_note += f", {allowed_empty} vacíos estructurales permitidos"
             diagnostics.append(f"{kind}: {len(data['rows']) - 1} filas, {empty_note}, {data['ragged']} filas con ancho irregular.")
+            if data.get("delimiter") != ",":
+                diagnostics.append(f"{kind}: delimitado por «{data['delimiter']}», no por comas.")
+            if data.get("wrong_extension"):
+                diagnostics.append(f"{kind}: extensión «{data['extension']}» en lugar de .csv.")
     dates = [" ".join(row) for row in files.get("Metadatos", {}).get("rows", [])
              if row and "fecha" in row[0].lower()]
     if dates:
@@ -203,7 +213,8 @@ def evaluate_package(evidence, siblings, check_online=False, fetch=None, previou
         cta["sugerencia"] = None
     cta["observacion"] += f" Comprobación local: paquete completo={complete}; fechas de metadatos coinciden con el período seleccionado={bool(metadata_dates) and all(value == expected for value in metadata_dates)}. Las excepciones NO APLICA/INFORMACIÓN NO DISPONIBLE requieren comprobar su nota aclaratoria."
     eta = by_key["eta"]
-    valid_csv = not missing and all(not d.get("error") and d.get("delimiter") == "," and not d.get("ragged") for d in files.values())
+    valid_csv = not missing and all(not d.get("error") and d.get("delimiter") == "," and not d.get("ragged")
+                                    and not d.get("wrong_extension") for d in files.values())
     eta["sugerencia"] = 1 if valid_csv else 0 if files else None
     eta["observacion"] = ("Los tres archivos locales son CSV estructurados delimitados por comas. Confirmar su publicación y acceso en el PNT."
                            if valid_csv else "No se ha verificado un paquete completo de CSV estructurados delimitados por comas. " + " ".join(diagnostics))

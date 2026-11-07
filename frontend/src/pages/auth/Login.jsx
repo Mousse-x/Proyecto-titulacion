@@ -96,7 +96,7 @@ export default function Login() {
       setRegError('Las contraseñas no coinciden.');
       return;
     }
-    const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]).{8,}$/;
+    const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-_=+[\]]).{8,}$/;
     if (!pwdRegex.test(regForm.password)) {
       setRegError('La contraseña no cumple con los requisitos mínimos de seguridad.');
       return;
@@ -160,7 +160,7 @@ export default function Login() {
   const isUpper = /[A-Z]/.test(regForm.password);
   const isLower = /[a-z]/.test(regForm.password);
   const isNum = /\d/.test(regForm.password);
-  const isSpecial = /[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]/.test(regForm.password);
+  const isSpecial = /[!@#$%^&*(),.?":{}|<>\-_=+[\]]/.test(regForm.password);
 
   return (
     <div className="login-page">

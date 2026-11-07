@@ -11,5 +11,5 @@ export const getScoreLabel = (score) => {
   if (value >= 90) return 'Alto';
   if (value >= 70) return 'Medio';
   if (value >= 40) return 'Bajo';
-  return 'Critico';
+  return 'Crítico';
 };

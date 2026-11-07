@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { EyeIcon, EyeOffIcon } from '../../components/common/ActionIcons';
 
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]).{8,}$/;
-const SPECIAL_REGEX = /[!@#$%^&*(),.?":{}|<>\-\_=+\[\]]/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>\-_=+[\]]).{8,}$/;
+const SPECIAL_REGEX = /[!@#$%^&*(),.?":{}|<>\-_=+[\]]/;
 
 export default function ResetPassword() {
   const { token } = useParams();

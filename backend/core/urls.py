@@ -1,27 +1,19 @@
 from django.urls import path
-from .views import (
-    register_user, login_user,
-    list_users, user_detail,
-    list_universities, university_detail,
-    list_indicators, indicator_detail, indicator_template_view,
-    system_stats,
-    list_roles,
-    list_audit_errors,
-    list_audit_logs,
-    request_password_reset,
-    confirm_password_reset,
-    verify_otp,
-    submit_feedback,
-    list_user_feedback,
-    user_feedback_detail,
-    refresh_token,
-    auth_status,
+from .views.auth_views import (
+    register_user, login_user, verify_otp, refresh_token, auth_status,
+    request_password_reset, confirm_password_reset,
 )
-from .evidence_views import (
+from .views.user_views import list_users, user_detail, list_roles
+from .views.university_views import list_universities, university_detail
+from .views.indicator_views import list_indicators, indicator_detail, indicator_template_view
+from .views.dashboard_views import system_stats
+from .views.audit_views import list_audit_errors, list_audit_logs
+from .views.feedback_views import submit_feedback, list_user_feedback, user_feedback_detail
+from .views.evidence_views import (
     list_evidences, evidence_detail, download_evidence, scrape_espoch,
     bulk_update_evidences, bulk_delete_evidences,
 )
-from .validation_views import (
+from .views.validation_views import (
     validate_document, validate_all_university,
     get_validation_result, get_compliance_summary, get_observations,
     get_latest_validation_period,
@@ -30,10 +22,11 @@ from .validation_views import (
     lotaip_link_review_queue, lotaip_link_review_decide, cancel_lotaip_run,
     retry_international_indicator, clear_international_cache,
 )
-from .transparency_views import transparency_model
+from .views.transparency_views import integrated_indicator_detail, transparency_model
 
 urlpatterns = [
     path("transparency-model/", transparency_model, name="transparency_model"),
+    path("transparency-model/indicators/<int:ind_id>/", integrated_indicator_detail, name="integrated_indicator_detail"),
     path("lotaip/config/numerales/", lotaip_numerals, name="lotaip_numerals"),
     path("lotaip/ejecuciones/<int:run_id>/", lotaip_run_detail, name="lotaip_run_detail"),
     path("lotaip/ejecuciones/<int:run_id>/cancelar/", cancel_lotaip_run, name="cancel_lotaip_run"),
