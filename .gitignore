@@ -8,3 +8,6 @@ dist/
 backend/.freellmapi-key
 # Archivos subidos/generados por la app
 backend/media/evidences/
+
+# Paquete de despliegue local (dump de BD, evidencias y .env del servidor)
+despliegue/

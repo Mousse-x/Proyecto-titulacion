@@ -24,7 +24,10 @@ No se abre ningún puerto del router: el túnel sale desde el servidor hacia Clo
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y git nginx postgresql postgresql-contrib tesseract-ocr tesseract-ocr-spa libmagic1 build-essential curl
+sudo apt install -y git nginx tesseract-ocr tesseract-ocr-spa libmagic1 build-essential curl postgresql-common
+# PostgreSQL 18 (misma versión que desarrollo; Ubuntu trae una anterior que no restaura el dump)
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+sudo apt install -y postgresql-18
 sudo ufw allow OpenSSH && sudo ufw enable
 curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.bashrc
 uv python install 3.14
@@ -47,17 +50,22 @@ Copia aparte `backend/media/` (las evidencias no están en Git), por ejemplo con
 
 ## 3. Base de datos
 
-En Windows:
+En Windows (la carpeta `despliegue/` está en `.gitignore`):
 
 ```bash
-pg_dump -U postgres -Fc transparencia_universitaria -f sistransp.dump
+pg_dump -U postgres -h 127.0.0.1 -Fc --no-owner --no-privileges transparencia_universitaria -f despliegue/sistransp.dump
+tar -czf despliegue/media.tar.gz -C backend media
+scp despliegue/sistransp.dump despliegue/media.tar.gz despliegue/env-servidor USUARIO@IP-DEL-SERVIDOR:~
 ```
 
-En el servidor:
+En el servidor (la contraseña es la de `DB_PASSWORD` en `env-servidor`):
 
 ```bash
-sudo -u postgres psql -c "CREATE USER sistransp WITH PASSWORD 'CAMBIAR';" -c "CREATE DATABASE transparencia_universitaria OWNER sistransp;"
+sudo -u postgres psql -c "CREATE USER sistransp WITH PASSWORD 'LA_DE_DB_PASSWORD';" -c "CREATE DATABASE transparencia_universitaria OWNER sistransp;"
 sudo -u postgres pg_restore -d transparencia_universitaria --no-owner --role=sistransp ~/sistransp.dump
+sudo -u postgres psql -c "ALTER ROLE sistransp SET search_path = core,universities,transparency,evaluation,evidence,catalogs,public;"
+tar -xzf ~/media.tar.gz -C /opt/sistransp/backend
+cp ~/env-servidor /opt/sistransp/backend/.env && chmod 600 /opt/sistransp/backend/.env
 ```
 
 ## 4. Backend
@@ -67,7 +75,7 @@ cd /opt/sistransp/backend
 uv venv --python 3.14 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
 playwright install --with-deps chromium
-cp .env.production.example .env && nano .env      # rellenar valores
+nano .env      # ya copiado en el paso 3: ajusta ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS y FRONTEND_URL
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py check --deploy
