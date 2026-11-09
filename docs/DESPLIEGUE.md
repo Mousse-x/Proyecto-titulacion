@@ -4,7 +4,7 @@
 Internet → Cloudflare (HTTPS) → cloudflared → Nginx :8088
                                                ├─ /         → /var/www/sistransp (frontend compilado)
                                                ├─ /api/     → Gunicorn 127.0.0.1:8000 (Django)
-                                               ├─ /admin/   → Gunicorn
+                                               ├─ /django-admin/ → Gunicorn (admin de Django; /admin/* es del frontend)
                                                ├─ /static/  → backend/staticfiles
                                                └─ /media/   → backend/media
 ```
@@ -133,9 +133,16 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self' blob:;" always;
 
-    location / { try_files $uri /index.html; }
+    # index.html siempre se revalida; los assets llevan hash y se cachean.
+    # (expires y no add_header: un add_header aquí anularía las cabeceras de seguridad)
+    location / {
+        try_files $uri /index.html;
+        expires -1;
+    }
+    location /assets/ { expires 1y; }
 
-    location ~ ^/(api|admin)/ {
+    # /admin/* son rutas del frontend; el admin de Django está en /django-admin/
+    location ~ ^/(api|django-admin)/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;

@@ -34,7 +34,7 @@ PUBLIC_PATHS = [
 
 PUBLIC_PREFIXES = [
     "/api/auth/password-reset/confirm/",
-    "/admin/",         # Django admin
+    "/django-admin/",  # Django admin
     "/media/",         # archivos estáticos
     "/static/",        # archivos estáticos
 ]
