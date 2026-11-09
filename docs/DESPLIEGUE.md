@@ -1,7 +1,7 @@
 # Despliegue de SisTransp en un servidor casero (Linux + Cloudflare Tunnel)
 
 ```
-Internet → Cloudflare (HTTPS) → cloudflared → Nginx :80
+Internet → Cloudflare (HTTPS) → cloudflared → Nginx :8088
                                                ├─ /         → /var/www/sistransp (frontend compilado)
                                                ├─ /api/     → Gunicorn 127.0.0.1:8000 (Django)
                                                ├─ /admin/   → Gunicorn
@@ -122,7 +122,7 @@ sudo mkdir -p /var/www/sistransp && sudo cp -r dist/* /var/www/sistransp/
 
 ```nginx
 server {
-    listen 80;
+    listen 8088;   # el 80 lo usa CasaOS en torre1
     server_name _;
     client_max_body_size 50M;
 
@@ -138,7 +138,7 @@ server {
     location ~ ^/(api|admin)/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 300s;
     }
@@ -148,9 +148,9 @@ server {
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/sistransp /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/sistransp /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
+sudo nginx -t && sudo systemctl enable --now nginx && sudo systemctl reload nginx
 ```
 
 Nginx (usuario `www-data`) necesita poder leer `/opt/sistransp/backend/media`
@@ -167,7 +167,7 @@ sudo dpkg -i cloudflared.deb
 **A. URL gratis temporal** (cambia en cada reinicio):
 
 ```bash
-cloudflared tunnel --url http://localhost:80
+cloudflared tunnel --url http://localhost:8088
 ```
 
 Añade el dominio `*.trycloudflare.com` mostrado a `ALLOWED_HOSTS`,
@@ -187,7 +187,7 @@ tunnel: <ID-DEL-TUNEL>
 credentials-file: /home/TU_USUARIO/.cloudflared/<ID-DEL-TUNEL>.json
 ingress:
   - hostname: sistransp.tudominio.com
-    service: http://localhost:80
+    service: http://localhost:8088
   - service: http_status:404
 ```
 
