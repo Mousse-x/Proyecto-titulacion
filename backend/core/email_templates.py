@@ -67,12 +67,17 @@ def render_email(*, title, greeting=None, intro=(), code=None, code_note=None, b
         body += f'<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:{INK};font-weight:600;">{escape(greeting)}</p>'
     body += _paragraphs(intro)
     if code:
-        spaced = " ".join(escape(str(code)))
+        # Sin espacios entre dígitos: la separación es solo visual (letter-spacing),
+        # así al copiar (doble clic o Ctrl+C) se copia el código completo y limpio.
+        # user-select: all hace que un solo clic seleccione todo en los clientes que lo admiten.
+        spaced = escape(str(code))
         body += (
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 18px;">'
             f'<tr><td align="center" style="background:{SOFT};border:1px solid {BORDER};border-radius:12px;padding:22px 12px;">'
             f'<div style="font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:{SUBTLE};font-weight:700;margin-bottom:8px;">Código de verificación</div>'
-            f'<div style="font-family:Consolas,\'Courier New\',monospace;font-size:34px;letter-spacing:6px;font-weight:700;color:{INK};">{spaced}</div>'
+            f'<div style="font-family:Consolas,\'Courier New\',monospace;font-size:34px;letter-spacing:8px;font-weight:700;color:{INK};'
+            f'-webkit-user-select:all;user-select:all;">{spaced}</div>'
+            f'<div style="font-size:12px;color:{SUBTLE};margin-top:8px;">Haz doble clic sobre el código para seleccionarlo y copiarlo.</div>'
             f'</td></tr></table>'
         )
         if code_note:

@@ -314,9 +314,11 @@ export default function Login() {
                         type="text"
                         className="form-input"
                         placeholder="123456"
-                        maxLength={6}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
                         value={otpCode}
-                        onChange={e => setOtpCode(e.target.value)}
+                        /* Acepta el código pegado con espacios, guiones o texto alrededor: se quedan solo los 6 dígitos. */
+                        onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         required
                       />
                     </div>
