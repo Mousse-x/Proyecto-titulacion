@@ -427,13 +427,23 @@ select.form-input option { background: var(--bg-secondary); color: var(--text); 
   gap: 2px;
 }
 .nav-section-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-subtle);
-  padding: 8px 10px 4px;
-  margin-top: 8px;
+  letter-spacing: 0.09em;
+  color: var(--text);
+  padding: 10px 10px 6px;
+  margin-top: 10px;
+}
+/* Línea fina que separa visualmente cada categoría. */
+.nav-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 .nav-item {
   display: flex;
@@ -2505,3 +2515,17 @@ select.form-input option {
     max-width: none;
   }
 }
+
+/* Escala de aprobación A–E (ver utils/score.js). color = relleno; -ink = texto legible. */
+:root {
+  --score-a: #038141; --score-a-ink: #038141; --score-a-subtle: rgba(3, 129, 65, .12);
+  --score-b: #85BB2F; --score-b-ink: #5B8A17; --score-b-subtle: rgba(133, 187, 47, .16);
+  --score-c: #FECB02; --score-c-ink: #A88600; --score-c-subtle: rgba(254, 203, 2, .2);
+  --score-d: #EE8100; --score-d-ink: #C26600; --score-d-subtle: rgba(238, 129, 0, .14);
+  --score-e: #E63E11; --score-e-ink: #CF320A; --score-e-subtle: rgba(230, 62, 17, .12);
+}
+.badge-score-a { background: var(--score-a-subtle); color: var(--score-a-ink); }
+.badge-score-b { background: var(--score-b-subtle); color: var(--score-b-ink); }
+.badge-score-c { background: var(--score-c-subtle); color: var(--score-c-ink); }
+.badge-score-d { background: var(--score-d-subtle); color: var(--score-d-ink); }
+.badge-score-e { background: var(--score-e-subtle); color: var(--score-e-ink); }

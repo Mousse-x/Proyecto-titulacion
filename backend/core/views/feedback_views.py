@@ -110,7 +110,7 @@ def submit_feedback(request):
 
     _log(
         user_id=user.id,
-        action="SEND_FEEDBACK",
+        action="SEND_FEEDBACK", module="feedback",
         table_name=None,
         record_id=None,
         description=f"Feedback enviado ({type_label})",
@@ -194,7 +194,7 @@ def user_feedback_detail(request, feedback_id):
         item.save(update_fields=["status", "updated_at"])
         _log(
             user_id=user.id,
-            action="UPDATE_FEEDBACK_STATUS",
+            action="UPDATE_FEEDBACK_STATUS", module="feedback",
             table_name="core.user_feedback",
             record_id=item.id,
             description=f"Estado de feedback actualizado a {status}",

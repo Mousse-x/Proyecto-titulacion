@@ -1,4 +1,4 @@
-import { getScoreColor } from '../../utils/score';
+import { getScoreColor, getScoreInk } from '../../utils/score';
 
 export default function StatCard({ icon, label, value, change, changeDir, color, iconBg, suffix = '' }) {
   return (
@@ -51,7 +51,7 @@ export function ScoreCard({ score, label, size = 80 }) {
         <text
           x="50%" y="50%"
           dominantBaseline="central" textAnchor="middle"
-          fill={color}
+          fill={getScoreInk(numericScore)}
           fontSize={fontSize}
           fontWeight="900"
         >

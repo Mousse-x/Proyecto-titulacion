@@ -166,6 +166,8 @@ export const api = {
     }) : getCachedStats();
   },
   roles:  ()    => client.get('/roles/'),
+  // Registra en auditoría una acción del navegador (no bloquea si falla).
+  auditEvent: (action, description = '') => client.post('/audit/events/', { action, description }).catch(() => null),
   feedback: {
     submit: (data) => client.post('/feedback/', data),
     list:   (params) => client.get('/feedback/admin/', { params }),

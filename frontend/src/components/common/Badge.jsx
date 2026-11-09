@@ -1,4 +1,4 @@
-﻿const normalizeStatus = (value = '') => String(value)
+const normalizeStatus = (value = '') => String(value)
   .replaceAll('PÃºblica', 'Pública')
   .replaceAll('En revisiÃ³n', 'En revisión')
   .replaceAll('Publica', 'Pública');
@@ -13,7 +13,7 @@ export default function Badge({ status }) {
     "OGP":         "info",    "OCDE":        "primary",
     "ODS":         "success", "Alta":        "danger",  "Media":       "warning",
     "Baja":        "info",    "Pública":     "primary", "Particular cofinanciada": "info",
-    "Alto": "success", "Medio": "warning", "Bajo": "info", "Crítico": "danger", "Critico": "danger",
+    "Alto": "score-a", "Medio alto": "score-b", "Medio": "score-c", "Bajo": "score-d", "Crítico": "score-e", "Critico": "score-e",
     "Provisional": "warning", "Definitivo": "success", "Particular autofinanciada": "info",
   };
   const cls = map[label] || 'subtle';

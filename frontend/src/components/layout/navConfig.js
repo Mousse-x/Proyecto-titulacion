@@ -71,7 +71,7 @@ export const PAGE_META = {
   dashboard: { title: 'Inicio', sub: 'Resumen del estado de transparencia del período' },
   users: { title: 'Gestión de usuarios', sub: 'Administrar cuentas y perfiles' },
   universities: { title: 'Universidades', sub: 'Instituciones registradas' },
-  indicators: { title: 'Indicadores de transparencia', sub: 'Catálogo LOTAIP, mixto y complementario' },
+  indicators: { title: 'Indicadores de transparencia', sub: 'Documentos LOTAIP, indicadores mixtos y complementarios' },
   weightings: { title: 'Ponderaciones', sub: 'Pesos por dimensión e indicador' },
   rankings: { title: 'Rankings', sub: 'Clasificación nacional por Índice de Transparencia Institucional' },
   reports: { title: 'Reportes', sub: 'Generar y exportar informes' },

@@ -4,7 +4,7 @@ import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import PeriodSelect, { SimulatedNotice } from '../../components/common/PeriodSelect';
 import useDashboardStats from '../../hooks/useDashboardStats';
-import { getScoreColor, getScoreLabel } from '../../utils/score';
+import { getScoreInk, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 
 const EMPTY_STATS = { ranking: [], available_periods: [] };
@@ -125,9 +125,9 @@ export default function ComparativesPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{row.label}</span>
                     <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, color: getScoreColor(row.a) }}>{row.a}%</span>
+                      <span style={{ fontWeight: 700, color: getScoreInk(row.a) }}>{row.a}%</span>
                       <span style={{ color: 'var(--text-subtle)' }}>vs</span>
-                      <span style={{ fontWeight: 700, color: getScoreColor(row.b) }}>{row.b}%</span>
+                      <span style={{ fontWeight: 700, color: getScoreInk(row.b) }}>{row.b}%</span>
                       <span style={{ fontWeight: 700, color: diff > 0 ? 'var(--primary-light)' : diff < 0 ? 'var(--accent)' : 'var(--text-subtle)' }}>
                         {diff > 0 ? `+${diff} ${uA?.name}` : diff < 0 ? `${Math.abs(diff)} ${uB?.name}` : 'Empate'}
                       </span>
@@ -155,13 +155,13 @@ export default function ComparativesPage() {
             <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center', textAlign: 'center' }}>
               <div style={{ background: 'var(--primary-subtle)', borderRadius: 'var(--radius)', padding: 12, border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{uA?.full_name}</div>
-                <div style={{ fontSize: '2rem', fontWeight: 900, color: getScoreColor(uA?.integrated_transparency_score || 0) }}>{uA?.integrated_transparency_score || 0}</div>
+                <div style={{ fontSize: '2rem', fontWeight: 900, color: getScoreInk(uA?.integrated_transparency_score || 0) }}>{uA?.integrated_transparency_score || 0}</div>
                 <Badge status={getScoreLabel(uA?.integrated_transparency_score || 0)} />
               </div>
               <div style={{ fontSize: '1.5rem', color: 'var(--text-subtle)' }}>vs</div>
               <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', padding: 12, border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{uB?.full_name}</div>
-                <div style={{ fontSize: '2rem', fontWeight: 900, color: getScoreColor(uB?.integrated_transparency_score || 0) }}>{uB?.integrated_transparency_score || 0}</div>
+                <div style={{ fontSize: '2rem', fontWeight: 900, color: getScoreInk(uB?.integrated_transparency_score || 0) }}>{uB?.integrated_transparency_score || 0}</div>
                 <Badge status={getScoreLabel(uB?.integrated_transparency_score || 0)} />
               </div>
             </div>

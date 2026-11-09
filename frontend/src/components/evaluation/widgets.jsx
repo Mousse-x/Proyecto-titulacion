@@ -1,5 +1,5 @@
 import { formatLotaipPercent } from '../../utils/lotaipDashboard';
-import { scoreColor } from './evaluationUi';
+import { scoreColor, scoreInk } from './evaluationUi';
 
 /* Anillo de puntuación con la cifra centrada. */
 export function ScoreRing({ value, size = 112, stroke = 9 }) {
@@ -15,7 +15,7 @@ export function ScoreRing({ value, size = 112, stroke = 9 }) {
           strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c} strokeLinecap="round"
           transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: 'stroke-dashoffset 1s ease' }} />
       </svg>
-      <span className="eval-ring-value" style={{ color }}>{value == null ? '—' : formatLotaipPercent(value)}</span>
+      <span className="eval-ring-value" style={{ color: scoreInk(value) }}>{value == null ? '—' : formatLotaipPercent(value)}</span>
     </div>
   );
 }
@@ -27,7 +27,7 @@ export function MeterRow({ label, value, hint }) {
     <div className="eval-meter" title={hint ? `${label}: ${hint}` : undefined} aria-label={`${label}${hint ? ` (${hint})` : ''}: ${value == null ? 'sin dato' : `${Number(value).toFixed(1)} %`}`}>
       <span className="eval-meter-label">{hint ? <abbr title={hint}>{label}</abbr> : label}</span>
       <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%`, background: scoreColor(value) }} /></div>
-      <strong style={{ color: scoreColor(value) }}>{value == null ? '—' : `${Number(value).toFixed(1)}%`}</strong>
+      <strong style={{ color: scoreInk(value) }}>{value == null ? '—' : `${Number(value).toFixed(1)}%`}</strong>
     </div>
   );
 }

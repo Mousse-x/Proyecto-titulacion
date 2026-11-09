@@ -1,6 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useConfirm } from '../../context/FeedbackContext';
 import { DASHBOARD_BY_ROLE, NAV_BY_ROLE } from './navConfig';
 
 function StatisticsIcon() {
@@ -152,14 +151,6 @@ function HelpIcon() {
   );
 }
 
-function LogoutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M15 4h4v16h-4M10 8l-4 4l4 4M6 12h10" />
-    </svg>
-  );
-}
-
 const ICONS = {
   HO: HomeIcon,
   DA: StatisticsIcon,
@@ -189,29 +180,11 @@ const titleByRole = {
 };
 
 export default function Sidebar({ open = false, onNavigate }) {
-  const { user, logout } = useAuth();
-  const confirm = useConfirm();
-  const navigate = useNavigate();
-  const nav = NAV_BY_ROLE[user?.role_id] || [];
-  const brand = titleByRole[user?.role_id] || { title: 'SisTransp', sub: '' };
+  const { user } = useAuth();
   const dashboardPath = DASHBOARD_BY_ROLE[user?.role_id] || '/';
-
-  const handleLogout = async () => {
-    const ok = await confirm({
-      title: 'Cerrar sesión',
-      message: '¿Deseas cerrar tu sesión? Los datos ya guardados se conservan; los formularios abiertos sin guardar se perderán.',
-      confirmLabel: 'Cerrar sesión',
-    });
-    if (!ok) return;
-    logout();
-    navigate('/login');
-  };
-
-  const initials = user?.full_name
-    ?.split(' ')
-    .slice(0, 2)
-    .map((name) => name[0])
-    .join('') || '?';
+  // «Inicio» ya está en el botón de la casa junto al logo; no se repite en la lista.
+  const nav = (NAV_BY_ROLE[user?.role_id] || []).filter((item) => item.to !== dashboardPath);
+  const brand = titleByRole[user?.role_id] || { title: 'SisTransp', sub: '' };
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}`} id="app-sidebar" aria-label="Menú principal">
@@ -254,21 +227,6 @@ export default function Sidebar({ open = false, onNavigate }) {
           );
         })}
       </nav>
-
-      <div className="sidebar-footer">
-        <div className="user-card" style={{ cursor: 'default' }}>
-          <div className="user-avatar" aria-hidden="true">{initials}</div>
-          <div className="user-info">
-            <div className="user-name">{user?.full_name}</div>
-            <div className="user-role">{user?.role_name}</div>
-          </div>
-          <button type="button" className="btn btn-secondary btn-sm logout-button" onClick={handleLogout}
-            title="Cerrar sesión" aria-label="Cerrar sesión">
-            <LogoutIcon />
-            <span>Salir</span>
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }

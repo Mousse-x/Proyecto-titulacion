@@ -560,12 +560,12 @@ export default function DocumentsPage() {
           <p>Gestiona los documentos por universidad, año, mes y literal</p>
         </div>
         <div className="page-header-actions" style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary" onClick={() => { setScrapeResult(null); setScrapeForm(p => ({ ...p, university_id: p.university_id || filterUniv || '' })); setScraperModal(true); }}
+          <button className="btn btn-primary" onClick={() => { setScrapeResult(null); setScrapeForm(p => ({ ...p, university_id: p.university_id || filterUniv || '' })); setScraperModal(true); }}
             title="Descarga automáticamente los literales publicados en el Portal Nacional de Transparencia">
-            🌐 Importar desde portal DPE
+            IMPORTAR DESDE PORTAL DPE
           </button>
           <button className="btn btn-primary" onClick={openUpload}>
-            📤 Subir documento
+            SUBIR DOCUMENTO
           </button>
         </div>
       </div>
@@ -593,14 +593,14 @@ export default function DocumentsPage() {
           <option value="">Todos los meses</option>
           {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
         </select>
-        <button className="btn btn-secondary" onClick={loadDocs}>↻ Actualizar</button>
+        <button className="btn btn-secondary" onClick={loadDocs}>ACTUALIZAR</button>
         <button className="btn btn-secondary" disabled={!searchTerm && !filterUniv && !filterMonth && !folderPath.length} onClick={() => {
           setSearchTerm('');
           setFilterUniv('');
           setFilterMonth('');
           setFolderPath([]);
         }}>
-          ✕ Limpiar filtros
+          LIMPIAR FILTROS
         </button>
       </div>
 
@@ -937,7 +937,7 @@ export default function DocumentsPage() {
                   Cancelar
                 </button>
                 <button className="btn btn-primary" onClick={handleUpload}>
-                  📤 {replacingDoc ? 'Reemplazar documento' : 'Subir documento'}
+                  {replacingDoc ? 'REEMPLAZAR DOCUMENTO' : 'SUBIR DOCUMENTO'}
                 </button>
               </div>
             )}

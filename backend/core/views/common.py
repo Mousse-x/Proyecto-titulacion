@@ -44,12 +44,12 @@ def _get_bool(data, key, default=True):
     return bool(value)
 
 
-def _log(user_id, action, table_name=None, record_id=None, description=None):
+def _log(user_id, action, table_name=None, record_id=None, description=None, module="auth"):
     """Registra auditoria exitosa; aisla la logica de persistencia"""
     try:
         AuditLog.objects.create(
             user_id=user_id,
-            module="auth",
+            module=module,
             action=action,
             table_name=table_name,
             record_id=record_id,

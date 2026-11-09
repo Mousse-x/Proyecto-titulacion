@@ -199,7 +199,7 @@ export default function DocumentsAuditorPage() {
           {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
         </select>
         <button className="btn btn-secondary" onClick={loadDocs}>Actualizar</button>
-        <button className="btn btn-secondary" onClick={() => { setSearchTerm(''); setFilterUniv(''); setFilterMonth(''); setFolderPath([]); }}>✕ Limpiar</button>
+        <button className="btn btn-secondary" onClick={() => { setSearchTerm(''); setFilterUniv(''); setFilterMonth(''); setFolderPath([]); }}>LIMPIAR</button>
       </div>
 
       {folderPath.length > 0 && (

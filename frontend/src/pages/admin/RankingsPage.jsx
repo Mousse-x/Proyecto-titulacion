@@ -6,7 +6,7 @@ import RankingBar from '../../components/charts/RankingBar';
 import Badge from '../../components/common/Badge';
 import PeriodSelect, { SimulatedNotice } from '../../components/common/PeriodSelect';
 import useDashboardStats from '../../hooks/useDashboardStats';
-import { getScoreColor, getScoreLabel } from '../../utils/score';
+import { getScoreColor, getScoreInk, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 
 const EMPTY_STATS = { ranking: [], available_periods: [] };
@@ -103,8 +103,7 @@ export default function RankingsPage() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 900, color: getScoreColor(u.integrated_transparency_score) }} title="Índice de Transparencia Institucional (ITI)">{Number(u.integrated_transparency_score).toFixed(2)}%</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>Nacional (SITA): {u.transparency_score}%</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 900, color: getScoreInk(u.integrated_transparency_score) }} title="Índice de Transparencia Institucional (ITI)">{Number(u.integrated_transparency_score).toFixed(2)}%</div>
                       <Badge status={getScoreLabel(u.integrated_transparency_score)} />
                     </div>
                   </div>
@@ -126,7 +125,7 @@ export default function RankingsPage() {
                       </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <ScoreCard score={selected.transparency_score || 0} size={82} label="Nacional (LOTAIP)" />
+                      <ScoreCard score={selected.transparency_score || 0} size={82} label="SITA" />
                       <ScoreCard score={selected.integrated_transparency_score || 0} size={82} label="Índice final ITI" />
                     </div>
                     <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.8125rem' }}>
@@ -134,7 +133,7 @@ export default function RankingsPage() {
                     </div>
                     <Link to={breakdownUrl} className="btn btn-primary link-button" style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
                       title="Abre la evaluación con cada indicador, su calificación y su evidencia">
-                      🔍 Ver desglose de indicadores y evidencias
+                      VER DESGLOSE DE INDICADORES Y EVIDENCIAS
                     </Link>
                     {selected.dimensions?.length > 0 && (
                       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -157,8 +156,8 @@ export default function RankingsPage() {
 
           <div className="grid-2">
             <div className="chart-card">
-              <div className="chart-title">Índice nacional (LOTAIP · SITA) {periodName}</div>
-              <RankingBar label="Índice nacional por universidad" data={rankings.map((u) => ({ name: u.name, transparency_score: u.transparency_score }))} height={260} />
+              <div className="chart-title">SITA {periodName}</div>
+              <RankingBar label="SITA por universidad" data={rankings.map((u) => ({ name: u.name, transparency_score: u.transparency_score }))} height={260} />
             </div>
             <div className="chart-card">
               <div className="chart-title">Índice final ITI (nacional + internacional) {periodName}</div>

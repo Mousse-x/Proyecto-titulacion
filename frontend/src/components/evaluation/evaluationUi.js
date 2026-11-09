@@ -1,3 +1,4 @@
+import { getScoreColor, getScoreInk } from '../../utils/score';
 /* Estados de los paquetes LOTAIP (resultado por literal). */
 export const PACKAGE_STATUS = {
   PENDIENTE_REVISION: { label: 'Pendiente de comprobación', badge: 'badge-warning', color: 'var(--warning)' },
@@ -45,8 +46,9 @@ export function resultOrigin(metadata = {}) {
   }
 }
 
-export const scoreColor = (score) => (score == null ? 'var(--text-subtle)'
-  : score >= 90 ? 'var(--success)' : score >= 70 ? 'var(--warning)' : score >= 40 ? 'var(--info)' : 'var(--danger)');
+/* Escala A–E compartida con toda la app (utils/score.js): color para rellenos, ink para texto. */
+export const scoreColor = (score) => (score == null ? 'var(--text-subtle)' : getScoreColor(score));
+export const scoreInk = (score) => (score == null ? 'var(--text-subtle)' : getScoreInk(score));
 
 /* Calificación de un criterio LOTAIP (0, 0.5, 1, SI, NO…) como texto y color. */
 export function criterionGrade(criterion) {

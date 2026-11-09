@@ -1,264 +1,329 @@
-import { useState, useEffect, useCallback } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import client from '../../api/client';
+import ErrorNotice from '../../components/common/ErrorNotice';
 
-// Helpers para formatear fechas
-const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'medium' }) : '—';
+const PAGE_SIZE = 200;
 
-// Colores por acción/código
-const ACTION_COLORS = {
-  LOGIN:    'var(--success)',
-  REGISTER: 'var(--primary-light)',
-  LOGOUT:   'var(--text-subtle)',
-  UPDATE:   'var(--warning)',
-  DELETE:   'var(--danger)',
+const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'medium' }) : '—');
+
+const MODULE_LABELS = {
+  auth: 'Autenticación', autenticacion: 'Autenticación', usuarios: 'Usuarios', universidades: 'Universidades',
+  indicadores: 'Indicadores', ponderaciones: 'Ponderaciones', documentos: 'Documentos', evidences: 'Documentos',
+  evaluacion: 'Evaluación', validation: 'Evaluación', feedback: 'Comentarios', reportes: 'Reportes', sistema: 'Sistema',
+  scraper: 'Importación DPE',
 };
-const ERROR_CODE_COLORS = {
-  USER_NOT_FOUND:   'var(--warning)',
-  WRONG_PASSWORD:   'var(--danger)',
-  ACCOUNT_INACTIVE: 'var(--danger)',
-  DUPLICATE_EMAIL:  'var(--warning)',
-  DB_ERROR:         'var(--danger)',
-  MISSING_FIELDS:   'var(--text-subtle)',
+
+const ACTION_LABELS = {
+  LOGIN_ATTEMPT: 'Inicio de sesión (contraseña)', LOGIN_2FA: 'Inicio de sesión', LOGIN_BYPASS_2FA: 'Inicio de sesión',
+  LOGOUT: 'Cierre de sesión', REGISTER: 'Registro de cuenta', REGISTRO: 'Registro de cuenta',
+  PASSWORD_RESET_REQUESTED: 'Solicitud de nueva contraseña', PASSWORD_RESET_CONFIRMED: 'Contraseña restablecida',
+  RECUPERAR_CLAVE: 'Recuperación de contraseña', VERIFICAR_2FA: 'Verificación 2FA',
+  CREAR: 'Crear', ACTUALIZAR: 'Actualizar', ELIMINAR: 'Eliminar', ELIMINAR_MASIVO: 'Eliminar en bloque',
+  ACTUALIZAR_MASIVO: 'Actualizar en bloque', ACTUALIZAR_PESOS: 'Cambiar ponderaciones', PLANTILLA: 'Plantilla LOTAIP',
+  IMPORTAR: 'Importar desde DPE', DESCARGAR: 'Descargar archivo', EVALUAR: 'Evaluar', REINTENTAR: 'Reintentar evaluación',
+  CANCELAR: 'Detener evaluación', LIMPIAR_CACHE: 'Limpiar caché', DECIDIR: 'Decidir enlace', REVISION_MANUAL: 'Revisión manual',
+  REVISAR_CRITERIOS: 'Revisar criterios', VALIDATE_DOCUMENT: 'Evaluar documento', VALIDATE_ALL_UNIVERSITY: 'Evaluar universidad',
+  CANCEL_LOTAIP_RUN: 'Detener evaluación', LOTAIP_MANUAL_REVIEW: 'Revisión manual', REVIEW_LOTAIP_CRITERIA: 'Revisar criterios',
+  REVIEW_LOTAIP_LINK: 'Revisar enlace', SEND_FEEDBACK: 'Enviar comentario', UPDATE_FEEDBACK_STATUS: 'Atender comentario',
+  EXPORTAR_REPORTE: 'Exportar reporte', VER_EVALUACION: 'Ver evaluación',
 };
+
+const humanize = (value = '') => {
+  const text = String(value).replace(/_/g, ' ').toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+const moduleLabel = (m) => MODULE_LABELS[m] || humanize(m || 'sistema');
+const actionLabel = (a) => ACTION_LABELS[a] || humanize(a);
+
+/* Tono visual de la acción: crear, cambiar, borrar, sesión o neutro. */
+function actionTone(action = '') {
+  if (/ELIMINAR|DELETE|LIMPIAR/.test(action)) return 'danger';
+  if (/LOGIN|LOGOUT|REGIST|2FA|PASSWORD|CLAVE/.test(action)) return 'session';
+  if (/CREAR|IMPORTAR|SEND|PLANTILLA/.test(action)) return 'create';
+  if (/ACTUALIZAR|UPDATE|REVIEW|REVISAR|REVISION|DECIDIR|PESOS/.test(action)) return 'update';
+  if (/EVALUAR|VALIDATE|REINTENTAR|CANCEL/.test(action)) return 'eval';
+  return 'neutral';
+}
+
+function errorTone(code = '') {
+  if (/HTTP_5|EXCEPCION|DB_ERROR|_ERROR$/.test(code)) return 'danger';
+  if (/HTTP_403|WRONG_PASSWORD|LOCKED|INACTIVE|USER_NOT_FOUND/.test(code)) return 'session';
+  return 'update';
+}
+
+const EMPTY_FILTERS = { q: '', module: '', action: '', code: '', user_id: '', from: '', to: '' };
+
+function toCsv(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const cell = (v) => {
+    const text = String(v ?? '');
+    return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return String.fromCharCode(0xfeff) + [headers.join(';'), ...rows.map((r) => headers.map((h) => cell(r[h])).join(';'))].join('\n');
+}
 
 export default function AuditPage() {
-  const [tab, setTab]         = useState('logs');
-  const [logs, setLogs]       = useState([]);
-  const [errors, setErrors]   = useState([]);
+  const [tab, setTab] = useState('logs');
+  const [summary, setSummary] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [expanded, setExpanded] = useState(null); // id del stack_trace expandido
-  const [search, setSearch]   = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [query, setQuery] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // La búsqueda de texto espera a que el usuario deje de escribir.
+  useEffect(() => {
+    const timer = setTimeout(() => setFilters((f) => (f.q === query ? f : { ...f, q: query })), 350);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const params = useMemo(() => {
+    const p = {};
+    Object.entries(filters).forEach(([k, v]) => {
+      if (!v) return;
+      if (tab === 'logs' && k === 'code') return;
+      if (tab === 'errors' && k === 'action') return;
+      p[k] = v;
+    });
+    return p;
+  }, [filters, tab]);
+
+  const endpoint = tab === 'logs' ? '/audit/logs/' : '/audit/errors/';
+
+  useEffect(() => {
+    let cancelled = false;
+    client.get('/audit/summary/')
+      .then((res) => { if (!cancelled) setSummary(res.data); })
+      .catch(() => { if (!cancelled) setSummary(null); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => { if (cancelled) return null; setLoading(true); setError(null); setExpanded(null); return client.get(endpoint, { params: { ...params, limit: PAGE_SIZE, offset: 0 } }); })
+      .then((res) => {
+        if (cancelled || !res) return;
+        setRows(res.data.results || []);
+        setTotal(res.data.total ?? (res.data.results || []).length);
+      })
+      .catch((err) => { if (!cancelled) setError(err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [endpoint, params, reloadKey]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
     try {
-      const [logsRes, errorsRes] = await Promise.all([
-        client.get('/audit/logs/'),
-        client.get('/audit/errors/'),
-      ]);
-      setLogs(logsRes.data);
-      setErrors(errorsRes.data);
+      const res = await client.get(endpoint, { params: { ...params, limit: PAGE_SIZE, offset: rows.length } });
+      setRows((current) => [...current, ...(res.data.results || [])]);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar datos de auditoría.');
+      setError(err);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  }, []);
+  };
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const changeTab = (next) => {
+    if (next === tab) return;
+    setTab(next);
+    setRows([]);
+  };
+  const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }));
+  const clearFilters = () => { setFilters(EMPTY_FILTERS); setQuery(''); };
+  const hasFilters = Object.entries(filters).some(([k, v]) => v && !(tab === 'logs' && k === 'code') && !(tab === 'errors' && k === 'action'));
 
-  // Filtrado por búsqueda
-  const filteredLogs = logs.filter(l =>
-    !search ||
-    l.action?.toLowerCase().includes(search.toLowerCase()) ||
-    l.description?.toLowerCase().includes(search.toLowerCase()) ||
-    String(l.user_id).includes(search)
-  );
-  const filteredErrors = errors.filter(e =>
-    !search ||
-    e.error_message?.toLowerCase().includes(search.toLowerCase()) ||
-    e.error_code?.toLowerCase().includes(search.toLowerCase()) ||
-    e.function_name?.toLowerCase().includes(search.toLowerCase()) ||
-    String(e.user_id).includes(search)
-  );
+  const exportCsv = () => {
+    const data = tab === 'logs'
+      ? rows.map((r) => ({ Fecha: fmtDate(r.created_at), Usuario: r.user_name || (r.user_id ? `#${r.user_id}` : 'Sin sesión'), Rol: r.user_role || '', Módulo: moduleLabel(r.module), Acción: actionLabel(r.action), Código: r.action, Vista: r.table_name || '', Registro: r.record_id ?? '', Detalle: r.description || '' }))
+      : rows.map((r) => ({ Fecha: fmtDate(r.created_at), Usuario: r.user_name || (r.user_id ? `#${r.user_id}` : 'Sin sesión'), Módulo: moduleLabel(r.module), Código: r.error_code || '', Función: r.function_name || '', Mensaje: r.error_message || '' }));
+    const blob = new Blob([toCsv(data)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `auditoria_${tab === 'logs' ? 'acciones' : 'errores'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const options = summary?.options || { modules: [], actions: [], codes: [], users: [] };
+  const maxModule = Math.max(1, ...(summary?.by_module || []).map((m) => m.total));
+
+  const cards = [
+    { label: 'Acciones hoy', value: summary?.logs_today },
+    { label: 'Acciones · 7 días', value: summary?.logs_week },
+    { label: 'Inicios de sesión · 7 días', value: summary?.logins_week },
+    { label: 'Errores · 7 días', value: summary?.errors_week, tone: summary?.errors_week ? 'danger' : '' },
+    { label: 'Accesos rechazados · 7 días', value: summary?.denied_week, tone: summary?.denied_week ? 'warn' : '' },
+  ];
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
-      {/* Page header */}
       <div className="page-header">
         <div className="page-header-info">
-          <h1>🔐 Auditoría del Sistema</h1>
-          <p>Registro de acciones y errores — campos sensibles cifrados en BD</p>
+          <h1>Auditoría del sistema</h1>
+          <p>Registro automático de todas las acciones que cambian datos, descargas, inicios de sesión y errores. Los mensajes de error se guardan cifrados.</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary" onClick={fetchAll} disabled={loading}>🔄 Actualizar</button>
+          <button className="btn btn-secondary" onClick={() => setReloadKey((k) => k + 1)} disabled={loading}>ACTUALIZAR</button>
+          <button className="btn btn-primary" onClick={exportCsv} disabled={loading || !rows.length}
+            title={rows.length ? `Exporta las ${rows.length} filas cargadas` : 'No hay filas para exportar'}>EXPORTAR CSV</button>
         </div>
       </div>
 
-      {/* Counters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-        <div className="card card-sm" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', flex: 1 }}>
-          <span style={{ fontSize: '1.5rem' }}>✅</span>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Acciones registradas</div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--success)' }}>{loading ? '—' : logs.length}</div>
+      <div className="aud-cards">
+        {cards.map((c) => (
+          <div key={c.label} className={`aud-card${c.tone ? ` ${c.tone}` : ''}`}>
+            <div className="aud-card-value">{c.value ?? '—'}</div>
+            <div className="aud-card-label">{c.label}</div>
           </div>
-        </div>
-        <div className="card card-sm" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', flex: 1 }}>
-          <span style={{ fontSize: '1.5rem' }}>⚠️</span>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Errores registrados</div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: errors.length > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{loading ? '—' : errors.length}</div>
-          </div>
-        </div>
-        <div className="card card-sm" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', flex: 1 }}>
-          <span style={{ fontSize: '1.5rem' }}>🔒</span>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cifrado</div>
-            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary-light)' }}>Fernet AES-128</div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Tabs + Search */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', padding: 4 }}>
-          {[
-            { id: 'logs',   label: '✅ Logs de acciones', count: logs.length },
-            { id: 'errors', label: '⚠️ Errores del sistema', count: errors.length },
-          ].map(t => (
-            <button key={t.id} type="button" onClick={() => { setTab(t.id); setSearch(''); setExpanded(null); }}
-              style={{
-                padding: '8px 16px', border: 'none', borderRadius: 'calc(var(--radius) - 2px)',
-                fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
-                background: tab === t.id ? 'var(--bg-card)' : 'transparent',
-                color: tab === t.id ? 'var(--text)' : 'var(--text-subtle)',
-                boxShadow: tab === t.id ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
-              }}>
-              {t.label}
-              <span style={{ marginLeft: 8, fontSize: '0.75rem', background: 'var(--bg-tertiary)', padding: '1px 7px', borderRadius: 10, color: 'var(--text-muted)' }}>
-                {t.count}
-              </span>
-            </button>
-          ))}
-        </div>
-        <input
-          className="form-input"
-          style={{ flex: 1, minWidth: 200, maxWidth: 360 }}
-          placeholder="Buscar por acción, usuario, código..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-
-      {/* Error banner */}
-      {error && <div className="alert alert-danger" style={{ marginBottom: 20 }}>⚠️ {error}</div>}
-
-      {/* Loading */}
-      {loading ? (
-        <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
-          <div className="spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} />
-          Cargando registros de auditoría...
-        </div>
-      ) : (
-
-        /* ── LOGS TAB ── */
-        tab === 'logs' ? (
+      {summary && (
+        <div className="aud-overview">
           <div className="card">
-            {filteredLogs.length === 0 ? (
-              <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
-                <div style={{ fontSize: '2rem', marginBottom: 12 }}>📋</div>
-                <div style={{ fontWeight: 600 }}>No hay logs registrados todavía</div>
-                <div style={{ fontSize: '0.875rem', marginTop: 4 }}>Las acciones de login y registro aparecerán aquí</div>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
-                      {['ID', 'Fecha', 'Usuario ID', 'Módulo', 'Acción', 'Tabla', 'Descripción'].map(h => (
-                        <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-subtle)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.map((l, i) => (
-                      <tr key={l.id} style={{ borderBottom: '1px solid var(--border-light)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-subtle)', fontFamily: 'monospace' }}>#{l.id}</td>
-                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{fmtDate(l.created_at)}</td>
-                        <td style={{ padding: '10px 14px' }}>
-                          {l.user_id
-                            ? <span style={{ background: 'var(--primary-subtle)', color: 'var(--primary-light)', padding: '2px 8px', borderRadius: 99, fontSize: '0.75rem', fontWeight: 600 }}>UID {l.user_id}</span>
-                            : <span style={{ color: 'var(--text-subtle)' }}>—</span>
-                          }
-                        </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{l.module}</td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <span style={{ fontWeight: 700, color: ACTION_COLORS[l.action] || 'var(--text)', padding: '2px 10px', borderRadius: 99, background: 'var(--bg-tertiary)', fontSize: '0.75rem' }}>
-                            {l.action}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{l.table_name || '—'}</td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.description || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="aud-subtitle">Actividad por módulo · últimos 7 días</div>
+            {(summary.by_module || []).length === 0 ? <p className="aud-muted">Sin actividad en los últimos 7 días.</p> : (
+              <ul className="aud-bars">
+                {summary.by_module.map((m) => (
+                  <li key={m.module}>
+                    <button type="button" onClick={() => { changeTab('logs'); setFilter('module', m.module); }} title={`Ver solo ${moduleLabel(m.module)}`}>
+                      <span className="aud-bar-label">{moduleLabel(m.module)}</span>
+                      <span className="aud-bar-track"><span style={{ width: `${(m.total / maxModule) * 100}%` }} /></span>
+                      <span className="aud-bar-value">{m.total}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        ) : (
-
-        /* ── ERRORS TAB ── */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {filteredErrors.length === 0 ? (
-              <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
-                <div style={{ fontSize: '2rem', marginBottom: 12 }}>✅</div>
-                <div style={{ fontWeight: 600 }}>No hay errores registrados</div>
-                <div style={{ fontSize: '0.875rem', marginTop: 4 }}>El sistema funciona correctamente</div>
-              </div>
-            ) : (
-              filteredErrors.map(e => (
-                <div key={e.id} className="card" style={{ padding: '16px 20px', borderLeft: `3px solid ${ERROR_CODE_COLORS[e.error_code] || 'var(--border)'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* Header row */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: '0.6875rem', color: 'var(--text-subtle)' }}>#{e.id}</span>
-                        {e.error_code && (
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: 'var(--bg-tertiary)', color: ERROR_CODE_COLORS[e.error_code] || 'var(--text-muted)' }}>
-                            {e.error_code}
-                          </span>
-                        )}
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{e.module}/{e.function_name}</span>
-                        {e.user_id && (
-                          <span style={{ fontSize: '0.75rem', background: 'var(--primary-subtle)', color: 'var(--primary-light)', padding: '2px 8px', borderRadius: 99 }}>UID {e.user_id}</span>
-                        )}
-                      </div>
-                      {/* Message */}
-                      <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                        {e.error_message}
-                      </div>
-                      {/* Timestamp */}
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{fmtDate(e.created_at)}</div>
-                    </div>
-                    {/* Stack trace toggle */}
-                    {e.stack_trace && (
-                      <button className="btn btn-secondary btn-sm"
-                        onClick={() => setExpanded(expanded === e.id ? null : e.id)}
-                        style={{ flexShrink: 0, fontSize: '0.75rem' }}>
-                        {expanded === e.id ? '▲ Ocultar trace' : '▼ Ver stack trace'}
-                      </button>
-                    )}
-                  </div>
-                  {/* Stack trace expandido */}
-                  {expanded === e.id && e.stack_trace && (
-                    <pre style={{
-                      marginTop: 12, padding: '12px 14px',
-                      background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)',
-                      fontSize: '0.6875rem', color: 'var(--text-muted)',
-                      overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                      borderLeft: '3px solid var(--border)',
-                      maxHeight: 340, overflowY: 'auto',
-                    }}>
-                      {e.stack_trace}
-                    </pre>
-                  )}
-                </div>
-              ))
+          <div className="card">
+            <div className="aud-subtitle">Usuarios más activos · últimos 7 días</div>
+            {(summary.top_users || []).length === 0 ? <p className="aud-muted">Sin actividad de usuarios.</p> : (
+              <ol className="aud-top">
+                {summary.top_users.map((u) => (
+                  <li key={u.user_id}>
+                    <button type="button" onClick={() => { changeTab('logs'); setFilter('user_id', String(u.user_id)); }} title="Ver solo sus acciones">
+                      <span>{u.name || `Usuario #${u.user_id}`}</span><strong>{u.total}</strong>
+                    </button>
+                  </li>
+                ))}
+              </ol>
             )}
           </div>
-        )
+        </div>
       )}
 
-      {/* Encryption badge */}
-      <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--primary-subtle)', borderRadius: 'var(--radius)', border: '1px solid rgba(99,102,241,0.2)', width: 'fit-content' }}>
-        <span>🔐</span>
-        <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--primary-light)' }}>error_message</strong> y <strong style={{ color: 'var(--primary-light)' }}>stack_trace</strong> se almacenan cifrados en BD con <strong>Fernet AES-128-CBC</strong> y se descifran en tiempo de consulta.
-        </span>
+      <div className="ind-tabs" role="tablist" aria-label="Tipo de registro" style={{ marginTop: 4 }}>
+        <button type="button" role="tab" aria-selected={tab === 'logs'} className={`ind-tab${tab === 'logs' ? ' active' : ''}`} onClick={() => changeTab('logs')}>
+          Acciones<span className="ind-tab-count">{summary?.logs_total ?? '—'}</span>
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'errors'} className={`ind-tab${tab === 'errors' ? ' active' : ''}`} onClick={() => changeTab('errors')}>
+          Errores y accesos rechazados<span className="ind-tab-count">{summary?.errors_total ?? '—'}</span>
+        </button>
+      </div>
+
+      <div className="aud-filters">
+        <input className="form-input aud-search" placeholder={tab === 'logs' ? 'Buscar en detalle, acción o usuario…' : 'Buscar en mensaje, código o usuario…'}
+          value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar" />
+        <select className="form-input" value={filters.module} onChange={(e) => setFilter('module', e.target.value)} aria-label="Módulo">
+          <option value="">Todos los módulos</option>
+          {options.modules.map((m) => <option key={m} value={m}>{moduleLabel(m)}</option>)}
+        </select>
+        {tab === 'logs' ? (
+          <select className="form-input" value={filters.action} onChange={(e) => setFilter('action', e.target.value)} aria-label="Acción">
+            <option value="">Todas las acciones</option>
+            {options.actions.map((a) => <option key={a} value={a}>{actionLabel(a)}</option>)}
+          </select>
+        ) : (
+          <select className="form-input" value={filters.code} onChange={(e) => setFilter('code', e.target.value)} aria-label="Código">
+            <option value="">Todos los códigos</option>
+            {options.codes.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        <select className="form-input" value={filters.user_id} onChange={(e) => setFilter('user_id', e.target.value)} aria-label="Usuario">
+          <option value="">Todos los usuarios</option>
+          {options.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <label className="aud-date">Desde<input type="date" className="form-input" value={filters.from} onChange={(e) => setFilter('from', e.target.value)} /></label>
+        <label className="aud-date">Hasta<input type="date" className="form-input" value={filters.to} onChange={(e) => setFilter('to', e.target.value)} /></label>
+        {hasFilters && <button type="button" className="btn btn-secondary btn-sm" onClick={clearFilters}>LIMPIAR FILTROS</button>}
+      </div>
+
+      <ErrorNotice error={error} fallback="No se pudieron cargar los registros de auditoría." onRetry={() => setReloadKey((k) => k + 1)} onDismiss={() => setError(null)} style={{ marginBottom: 16 }} />
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="aud-table-head">
+          <span>{loading ? 'Cargando…' : `${rows.length} de ${total} registros`}</span>
+        </div>
+        {loading ? (
+          <div className="empty-state" aria-busy="true"><div className="spinner" style={{ width: 28, height: 28, margin: '0 auto 12px' }} /><h4>Cargando registros…</h4></div>
+        ) : rows.length === 0 ? (
+          <div className="empty-state"><h4>Sin registros</h4><p>{hasFilters ? 'No hay registros con estos filtros.' : 'Todavía no hay registros.'}</p></div>
+        ) : (
+          <div className="table-wrapper" style={{ border: 0, borderRadius: 0 }}>
+            <table className="table aud-table">
+              <thead>
+                {tab === 'logs'
+                  ? <tr><th>Fecha</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Detalle</th></tr>
+                  : <tr><th>Fecha</th><th>Usuario</th><th>Módulo</th><th>Código</th><th>Mensaje</th></tr>}
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const open = expanded === r.id;
+                  const user = (
+                    <td className="aud-user">
+                      {r.user_name ? <><strong>{r.user_name}</strong>{r.user_role && <span>{r.user_role}</span>}</> : <span>{r.user_id ? `Usuario #${r.user_id}` : 'Sin sesión'}</span>}
+                    </td>
+                  );
+                  return tab === 'logs' ? (
+                    <tr key={r.id}>
+                      <td className="aud-date-cell">{fmtDate(r.created_at)}</td>
+                      {user}
+                      <td><span className="aud-module">{moduleLabel(r.module)}</span></td>
+                      <td><span className={`aud-chip tone-${actionTone(r.action)}`} title={r.action}>{actionLabel(r.action)}</span>
+                        {r.record_id != null && <div className="aud-record">Registro #{r.record_id}</div>}</td>
+                      <td className="aud-detail">{r.description || '—'}</td>
+                    </tr>
+                  ) : (
+                    <Fragment key={r.id}>
+                      <tr>
+                        <td className="aud-date-cell">{fmtDate(r.created_at)}</td>
+                        {user}
+                        <td><span className="aud-module">{moduleLabel(r.module)}</span>{r.function_name && <div className="aud-record">{r.function_name}</div>}</td>
+                        <td><span className={`aud-chip tone-${errorTone(r.error_code)}`}>{r.error_code || '—'}</span></td>
+                        <td className="aud-detail">
+                          {r.error_message}
+                          {r.stack_trace && (
+                            <button type="button" className="eval-link-btn" style={{ display: 'block', marginTop: 4 }} onClick={() => setExpanded(open ? null : r.id)}>
+                              {open ? 'Ocultar traza' : 'Ver traza técnica'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {open && (
+                        <tr><td colSpan={5}><pre className="aud-trace">{r.stack_trace}</pre></td></tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!loading && rows.length < total && (
+          <div style={{ padding: 14, textAlign: 'center', borderTop: '1px solid var(--border)' }}>
+            <button className="btn btn-secondary btn-sm" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? 'CARGANDO…' : `CARGAR ${Math.min(PAGE_SIZE, total - rows.length)} MÁS`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

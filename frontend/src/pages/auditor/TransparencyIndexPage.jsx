@@ -5,7 +5,7 @@ import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
 import { validationApi } from '../../api/validation';
-import { getScoreColor, getScoreLabel } from '../../utils/score';
+import { getScoreColor, getScoreInk, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 import {
   CartesianGrid,
@@ -240,7 +240,7 @@ export default function TransparencyIndexPage() {
                   </div>
                 ) : <ScoreCard score={integrated} size={90} label="Índice final ITI" />}
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated), lineHeight: 1 }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreInk(integrated), lineHeight: 1 }}>
                     {integrated == null ? 'Pendiente' : getScoreLabel(integrated)}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: 4 }}>Clasificación del ITI</div>
@@ -308,7 +308,7 @@ export default function TransparencyIndexPage() {
                     <div key={item.label} style={{ marginBottom: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, gap: 10 }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{item.label}</span>
-                        <span style={{ fontWeight: 900, color: item.score == null ? 'var(--warning)' : getScoreColor(item.score) }}>{item.score == null ? 'Pendiente' : `${item.score}%`}</span>
+                        <span style={{ fontWeight: 900, color: item.score == null ? 'var(--warning)' : getScoreInk(item.score) }}>{item.score == null ? 'Pendiente' : `${item.score}%`}</span>
                       </div>
                       <div className="progress-bar">
                         <div className="progress-fill" style={{ width: `${item.score || 0}%`, background: item.score == null ? 'var(--warning)' : getScoreColor(item.score) }} />
@@ -323,7 +323,7 @@ export default function TransparencyIndexPage() {
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontWeight: 700 }}>Documentos evaluados</div>
                   </div>
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated) }}>{integrated == null ? 'Pendiente' : getScoreLabel(integrated)}</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreInk(integrated) }}>{integrated == null ? 'Pendiente' : getScoreLabel(integrated)}</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontWeight: 700 }}>Clasificación</div>
                   </div>
                 </div>
@@ -396,7 +396,7 @@ export default function TransparencyIndexPage() {
                           style={{ width: `${Math.max(0, Math.min(item.score, 100))}%`, background: getScoreColor(item.score) }}
                         />
                       </div>
-                      <strong className="dimension-bar-score" style={{ color: getScoreColor(item.score) }}>
+                      <strong className="dimension-bar-score" style={{ color: getScoreInk(item.score) }}>
                         {Number(item.score).toFixed(1).replace('.0', '')}%
                       </strong>
                     </div>
@@ -423,17 +423,17 @@ export default function TransparencyIndexPage() {
                 <tbody>
                   <tr>
                     <td>Transparencia nacional LOTAIP</td>
-                    <td><span style={{ fontWeight: 800, color: getScoreColor(national) }}>{national}%</span></td>
+                    <td><span style={{ fontWeight: 800, color: getScoreInk(national) }}>{national}%</span></td>
                     <td><Badge status={getScoreLabel(national)} /></td>
                   </tr>
                   <tr>
                     <td>Componente complementario internacional</td>
-                    <td><span style={{ fontWeight: 800, color: internationalScore == null ? 'var(--warning)' : getScoreColor(internationalScore) }}>{internationalScore == null ? 'Pendiente' : `${Number(internationalScore).toFixed(2)}%`}</span></td>
+                    <td><span style={{ fontWeight: 800, color: internationalScore == null ? 'var(--warning)' : getScoreInk(internationalScore) }}>{internationalScore == null ? 'Pendiente' : `${Number(internationalScore).toFixed(2)}%`}</span></td>
                     <td><Badge status={internationalScore == null ? 'Pendiente' : getScoreLabel(internationalScore)} /></td>
                   </tr>
                   <tr>
                     <td><strong>Índice de Transparencia Institucional (resultado único)</strong></td>
-                    <td><span style={{ fontWeight: 800, color: integrated == null ? 'var(--warning)' : getScoreColor(integrated) }}>{integrated == null ? 'Pendiente' : `${integrated}%`}</span></td>
+                    <td><span style={{ fontWeight: 800, color: integrated == null ? 'var(--warning)' : getScoreInk(integrated) }}>{integrated == null ? 'Pendiente' : `${integrated}%`}</span></td>
                     <td><Badge status={integrated == null ? 'Provisional' : getScoreLabel(integrated)} /></td>
                   </tr>
                 </tbody>

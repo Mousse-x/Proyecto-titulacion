@@ -7,6 +7,8 @@ import { validationApi } from '../../api/validation';
 import { useAuth } from '../../context/AuthContext';
 import LotaipLinkReviewQueue from '../../components/LotaipLinkReviewQueue';
 import IndexSummary from '../../components/evaluation/IndexSummary';
+import DimensionBars from '../../components/evaluation/DimensionBars';
+import { SCORE_SCALE } from '../../utils/score';
 import UniversityLogo from '../../components/common/UniversityLogo';
 import LotaipPanel from '../../components/evaluation/LotaipPanel';
 import InternationalPanel from '../../components/evaluation/InternationalPanel';
@@ -116,6 +118,7 @@ export default function ValidationPage({ readOnly = false }) {
   const [results, setResults] = useState([]);
   const [numerals, setNumerals] = useState([]);
   const [activeTab, setActiveTab] = useState('lotaip');
+  const tabsRef = useRef(null);
   const [retryingIndicator, setRetryingIndicator] = useState(null);
   const [clearingDimension, setClearingDimension] = useState(null);
   const [error, setError] = useState(null);
@@ -454,61 +457,67 @@ export default function ValidationPage({ readOnly = false }) {
   const webIndicators = (integrated?.indicators || []).filter((indicator) => indicator.classification !== 'NACIONAL');
   const canReview = [1, 4].includes(Number(user?.role_id));
 
+  /* Desde las tarjetas de índice: abre la pestaña y desplaza hasta ella. */
+  const selectTabAndScroll = (tab) => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      tabsRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    }, 0);
+  };
+
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
       {/* Page Header */}
       <div className="page-header">
         <div className="page-header-info">
-          <h1>🔍 Evaluación de transparencia</h1>
-          <p>{readOnly ? 'Consulta separada de resultados nacionales e internacionales' : 'Evalúa por separado LOTAIP y los complementos internacionales antes de calcular el ITI'}
-            <Link to="/ayuda#indice" className="info-button" title="¿Qué es el ITI y cómo se calcula?" aria-label="Ayuda: qué es el ITI">?</Link>
-          </p>
+          <h1>EVALUACIÓN DE TRANSPARENCIA</h1>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="search-bar" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div className="filter-field" style={{ flex: '2 1 260px', maxWidth: 360 }}>
+      <div className="eval-filters">
+        <div className="filter-field eval-filter-univ">
           <label htmlFor="val-univ">Universidad</label>
           <select id="val-univ" className="form-input"
             value={selectedUniv} onChange={e => setSelectedUniv(e.target.value)} disabled={lockUniversitySelect || validating}>
-            <option value="">— Selecciona una universidad —</option>
+            <option value="">Selecciona una universidad</option>
             {universities.map(u => (
               <option key={u.id} value={u.id}>{u.name} — {u.full_name}</option>
             ))}
           </select>
         </div>
-        <div className="filter-field" style={{ flex: '1 1 150px', maxWidth: 200 }}>
-          <label htmlFor="val-period">Período (año)</label>
+        <div className="filter-field">
+          <label htmlFor="val-period">Año</label>
           <select id="val-period" className="form-input"
             value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)} disabled={validating}>
-            <option value="">— Selecciona el año —</option>
+            <option value="">Selecciona</option>
             {periods.map(p => (
-              <option key={p.id} value={p.id}>Año {p.year}</option>
+              <option key={p.id} value={p.id}>{p.year}</option>
             ))}
           </select>
         </div>
-        <div className="filter-field" style={{ flex: '1 1 150px', maxWidth: 200 }}>
-          <label htmlFor="val-month">Mes (opcional)</label>
+        <div className="filter-field">
+          <label htmlFor="val-month">Mes</label>
           <select id="val-month" className="form-input"
             value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} disabled={validating}>
-            <option value="">Todos los meses</option>
+            <option value="">Todo el año</option>
             {MONTHS.map(m => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
         </div>
-        {selectedUniv && selectedPeriod && (
-          <span className={`tag${documentCount === 0 && !documentsLoading ? ' tag-warning' : ''}`} style={{ alignSelf: 'center' }} aria-live="polite">
-            {documentsLoading ? 'Verificando documentos...' : `${documentCount || 0} documentos disponibles`}
-          </span>
-        )}
-        {results.length > 0 && (
-          <button className="btn btn-secondary" onClick={loadResults} disabled={loading}>
-            ↻ Actualizar
-          </button>
-        )}
-        {validating && <span className="field-hint" style={{ alignSelf: 'center' }}>Los filtros se bloquean mientras la evaluación está en curso.</span>}
+        <div className="eval-filters-side">
+          {selectedUniv && selectedPeriod && (
+            <span className={`eval-doc-pill${documentCount === 0 && !documentsLoading ? ' empty' : ''}`} aria-live="polite">
+              <span className="eval-doc-dot" aria-hidden="true" />
+              {documentsLoading
+                ? 'Verificando…'
+                : <><strong>{(documentCount || 0).toLocaleString('es-EC')}</strong> documentos</>}
+            </span>
+          )}
+        </div>
+        {validating && <div className="field-hint eval-filters-hint">Los filtros se bloquean mientras la evaluación está en curso.</div>}
       </div>
 
       {selectedUniv && selectedPeriod && (
@@ -564,10 +573,11 @@ export default function ValidationPage({ readOnly = false }) {
       ) : (
         <>
           {summary && (
-            <IndexSummary lotaip={lotaip} international={internationalComponent} integrated={integrated} />
+            <IndexSummary lotaip={lotaip} international={internationalComponent} integrated={integrated}
+              activeTab={activeTab} onSelect={selectTabAndScroll} />
           )}
 
-          <div className="eval-tabs-row">
+          <div className="eval-tabs-row" ref={tabsRef}>
             <div className="tabs">
               <button className={`tab ${activeTab === 'lotaip' ? 'active' : ''}`} onClick={() => setActiveTab('lotaip')} aria-pressed={activeTab === 'lotaip'}
                 title="Componente nacional: 24 numerales del art. 19 de la LOTAIP">
@@ -576,6 +586,10 @@ export default function ValidationPage({ readOnly = false }) {
               <button className={`tab ${activeTab === 'international' ? 'active' : ''}`} onClick={() => setActiveTab('international')} aria-pressed={activeTab === 'international'}
                 title="Componente complementario: indicadores de referentes internacionales">
                 Internacional<span className="eval-tab-count">{webIndicators.length}</span>
+              </button>
+              <button className={`tab ${activeTab === 'combined' ? 'active' : ''}`} onClick={() => setActiveTab('combined')} aria-pressed={activeTab === 'combined'}
+                title="Índice de Transparencia Integrado: cumplimiento de las 8 dimensiones">
+                Combinado · ITI<span className="eval-tab-count">{integrated?.dimension_scores?.length || 0}</span>
               </button>
             </div>
           </div>
@@ -597,7 +611,7 @@ export default function ValidationPage({ readOnly = false }) {
                     <button className="btn btn-primary" onClick={() => handleValidate('lotaip')}
                       title={documentCount === 0 ? 'No hay documentos para evaluar en esta selección' : validating ? 'Ya hay una evaluación en curso' : undefined}
                       disabled={!selectedUniv || !selectedPeriod || validating || documentsLoading || documentCount === 0}>
-                      {validating && validationScope === 'lotaip' ? '⏳ Evaluando LOTAIP...' : '📄 Evaluar solo LOTAIP'}
+                      {validating && validationScope === 'lotaip' ? 'EVALUANDO LOTAIP…' : 'EVALUAR LOTAIP'}
                     </button>
                   </div>
                 </div>
@@ -610,9 +624,9 @@ export default function ValidationPage({ readOnly = false }) {
                 universityId={selectedUniv} periodId={selectedPeriod} month={selectedMonth}
                 refreshKey={results} onDecided={loadResults}
               />}
-              <LotaipPanel packages={lotaipPackages} numerals={numerals} summary={summary} readOnly={readOnly}
+              <LotaipPanel packages={lotaipPackages} numerals={numerals} readOnly={readOnly}
                 canReview={canReview} onValidateOne={handleValidateOne} onSaved={loadResults}
-                emptyText={readOnly ? 'No hay resultados LOTAIP para la selección actual.' : 'Haz clic en “Evaluar solo LOTAIP” para ejecutar la evaluación nacional.'} />
+                emptyText={readOnly ? 'No hay resultados LOTAIP para la selección actual.' : 'Haz clic en “Evaluar LOTAIP” para ejecutar la evaluación nacional.'} />
             </Fragment>
           )}
 
@@ -627,7 +641,7 @@ export default function ValidationPage({ readOnly = false }) {
                   <button className="btn btn-primary" onClick={() => handleValidate('international')}
                     title={validating ? 'Ya hay una evaluación en curso' : 'Busca y verifica evidencia web con apoyo de IA (puede tardar varios minutos)'}
                     disabled={!selectedUniv || !selectedPeriod || validating}>
-                    {validating && validationScope === 'international' ? '⏳ Evaluando internacionales...' : '🌐 Evaluar solo internacionales'}
+                    {validating && validationScope === 'international' ? 'EVALUANDO INTERNACIONALES…' : 'EVALUAR INTERNACIONALES'}
                   </button>
                 </div>
               )}
@@ -638,8 +652,28 @@ export default function ValidationPage({ readOnly = false }) {
               <InternationalPanel indicators={webIndicators} dimensions={internationalComponent?.dimensions}
                 readOnly={readOnly} retrying={retryingIndicator} validating={validating}
                 clearingDimension={clearingDimension} onRetry={handleRetryInternational} onClearCache={handleClearInternationalCache}
-                emptyText={readOnly ? 'No hay indicadores internacionales evaluados para esta selección.' : 'Haz clic en “Evaluar solo internacionales” para buscar y verificar evidencia web.'} />
+                emptyText={readOnly ? 'No hay indicadores internacionales evaluados para esta selección.' : 'Haz clic en “Evaluar internacionales” para buscar y verificar evidencia web.'} />
             </Fragment>
+          )}
+
+          {activeTab === 'combined' && (
+            <div className="card eval-section">
+              <div className="eval-iti-head">
+                <div>
+                  <div className="eval-section-title">Cumplimiento por dimensión</div>
+                  <div className="eval-iti-score">
+                    <strong>{integrated?.index_percent != null ? `${Number(integrated.index_percent).toLocaleString('es-EC', { maximumFractionDigits: 1 })} %` : '—'}</strong>
+                    <span>ITI{integrated?.is_provisional ? ' · provisional' : ''}</span>
+                  </div>
+                </div>
+              </div>
+              <DimensionBars dimensions={integrated?.dimension_scores || []} />
+              <div className="eval-iti-legend" aria-label="Escala de cumplimiento">
+                {SCORE_SCALE.map((level) => (
+                  <span key={level.grade}><i style={{ background: level.color }} />{level.grade} · {level.label}{Number.isFinite(level.min) ? ` (≥ ${level.min})` : ' (< 20)'}</span>
+                ))}
+              </div>
+            </div>
           )}
         </>
       )}

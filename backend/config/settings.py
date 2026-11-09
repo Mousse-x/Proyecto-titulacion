@@ -109,6 +109,7 @@ MIDDLEWARE = [
     # ─── Seguridad personalizada (HT-08) ──────────────────────
     "core.middleware.RateLimitMiddleware",
     "core.middleware.JWTAuthMiddleware",
+    "core.audit.AuditMiddleware",
 ]
 
 ROOT_URLCONF = 'config.urls'

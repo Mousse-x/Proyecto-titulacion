@@ -2,7 +2,7 @@ import TrendLine from '../../components/charts/TrendLine';
 import RankingBar from '../../components/charts/RankingBar';
 import PeriodSelect, { SimulatedNotice } from '../../components/common/PeriodSelect';
 import useDashboardStats from '../../hooks/useDashboardStats';
-import { getScoreColor } from '../../utils/score';
+import { getScoreInk } from '../../utils/score';
 
 // Datos vacíos por defecto mientras no hay info en BD
 const EMPTY_STATS = {
@@ -162,7 +162,7 @@ export default function AdminDashboard() {
                     <div style={{ fontWeight: 700 }}>{u.name}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</div>
                   </div>
-                  <div style={{ fontWeight: 800, color: getScoreColor(u.integrated_transparency_score) }}>
+                  <div style={{ fontWeight: 800, color: getScoreInk(u.integrated_transparency_score) }}>
                     {Number(u.integrated_transparency_score).toFixed(2)}%
                   </div>
                 </div>

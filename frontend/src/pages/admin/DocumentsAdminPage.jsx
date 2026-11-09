@@ -493,11 +493,11 @@ export default function DocumentsAdminPage() {
           <p>Gestiona los documentos por universidad, año, mes y literal</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary" onClick={openScraper} title="Descarga automáticamente los literales publicados en el Portal Nacional de Transparencia">
-            🌐 Importar desde portal DPE
+          <button className="btn btn-primary" onClick={openScraper} title="Descarga automáticamente los literales publicados en el Portal Nacional de Transparencia">
+            IMPORTAR DESDE PORTAL DPE
           </button>
           <button className="btn btn-primary" onClick={openUpload}>
-            📤 Subir documento
+            SUBIR DOCUMENTO
           </button>
         </div>
       </div>
@@ -525,10 +525,10 @@ export default function DocumentsAdminPage() {
           <option value="">Todos los meses</option>
           {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
         </select>
-        <button className="btn btn-secondary" onClick={loadDocs}>↻ Actualizar</button>
+        <button className="btn btn-secondary" onClick={loadDocs}>ACTUALIZAR</button>
         <button className="btn btn-secondary" onClick={() => { setSearchTerm(''); setFilterUniv(''); setFilterMonth(''); setFolderPath([]); }}
           disabled={!searchTerm && !filterUniv && !filterMonth && !folderPath.length}>
-          ✕ Limpiar filtros
+          LIMPIAR FILTROS
         </button>
       </div>
 
@@ -786,7 +786,7 @@ export default function DocumentsAdminPage() {
                   Cancelar
                 </button>
                 <button className="btn btn-primary" onClick={handleUpload}>
-                  📤 {replacingDoc ? 'Reemplazar documento' : 'Subir documento'}
+                  {replacingDoc ? 'REEMPLAZAR DOCUMENTO' : 'SUBIR DOCUMENTO'}
                 </button>
               </div>
             )}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { getScoreColor } from '../../utils/score';
 import { useNavigate } from 'react-router-dom';
 import PeriodSelect, { SimulatedNotice } from '../../components/common/PeriodSelect';
 import useDashboardStats from '../../hooks/useDashboardStats';
@@ -13,12 +14,7 @@ const EMPTY_STATS = {
   ranking: [],
 };
 
-function getScoreTone(score) {
-  if (score >= 85) return '#2ecc35';
-  if (score >= 70) return '#8bcf25';
-  if (score >= 50) return '#f2b705';
-  return '#cf2027';
-}
+const getScoreTone = (score) => getScoreColor(score);
 
 function UniversityMark({ university }) {
   const logo = getUniversityLogo(university);

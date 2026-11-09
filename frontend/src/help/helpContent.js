@@ -87,8 +87,8 @@ const VALIDATION_HELP = {
   purpose: 'Ejecuta y consulta por separado la evaluación nacional (LOTAIP) y la internacional; juntas forman el ITI.',
   steps: [
     'Elige universidad, año y mes (opcional). Se muestra cuántos documentos hay disponibles.',
-    '«Evaluar solo LOTAIP» analiza los documentos nacionales y calcula CTA, ETA, RP, CI y SITA.',
-    '«Evaluar solo internacionales» busca y verifica evidencia web con apoyo de IA para los 34 indicadores complementarios.',
+    '«Evaluar LOTAIP» analiza los documentos nacionales y calcula CTA, ETA, RP, CI y SITA.',
+    '«Evaluar internacionales» busca y verifica evidencia web con apoyo de IA para los 34 indicadores complementarios.',
     'Durante la evaluación verás la fase, el porcentaje y los subprocesos. Puedes detenerla en cualquier momento.',
     'Al terminar aparece un aviso de «Completada», «Detenida» o «Fallida». Si falla, pulsa «Reintentar».',
   ],
@@ -129,7 +129,8 @@ const REPORTS_HELP = {
   title: 'Reportes',
   purpose: 'Genera y exporta informes con los datos reales del sistema.',
   steps: [
-    'Elige el tipo de reporte, la universidad y el mes.',
+    'Elige el tipo de reporte: Ranking ITI, Cumplimiento por dimensión, Evaluación LOTAIP por literal, Evaluación internacional, Documentos o Catálogo de indicadores.',
+    'Selecciona el período; los reportes por universidad piden elegir una universidad y el mes solo aplica donde tiene sentido.',
     'Revisa la vista previa: muestra exactamente lo que se exportará.',
     'Pulsa «Exportar». Si no hay datos para los filtros, el botón se desactiva y se explica el motivo.',
   ],
@@ -173,8 +174,8 @@ export const PAGE_HELP = {
   },
   indicators: {
     title: 'Indicadores de transparencia',
-    purpose: 'Catálogo de los 58 indicadores: nacionales (LOTAIP), mixtos y complementarios.',
-    steps: ['Filtra por dimensión o tipo para encontrar un indicador.', 'Edita su nombre o plantilla; eliminar pide confirmación.'],
+    purpose: 'Catálogo de indicadores en tres pestañas: documentos base LOTAIP (con su plantilla), mixtos y complementarios.',
+    steps: ['Elige la pestaña del tipo de indicador.', 'En LOTAIP, pulsa la etiqueta de la columna «Plantilla base» para subir, descargar o reemplazar la plantilla.', 'Mixtos y complementarios se agrupan por dimensión: abre una dimensión o usa el buscador; eliminar pide confirmación.'],
   },
   weightings: {
     title: 'Ponderaciones',

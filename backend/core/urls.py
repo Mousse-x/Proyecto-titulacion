@@ -7,7 +7,7 @@ from .views.user_views import list_users, user_detail, list_roles
 from .views.university_views import list_universities, university_detail
 from .views.indicator_views import list_indicators, indicator_detail, indicator_template_view
 from .views.dashboard_views import system_stats
-from .views.audit_views import list_audit_errors, list_audit_logs
+from .views.audit_views import audit_event, audit_summary, list_audit_errors, list_audit_logs
 from .views.feedback_views import submit_feedback, list_user_feedback, user_feedback_detail
 from .views.evidence_views import (
     list_evidences, evidence_detail, download_evidence, scrape_espoch,
@@ -70,6 +70,8 @@ urlpatterns = [
     # Auditoría — solo admin
     path("audit/errors/", list_audit_errors, name="list_audit_errors"),
     path("audit/logs/",   list_audit_logs,   name="list_audit_logs"),
+    path("audit/summary/", audit_summary,    name="audit_summary"),
+    path("audit/events/",  audit_event,      name="audit_event"),
 
     # Evidencias / Documentos
     path("evidences/",                      list_evidences,    name="list_evidences"),
