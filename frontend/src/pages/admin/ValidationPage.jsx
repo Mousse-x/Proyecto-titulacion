@@ -7,6 +7,7 @@ import { validationApi } from '../../api/validation';
 import { useAuth } from '../../context/AuthContext';
 import LotaipLinkReviewQueue from '../../components/LotaipLinkReviewQueue';
 import IndexSummary from '../../components/evaluation/IndexSummary';
+import UniversityLogo from '../../components/common/UniversityLogo';
 import LotaipPanel from '../../components/evaluation/LotaipPanel';
 import InternationalPanel from '../../components/evaluation/InternationalPanel';
 import '../../components/evaluation/evaluation.css';
@@ -449,7 +450,6 @@ export default function ValidationPage({ readOnly = false }) {
   const pendingPackages = pendingLotaipPackages(results);
   const integrated = summary?.integrated || null;
   const componentScores = integrated?.component_scores || {};
-  const nationalComponent = componentScores.national || null;
   const internationalComponent = componentScores.international || null;
   const webIndicators = (integrated?.indicators || []).filter((indicator) => indicator.classification !== 'NACIONAL');
   const canReview = [1, 4].includes(Number(user?.role_id));
@@ -512,14 +512,23 @@ export default function ValidationPage({ readOnly = false }) {
       </div>
 
       {selectedUniv && selectedPeriod && (
-        <div className="eval-context" style={{ marginBottom: 16, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          Mostrando: <strong style={{ color: 'var(--text)' }}>{contextLabel}</strong>
-          {selectedUniv && (
-            <Link to={`${user?.role_id === 1 ? '/admin' : user?.role_id === 4 ? '/auditor' : '/university'}/documents?university_id=${selectedUniv}`}
-              style={{ marginLeft: 12, fontWeight: 600 }}>
-              Ver documentos de esta universidad →
-            </Link>
-          )}
+        <div className="eval-uni-header">
+          <UniversityLogo university={selectedUniversity || {}} size={84} />
+          <div style={{ minWidth: 0, flex: '1 1 280px' }}>
+            <h2>{selectedUniversity?.full_name || selectedUniversity?.name || 'Universidad'}</h2>
+            <div className="eval-uni-sub">
+              <span>
+                {[selectedUniversity?.name,
+                  selectedPeriodObj ? `Año ${selectedPeriodObj.year}` : null,
+                  selectedMonth ? MONTHS.find((m) => String(m.value) === String(selectedMonth))?.label : 'Todos los meses',
+                ].filter(Boolean).join(' · ')}
+              </span>
+              <Link to={`${user?.role_id === 1 ? '/admin' : user?.role_id === 4 ? '/auditor' : '/university'}/documents?university_id=${selectedUniv}`}
+                style={{ fontWeight: 600 }}>
+                Ver documentos de esta universidad →
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 
@@ -555,8 +564,7 @@ export default function ValidationPage({ readOnly = false }) {
       ) : (
         <>
           {summary && (
-            <IndexSummary lotaip={lotaip} summary={summary} national={nationalComponent}
-              international={internationalComponent} integrated={integrated} documentTotal={results.length} />
+            <IndexSummary lotaip={lotaip} international={internationalComponent} integrated={integrated} />
           )}
 
           <div className="eval-tabs-row">

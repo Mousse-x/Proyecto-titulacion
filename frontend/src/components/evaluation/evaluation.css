@@ -1,7 +1,9 @@
 /* Página de evaluación de transparencia: resumen, paneles LOTAIP e internacional. */
 
 .eval-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.eval-index-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center; }
+.eval-index-card { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 16px; text-align: center; animation: eval-card-in .5s ease both; }
+@keyframes eval-card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .eval-index-card { animation: none; } }
 .eval-index-card.featured { border-color: var(--primary); box-shadow: var(--shadow-glow); }
 .eval-index-kicker { font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--text-subtle); font-weight: 700; }
 .eval-index-title { font-size: 1rem; font-weight: 800; margin: 2px 0 8px; color: var(--text); }
@@ -10,7 +12,13 @@
 
 .eval-ring { position: relative; display: grid; place-items: center; flex-shrink: 0; }
 .eval-ring svg { position: absolute; inset: 0; }
-.eval-ring-value { position: relative; font-size: 1.05rem; font-weight: 800; }
+.eval-ring-value { position: relative; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.eval-index-card .eval-index-title { font-size: 1.05rem; margin: 0; }
+.eval-index-card .eval-ring-value { font-size: 1.7rem; }
+
+.eval-uni-header { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; flex-wrap: wrap; }
+.eval-uni-header h2 { font-size: clamp(1.35rem, 2.6vw, 2rem); font-weight: 800; line-height: 1.15; margin: 0; color: var(--text); }
+.eval-uni-sub { margin-top: 6px; font-size: 0.88rem; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 
 .eval-meter { display: grid; grid-template-columns: 44px minmax(0, 1fr) 54px; gap: 10px; align-items: center; font-size: 0.78rem; }
 .eval-meter-label { font-weight: 700; color: var(--text-muted); }
@@ -115,6 +123,5 @@
   .eval-split { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
-  .eval-index-card { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .eval-toolbar .form-input { max-width: none; width: 100%; }
 }

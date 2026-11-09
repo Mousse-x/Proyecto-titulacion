@@ -1,6 +1,6 @@
 import { getUniversityLogo } from '../../data/universityLogos';
 
-export default function UniversityLogo({ university = {}, name = '' }) {
+export default function UniversityLogo({ university = {}, name = '', size = 44 }) {
   const logo = getUniversityLogo(university);
   const label = university.full_name || university.name || name || 'Universidad';
   const initials = university.logo_initials || university.name || name || 'UNIV';
@@ -11,17 +11,17 @@ export default function UniversityLogo({ university = {}, name = '' }) {
       className="doc-icon"
       title={`Escudo de ${label}`}
       style={{
-        width: 44,
-        height: 44,
-        borderRadius: 9,
+        width: size,
+        height: size,
+        borderRadius: Math.round(size / 5),
         background: logo ? '#fff' : 'var(--primary-subtle)',
         border: logo ? '1px solid var(--border)' : `1px solid ${color}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: logo ? 4 : 0,
+        padding: logo ? Math.round(size / 11) : 0,
         color,
-        fontSize: '0.68rem',
+        fontSize: size > 60 ? `${size / 70}rem` : '0.68rem',
         fontWeight: 800,
         overflow: 'hidden',
       }}
