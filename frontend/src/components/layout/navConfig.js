@@ -49,6 +49,7 @@ export const AUDITOR_NAV = [
   { label: 'Rankings', icon: 'RK', to: '/auditor/rankings' },
   { label: 'Reportes', icon: 'RP', to: '/auditor/reports' },
   { section: 'Evidencias y evaluación' },
+  { label: 'Indicadores', icon: 'IN', to: '/auditor/indicators' },
   { label: 'Documentos LOTAIP', icon: 'LC', to: '/auditor/documents' },
   { label: 'Evaluación de transparencia', icon: 'EV', to: '/auditor/validation' },
   { section: 'Sistema' },

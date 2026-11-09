@@ -23,7 +23,7 @@ const typeFromClassification = (value) => value === 'MIXTO' ? 'MIXTO' : 'COMPLEM
 const templateHref = (url) => url?.startsWith('http') ? url : `${MEDIA_BASE}${url || ''}`;
 const codeStyle = { fontFamily: 'monospace', background: 'var(--bg-tertiary)', padding: '3px 8px', borderRadius: 5, fontSize: '0.8125rem', color: 'var(--primary)' };
 
-export default function IndicatorsCatalogPage() {
+export default function IndicatorsCatalogPage({ readOnly = false }) {
   const [indicators, setIndicators] = useState([]);
   const [dimensions, setDimensions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -231,22 +231,26 @@ export default function IndicatorsCatalogPage() {
     {
       key: 'template_url', label: 'Plantilla base',
       render: (value, row) => (
-        <button type="button" className={`ind-template ${value ? 'ok' : 'missing'}`} onClick={() => setTemplateIndicator(row)}
-          title={value ? 'Ver, descargar o reemplazar la plantilla' : 'Subir la plantilla base'}>
-          <span className="ind-template-dot" aria-hidden="true" />
-          {value ? (row.template_name || 'Disponible') : 'Sin plantilla · Subir'}
-        </button>
+        readOnly && !value ? (
+          <span className="ind-template missing" style={{ cursor: 'default' }}><span className="ind-template-dot" aria-hidden="true" />Sin plantilla</span>
+        ) : (
+          <button type="button" className={`ind-template ${value ? 'ok' : 'missing'}`} onClick={() => setTemplateIndicator(row)}
+            title={readOnly ? 'Ver o descargar la plantilla' : value ? 'Ver, descargar o reemplazar la plantilla' : 'Subir la plantilla base'}>
+            <span className="ind-template-dot" aria-hidden="true" />
+            {value ? (row.template_name || 'Disponible') : 'Sin plantilla · Subir'}
+          </button>
+        )
       ),
     },
     { key: 'is_active', label: 'Estado', render: (value) => <Badge status={value ? 'Activo' : 'Inactivo'} /> },
-    {
+    ...(readOnly ? [] : [{
       key: 'id', label: 'Acciones', sortable: false,
       render: (_, row) => (
         <div className="table-actions">
           <button className="btn btn-danger btn-sm" title={`Eliminar ${row.code}`} onClick={() => setConfirm({ open: true, indicator: row })}>Eliminar</button>
         </div>
       ),
-    },
+    }]),
   ];
 
   const total = indicators.length;
@@ -260,7 +264,7 @@ export default function IndicatorsCatalogPage() {
         </div>
         <div className="page-header-actions">
           <button className="btn btn-secondary" onClick={fetchIndicators} disabled={loading}>Actualizar</button>
-          <button className="btn btn-primary" onClick={openCreate}>+ Nuevo {tab === 'LOTAIP' ? 'documento' : 'indicador'}</button>
+          {!readOnly && <button className="btn btn-primary" onClick={openCreate}>+ Nuevo {tab === 'LOTAIP' ? 'documento' : 'indicador'}</button>}
         </div>
       </div>
 
@@ -328,8 +332,8 @@ export default function IndicatorsCatalogPage() {
                               {indicator.family_name && <div className="ind-row-meta">{indicator.family_code} · {indicator.family_name}</div>}
                             </div>
                             <Badge status={indicator.is_active ? 'Activo' : 'Inactivo'} />
-                            <button className="btn btn-danger btn-sm" title={`Eliminar ${indicator.code}`}
-                              onClick={() => setConfirm({ open: true, indicator })}>Eliminar</button>
+                            {!readOnly && <button className="btn btn-danger btn-sm" title={`Eliminar ${indicator.code}`}
+                              onClick={() => setConfirm({ open: true, indicator })}>Eliminar</button>}
                           </li>
                         ))}
                       </ul>
@@ -403,12 +407,12 @@ export default function IndicatorsCatalogPage() {
               </div>
               <a className="btn btn-secondary btn-sm" href={templateHref(templateIndicator.template_url)} target="_blank" rel="noopener noreferrer">Descargar</a>
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {!readOnly && <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button className="btn btn-secondary" onClick={() => fileRef.current?.click()} disabled={templateUploading}>
                 {templateUploading ? 'Subiendo...' : 'Reemplazar plantilla'}
               </button>
               <button className="btn btn-danger" onClick={handleTemplateDelete} disabled={templateUploading}>Eliminar plantilla</button>
-            </div>
+            </div>}
           </div>
         ) : (
           <div style={{ padding: 22, borderRadius: 9, border: '1px dashed var(--border)', background: 'var(--bg-tertiary)', textAlign: 'center' }}>
