@@ -13,7 +13,7 @@ from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone
-from django.core.mail import send_mail
+from ..email_templates import send_email
 
 from ..models import (
     AppUser, University, Indicator, EvaluationPeriod, Evidence, AuditLog
@@ -347,14 +347,18 @@ def evidence_detail(request, ev_id):
                     try:
                         user_email = decrypt_email(ev.uploaded_by_user.email)
                         obs = data.get("observations", "Sin observaciones adicionales.")
-                        subject = f"Documento marcado como {ev.validation_status.upper()}"
-                        msg = (
-                            f"Hola {ev.uploaded_by_user.full_name},\n\n"
-                            f"Su documento '{ev.title}' ha sido marcado como {ev.validation_status.upper()}.\n\n"
-                            f"Observaciones del auditor/administrador:\n{obs}\n\n"
-                            "Por favor, revise la plataforma para más detalles.\n"
+                        status_label = ev.validation_status.upper()
+                        send_email(
+                            f"Tu documento fue marcado como {status_label}", [user_email], fail_silently=True,
+                            title=f"Documento marcado como {status_label}",
+                            preheader=f"{ev.title}: revisa las observaciones.",
+                            greeting=f"Hola, {ev.uploaded_by_user.full_name}:",
+                            intro=[f"Tu documento «{ev.title}» fue marcado como {status_label}."],
+                            box_title="Observaciones del revisor",
+                            box_text=obs,
+                            button=("REVISAR MIS DOCUMENTOS", f"{settings.FRONTEND_URL}/university/documents"),
+                            outro=["Corrige o reemplaza el documento para que vuelva a evaluarse."],
                         )
-                        send_mail(subject, msg, settings.DEFAULT_FROM_EMAIL, [user_email], fail_silently=True)
                     except Exception as e:
                         print("Error enviando notificación:", e)
 
@@ -447,16 +451,19 @@ def bulk_update_evidences(request):
             for u, docs in user_docs.items():
                 try:
                     user_email = decrypt_email(u.email)
-                    subject = f"Atención: {len(docs)} documento(s) marcados como {new_status.upper()}"
-                    
-                    doc_list = "\n".join([f"- {d.title}" for d in docs])
-                    msg = (
-                        f"Hola {u.full_name},\n\n"
-                        f"{len(docs)} de sus documentos han sido marcados como {new_status.upper()}:\n\n"
-                        f"{doc_list}\n\n"
-                        "Por favor, ingrese a la plataforma para revisar las observaciones y tomar acciones correctivas.\n"
+                    status_label = new_status.upper()
+                    count_text = "1 documento fue marcado" if len(docs) == 1 else f"{len(docs)} documentos fueron marcados"
+                    count_text = count_text[0].upper() + count_text[1:]
+                    send_email(
+                        f"{count_text} como {status_label}", [user_email], fail_silently=True,
+                        title=f"Documentos marcados como {status_label}",
+                        preheader="Revisa las observaciones en la plataforma.",
+                        greeting=f"Hola, {u.full_name}:",
+                        intro=[f"{count_text} como {status_label}:"],
+                        items=[d.title for d in docs],
+                        button=("REVISAR MIS DOCUMENTOS", f"{settings.FRONTEND_URL}/university/documents"),
+                        outro=["Revisa las observaciones y corrige o reemplaza los documentos para que vuelvan a evaluarse."],
                     )
-                    send_mail(subject, msg, settings.DEFAULT_FROM_EMAIL, [user_email], fail_silently=True)
                 except Exception as e:
                     print("Error enviando correos consolidados:", e)
 

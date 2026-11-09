@@ -3,8 +3,9 @@ import queue
 import threading
 import time
 
-from django.conf import settings
-from django.core.mail import EmailMessage, get_connection
+from django.core.mail import get_connection
+
+from .email_templates import build_email
 
 
 _OTP_QUEUE = queue.Queue(maxsize=200)
@@ -14,12 +15,16 @@ _SENTINEL = object()
 
 
 def _build_otp_message(recipient_email, otp, connection):
-    return EmailMessage(
-        subject="Codigo de Verificacion - Sistema Transparencia",
-        body=f"Su codigo de verificacion (OTP) es: {otp}\nEste codigo expirara en 5 minutos.",
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[recipient_email],
+    return build_email(
+        f"{otp} es tu código de verificación de SisTransp",
+        [recipient_email],
         connection=connection,
+        title="Confirma tu inicio de sesión",
+        preheader=f"Tu código es {otp}. Caduca en 5 minutos.",
+        intro=["Usa este código para terminar de iniciar sesión en SisTransp."],
+        code=otp,
+        code_note="El código caduca en 5 minutos y solo se puede usar una vez.",
+        outro=["Si no intentaste iniciar sesión, ignora este correo y cambia tu contraseña: alguien podría conocerla."],
     )
 
 

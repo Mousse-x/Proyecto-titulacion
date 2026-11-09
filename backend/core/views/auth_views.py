@@ -7,13 +7,13 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
-from django.core.mail import send_mail
 from django.conf import settings
 from ..models import AppUser, Role, PasswordResetToken
 from ..encryption import encrypt_email, decrypt_email, hash_email
 from ..middleware import generate_jwt, require_auth
 from ..sanitizers import sanitize_text, validate_name, validate_email_format, validate_password
 from ..otp_mailer import enqueue_otp_email
+from ..email_templates import send_email
 from .common import _log, _log_error
 
 
@@ -448,21 +448,22 @@ def request_password_reset(request):
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
     reset_link = f"{frontend_url}/reset-password/{reset_token.token}"
 
-    subject = "Restablecer contraseña — SisTransp"
-    message = (
-        f"Hola {user.full_name},\n\n"
-        f"Recibimos una solicitud para restablecer la contraseña de tu cuenta.\n\n"
-        f"Haz clic en el siguiente enlace (válido por {expiry_minutes} minutos):\n"
-        f"{reset_link}\n\n"
-        f"Si no solicitaste este cambio, ignora este correo.\n\n"
-        f"— Equipo SisTransp"
+    subject = "Restablecer tu contraseña de SisTransp"
+    email_content = dict(
+        title="Restablece tu contraseña",
+        preheader=f"El enlace es válido durante {expiry_minutes} minutos.",
+        greeting=f"Hola, {user.full_name}:",
+        intro=["Recibimos una solicitud para restablecer la contraseña de tu cuenta.",
+               f"Pulsa el botón para elegir una nueva. El enlace es válido durante {expiry_minutes} minutos."],
+        button=("RESTABLECER CONTRASEÑA", reset_link),
+        outro=["Si no solicitaste este cambio, ignora este correo: tu contraseña seguirá siendo la misma."],
     )
 
     # ── Modo desarrollo: muestra el link en consola y en la respuesta ──
     debug_mode = getattr(settings, "DEBUG_RESET_LINK", False)
 
     try:
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email_raw], fail_silently=False)
+        send_email(subject, [email_raw], **email_content)
     except Exception as exc:
         if not debug_mode:
             _log_error(

@@ -3,11 +3,11 @@ from django.http import JsonResponse
 import json
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from django.core.mail import send_mail
 from django.conf import settings
 from email.utils import parseaddr
 from ..models import UserFeedback
 from ..encryption import decrypt_email
+from ..email_templates import send_email
 from ..middleware import require_auth, require_role
 from ..sanitizers import sanitize_text
 from .common import _log, _log_error
@@ -57,24 +57,26 @@ def submit_feedback(request):
     except Exception:
         user_email = user.email or ""
 
-    mail_subject = f"[Feedback {type_label}] {subject}"
-    mail_message = (
-        f"Nuevo feedback recibido - {type_label}\n\n"
-        f"Usuario: {user.full_name}\n"
-        f"Correo: {user_email}\n"
-        f"Rol: {getattr(user.role, 'name', '')}\n"
-        f"Fecha: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        f"Asunto: {subject}\n\n"
-        f"Comentario:\n{message}"
-    )
+    mail_subject = f"[Comentario · {type_label}] {subject}"
+    frontend = getattr(settings, "FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
     try:
-        send_mail(
-            subject=mail_subject,
-            message=mail_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[recipient],
-            fail_silently=False,
+        send_email(
+            mail_subject, [recipient],
+            reply_to=[user_email] if user_email else None,
+            title=f"Nuevo comentario: {type_label}",
+            preheader=f"{user.full_name} envió un comentario: {subject}",
+            intro=[f"{user.full_name} envió un comentario desde la plataforma."],
+            items=[
+                f"Correo: {user_email}",
+                f"Rol: {getattr(user.role, 'name', '')}",
+                f"Fecha: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}",
+                f"Asunto: {subject}",
+            ],
+            box_title="Comentario",
+            box_text=message,
+            button=("VER COMENTARIOS", f"{frontend}/admin/feedback"),
+            outro=["Puedes responder a este correo para contestar directamente a la persona."],
         )
     except Exception as exc:
         _log_error(
