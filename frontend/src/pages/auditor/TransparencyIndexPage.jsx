@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import ScoreLegend from '../../components/common/ScoreLegend';
 import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
@@ -41,7 +40,7 @@ function EvolutionTooltip({ active, payload, label }) {
       {payload.map((item) => (
         <div key={item.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: 18, color: item.color, fontSize: '0.8125rem', marginBottom: 2 }}>
           <span>{item.name}</span>
-          <strong>{Number(item.value || 0).toFixed(2)}%</strong>
+          <strong>{item.value == null ? 'Pendiente' : `${Number(item.value).toFixed(2)}%`}</strong>
         </div>
       ))}
     </div>
@@ -57,6 +56,7 @@ export default function TransparencyIndexPage() {
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [evolutionResults, setEvolutionResults] = useState([]);
   const [integratedResult, setIntegratedResult] = useState(null);
+  const [monthlyIntegrated, setMonthlyIntegrated] = useState([]);
   const [loading, setLoading] = useState(true);
   const [evolutionLoading, setEvolutionLoading] = useState(false);
 
@@ -104,6 +104,7 @@ export default function TransparencyIndexPage() {
         if (!cancelled && res) {
           setEvolutionResults(res.data.results || []);
           setIntegratedResult(res.data.summary?.integrated || null);
+          setMonthlyIntegrated(res.data.summary?.monthly_integrated || []);
         }
       })
       .catch(() => {
@@ -111,6 +112,7 @@ export default function TransparencyIndexPage() {
           setSelectedPeriod('');
           setEvolutionResults([]);
           setIntegratedResult(null);
+          setMonthlyIntegrated([]);
         }
       })
       .finally(() => {
@@ -137,6 +139,8 @@ export default function TransparencyIndexPage() {
   const institutionLogo = getUniversityLogo(selectedUniversity);
 
   const evolutionData = useMemo(() => {
+    const byMonth = Object.fromEntries(monthlyIntegrated.map((row) => [row.month, row]));
+    const annualInternational = internationalScore == null ? null : Number(internationalScore);
     const grouped = evolutionResults.reduce((acc, result) => {
       const label = result.periodo || 'Sin periodo';
       if (!acc[label]) {
@@ -154,15 +158,18 @@ export default function TransparencyIndexPage() {
     return Object.values(grouped)
       .map((item) => {
         const [monthName = '', year = ''] = String(item.periodo).toLowerCase().split(' ');
+        const monthly = byMonth[MONTH_ORDER[monthName]] || {};
         return {
           periodo: item.periodo,
           sort: Number(year) * 100 + (MONTH_ORDER[monthName] || 0),
           nacional: Number((item.nacionalTotal / item.documentos).toFixed(2)),
+          internacional: monthly.international ?? annualInternational,
+          iti: monthly.index_percent ?? null,
           documentos: item.documentos,
         };
       })
       .sort((a, b) => a.sort - b.sort);
-  }, [evolutionResults]);
+  }, [evolutionResults, monthlyIntegrated, internationalScore]);
 
   const dimensionData = useMemo(() => (integratedResult?.dimension_scores || []).map((dimension) => ({
     code: dimension.code,
@@ -183,28 +190,33 @@ export default function TransparencyIndexPage() {
           </p>
         </div>
         <div className="page-header-actions" style={{ alignItems: 'flex-end' }}>
-          <div className="filter-field">
-          <label htmlFor="index-univ">Universidad</label>
-          <select
-            id="index-univ"
-            className="form-input"
-            value={selectedId}
-            onChange={(e) => {
-              setSelectedId(e.target.value);
-              setSearchParams({ university_id: e.target.value });
-            }}
-            disabled={!rankings.length}
-          >
-            {rankings.map((u) => (
-              <option key={u.id} value={u.id}>{u.name} - {u.full_name}</option>
-            ))}
-          </select>
+          <div className="filter-field period-picker">
+            <label htmlFor="index-univ">Universidad</label>
+            <div className="period-picker-box">
+              <svg className="period-picker-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 9.5 12 4l9 5.5" />
+                <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8" />
+                <path d="M3 20.5h18" />
+              </svg>
+              <select
+                id="index-univ"
+                value={selectedId}
+                onChange={(e) => {
+                  setSelectedId(e.target.value);
+                  setSearchParams({ university_id: e.target.value });
+                }}
+                disabled={!rankings.length}
+                title={rankings.length > 1 ? `Hay ${rankings.length} universidades disponibles` : undefined}
+              >
+                {rankings.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} - {u.full_name}</option>
+                ))}
+              </select>
+              <svg className="period-picker-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </div>
           </div>
-          {selected && (
-            <Link to={breakdownUrl} className="btn btn-primary link-button" title="Ver cada indicador, su calificación, fuente y evidencia">
-              🔍 Ver desglose de indicadores y evidencias
-            </Link>
-          )}
         </div>
       </div>
 
@@ -229,22 +241,21 @@ export default function TransparencyIndexPage() {
                 <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                   {evaluatedDocs} documentos evaluados{selectedPeriod && integratedResult?.international_year ? ` · Año ${integratedResult.international_year}` : ''}
                 </p>
-                <div style={{ marginTop: 8 }}><ScoreLegend /></div>
               </div>
               <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
                 <ScoreCard score={national} size={90} label="Nacional (LOTAIP)" />
+                {internationalScore == null ? (
+                  <div style={{ width: 110, textAlign: 'center', color: 'var(--warning)', fontWeight: 800 }}>
+                    <div style={{ fontSize: '1rem' }}>Pendiente</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: 4 }}>Internacional</div>
+                  </div>
+                ) : <ScoreCard score={Number(internationalScore)} size={90} label="Internacional" />}
                 {integrated == null ? (
                   <div style={{ width: 110, textAlign: 'center', color: 'var(--warning)', fontWeight: 800 }}>
                     <div style={{ fontSize: '1rem' }}>Pendiente</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: 4 }}>Índice final ITI</div>
                   </div>
                 ) : <ScoreCard score={integrated} size={90} label="Índice final ITI" />}
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: integrated == null ? 'var(--warning)' : getScoreInk(integrated), lineHeight: 1 }}>
-                    {integrated == null ? 'Pendiente' : getScoreLabel(integrated)}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: 4 }}>Clasificación del ITI</div>
-                </div>
               </div>
             </div>
           </div>
@@ -298,25 +309,6 @@ export default function TransparencyIndexPage() {
                   </div>
                 </div>
 
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 8 }}>Indicadores actuales</div>
-                  {[
-                    { label: 'Nacional (LOTAIP · SITA)', score: national },
-                    { label: 'Complementario internacional', score: internationalScore == null ? null : Number(Number(internationalScore).toFixed(2)) },
-                    { label: 'Índice final ITI', score: integrated },
-                  ].map((item) => (
-                    <div key={item.label} style={{ marginBottom: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, gap: 10 }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{item.label}</span>
-                        <span style={{ fontWeight: 900, color: item.score == null ? 'var(--warning)' : getScoreInk(item.score) }}>{item.score == null ? 'Pendiente' : `${item.score}%`}</span>
-                      </div>
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${item.score || 0}%`, background: item.score == null ? 'var(--warning)' : getScoreColor(item.score) }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--text)' }}>{evaluatedDocs}</div>
@@ -330,7 +322,7 @@ export default function TransparencyIndexPage() {
               </div>
             </div>
             <div className="chart-card">
-              <div className="chart-title">Evolución de la calificación de documentos (nacional)</div>
+              <div className="chart-title">Evolución de la calificación: nacional, internacional e ITI</div>
               {evolutionLoading ? (
                 <div className="empty-state" style={{ minHeight: 300 }}>
                   <h4>Cargando evolución...</h4>
@@ -343,12 +335,14 @@ export default function TransparencyIndexPage() {
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={evolutionData} margin={{ top: 18, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-light)" />
-                    <XAxis dataKey="periodo" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-subtle)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="4 4" stroke="var(--text-subtle)" strokeOpacity={0.45} vertical horizontal />
+                    <XAxis dataKey="periodo" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} axisLine={{ stroke: 'var(--text-subtle)' }} tickLine={{ stroke: 'var(--text-subtle)' }} />
+                    <YAxis domain={[0, 100]} ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--text-subtle)' }} tickLine={{ stroke: 'var(--text-subtle)' }} />
                     <Tooltip content={<EvolutionTooltip />} />
                     <Legend wrapperStyle={{ paddingTop: 12, fontSize: '0.8125rem' }} />
                     <Line name="Índice nacional" type="monotone" dataKey="nacional" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, strokeWidth: 0, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
+                    <Line name="Internacional" type="monotone" dataKey="internacional" stroke="#0f9f8f" strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 3.5, strokeWidth: 0, fill: '#0f9f8f' }} activeDot={{ r: 6 }} connectNulls />
+                    <Line name="Índice final ITI" type="monotone" dataKey="iti" stroke="#e08a00" strokeWidth={3} dot={{ r: 4, strokeWidth: 0, fill: '#e08a00' }} activeDot={{ r: 6 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               )}

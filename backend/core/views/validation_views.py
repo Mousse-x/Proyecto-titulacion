@@ -465,6 +465,22 @@ def _validation_result_to_dict(vr):
     return result
 
 
+def _monthly_integrated_series(univ_id, period_id, validations):
+    """ITI y componente internacional de cada mes con documentos evaluados."""
+    series = []
+    months = sorted({row.evidence.month for row in validations if row.evidence.month})
+    for month in months:
+        sync_national_results(univ_id, period_id, month)
+        result = recalculate_integrated_index(univ_id, period_id, month)
+        international = (result.coverage or {}).get('components', {}).get('international', {}).get('score')
+        series.append({
+            'month': month,
+            'index_percent': float(result.index_percent) if result.index_percent is not None else None,
+            'international': float(international) if international is not None else None,
+        })
+    return series
+
+
 def _summary_from_validations(validations):
     counters = {
         "CUMPLE": 0,
@@ -629,6 +645,9 @@ def get_compliance_summary(request, univ_id):
     sync_national_results(univ_id, int(period_id), month_value)
     recalculate_integrated_index(univ_id, int(period_id), month_value)
     integrated = serialize_integrated_result(univ_id, int(period_id), month_value)
+    summary["monthly_integrated"] = (
+        [] if month_value else _monthly_integrated_series(univ_id, int(period_id), validations)
+    )
     summary.update({
         "total_index": national_index,
         "national_index": national_index,
