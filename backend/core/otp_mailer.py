@@ -62,7 +62,6 @@ def _otp_worker():
 
             _build_otp_message(recipient_email, otp, connection).send()
             last_used = time.monotonic()
-            print(f"OTP para {recipient_email}: {otp}")
         except Exception as exc:
             if connection is not None:
                 try:
