@@ -14,7 +14,33 @@ from core.lotaip_engine.schemas import header_key, header_map, resolve_format
 from core.lotaip_engine.rules import ENGINE_VERSION
 
 VERSION = ENGINE_VERSION
-SOURCE = "https://www.registroficial.gob.ec/registro-oficial-no-633/"
+
+# Rúbrica recortada en PostgreSQL a lo que lee summarize_rubrics. Las rúbricas
+# completas (evidencias, enlaces) pesan decenas de MB por período y leerlas
+# enteras era lo más lento de los dashboards y lo que inflaba la RAM.
+SLIM_RUBRIC_SQL = """
+CASE WHEN jsonb_typeof(lotaip_rubric) <> 'object' OR lotaip_rubric = '{}'::jsonb THEN NULL
+ELSE jsonb_build_object(
+    'unidad', lotaip_rubric->'unidad',
+    'version', lotaip_rubric->'version',
+    'criterios', CASE WHEN jsonb_typeof(lotaip_rubric->'criterios') = 'array' THEN (
+        SELECT coalesce(jsonb_agg(jsonb_build_object(
+            'id', c->'id', 'aplica', c->'aplica',
+            'calificacion', c->'calificacion', 'sugerencia', c->'sugerencia') ORDER BY ord), '[]'::jsonb)
+        FROM jsonb_array_elements(lotaip_rubric->'criterios') WITH ORDINALITY AS t(c, ord)
+    ) END
+) END
+"""
+
+
+def slim_rubric_expression():
+    """Anotación para EvidenceValidationResult: values(..., slim_rubric=slim_rubric_expression())."""
+    from django.db.models import JSONField
+    from django.db.models.expressions import RawSQL
+    return RawSQL(SLIM_RUBRIC_SQL, [], output_field=JSONField())
+
+
+SOURCE ="https://www.registroficial.gob.ec/registro-oficial-no-633/"
 DEFINITIONS = [
     ("cta", "Información completa y actualizada", [0, 0.5, 1], "6.2.1 · Tabla 1 · p. 59",
      "1: publicada, accesible, completa y actualizada; 0,5: accesible pero incompleta o desactualizada; 0: no publicada o inaccesible."),

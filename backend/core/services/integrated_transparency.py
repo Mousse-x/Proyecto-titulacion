@@ -37,7 +37,7 @@ from ..lotaip_engine.freellm import (
     select_semantic_excerpt,
 )
 from .lotaip_automatic import fetch_public, readable_text
-from .lotaip_rubric import indicator_number, summarize_rubrics
+from .lotaip_rubric import indicator_number, slim_rubric_expression, summarize_rubrics
 from .transparency_catalog import (
     ANCHOR_DOCUMENT_FAMILIES,
     EVALUATION_ELEMENTS,
@@ -290,27 +290,43 @@ def _weight_map(values, rows, label):
     return by_id
 
 
-def _latest_lotaip_scores(university_id, period_id, month=None):
-    queryset = EvidenceValidationResult.objects.select_related('evidence', 'evidence__indicator').filter(
+def lotaip_score_rows(university_id, period_id, month=None):
+    """Filas (indicador, código, mes, url, título, rúbrica recortada) de la más reciente a la más antigua.
+
+    Se pueden leer una vez para todo el período y pasarlas a sync_national_results
+    de cada mes: leer las rúbricas es lo caro (PostgreSQL las descomprime).
+    """
+    queryset = EvidenceValidationResult.objects.filter(
         evidence__university_id=university_id,
         evidence__period_id=period_id,
     ).exclude(lotaip_rubric={}).order_by('-validated_at')
     if month:
         queryset = queryset.filter(evidence__month=month)
+    return list(queryset.annotate(slim_rubric=slim_rubric_expression()).values_list(
+        'evidence__indicator_id', 'evidence__indicator__code', 'evidence__month',
+        'evidence__source_url', 'evidence__title', 'slim_rubric',
+    ))
+
+
+def _latest_lotaip_scores(university_id, period_id, month=None, rows=None):
+    if rows is None:
+        rows = lotaip_score_rows(university_id, period_id, month)
+    elif month:
+        rows = [row for row in rows if row[2] is not None and int(row[2]) == int(month)]
     latest = {}
-    for validation in queryset:
-        number = indicator_number(validation.evidence.indicator.code if validation.evidence.indicator_id else '')
+    for indicator_id, indicator_code, evidence_month, source_url, title, rubric in rows:
+        number = indicator_number(indicator_code if indicator_id else '')
         if number is None:
             continue
-        key = (validation.evidence.indicator_id, validation.evidence.month)
+        key = (indicator_id, evidence_month)
         if key in latest:
             continue
-        summary = summarize_rubrics([validation.lotaip_rubric])
+        summary = summarize_rubrics([rubric])
         latest[key] = {
             'numeral': number,
             'score': None if summary['puntaje_formato'] is None else float(summary['puntaje_formato']) / 100,
-            'source_url': validation.evidence.source_url or '',
-            'source_title': validation.evidence.title,
+            'source_url': source_url or '',
+            'source_title': title,
             'justification': 'Resultado obtenido por el motor LOTAIP vigente.',
         }
     grouped = {}
@@ -319,12 +335,20 @@ def _latest_lotaip_scores(university_id, period_id, month=None):
     return grouped
 
 
-def sync_national_results(university_id, period_id, month=None):
+def sync_national_results(university_id, period_id, month=None, score_rows=None):
+    """score_rows: lotaip_score_rows() de todo el período, para no releerlas en cada mes."""
     month_key = int(month or 0)
-    grouped = _latest_lotaip_scores(university_id, period_id, month)
-    for indicator in IntegratedIndicator.objects.filter(
+    grouped = _latest_lotaip_scores(university_id, period_id, month, rows=score_rows)
+    indicators = list(IntegratedIndicator.objects.filter(
         is_active=True, classification=IntegratedIndicator.Classification.NATIONAL,
-    ):
+    ))
+    existing = {
+        row.indicator_id: row for row in IntegratedIndicatorResult.objects.filter(
+            university_id=university_id, period_id=period_id, month=month_key,
+            indicator_id__in=[indicator.id for indicator in indicators],
+        )
+    }
+    for indicator in indicators:
         rows = [row for numeral in indicator.lotaip_numerals for row in grouped.get(int(numeral), [])]
         scores = [row['score'] for row in rows if row['score'] is not None]
         if not rows and grouped:
@@ -356,6 +380,9 @@ def sync_national_results(university_id, period_id, month=None):
                 'justification': 'Promedio normalizado de los formatos LOTAIP asociados al indicador nacional.',
                 'metadata': {'origin': 'LOTAIP', 'formats': len(rows)},
             }
+        current = existing.get(indicator.id)
+        if current is not None and all(getattr(current, field) == value for field, value in values.items()):
+            continue  # Sin cambios: los dashboards llaman esto en cada visita.
         IntegratedIndicatorResult.objects.update_or_create(
             university_id=university_id, period_id=period_id, month=month_key, indicator=indicator,
             defaults=values,
@@ -2768,7 +2795,8 @@ def recalculate_integrated_index(university_id, period_id, month=None):
     weights_snapshot = {'dimensions': {}, 'indicators': {}}
     final_ready = True
     for dimension in dimensions:
-        indicators = list(dimension.indicators.filter(is_active=True))
+        # Usa el prefetch (antes .filter() hacía una consulta por dimensión).
+        indicators = [indicator for indicator in dimension.indicators.all() if indicator.is_active]
         numerator = Decimal('0')
         denominator = Decimal('0')
         dimension_pending = 0
@@ -2813,25 +2841,31 @@ def recalculate_integrated_index(university_id, period_id, month=None):
         'national': _component_breakdown(dimensions, results, 'national'),
         'international': _component_breakdown(dimensions, results, 'international'),
     }
+    values = {
+        'index_percent': index,
+        'is_provisional': not final_ready,
+        'dimension_scores': dimension_scores,
+        'coverage': {
+            'total': sum(row['indicator_count'] for row in dimension_scores),
+            'applicable': applicable,
+            'resolved': resolved,
+            'pending': pending,
+            'technical_errors': technical,
+            'no_evidence': no_evidence,
+            'components': components,
+        },
+        'weights_snapshot': weights_snapshot,
+    }
+    current = IntegratedTransparencyResult.objects.filter(
+        university_id=university_id, period_id=period_id, month=month_key,
+    ).first()
+    if current is not None and all(getattr(current, field) == value for field, value in values.items()):
+        return current  # Sin cambios: los dashboards recalculan en cada visita.
     return IntegratedTransparencyResult.objects.update_or_create(
         university_id=university_id,
         period_id=period_id,
         month=month_key,
-        defaults={
-            'index_percent': index,
-            'is_provisional': not final_ready,
-            'dimension_scores': dimension_scores,
-            'coverage': {
-                'total': sum(row['indicator_count'] for row in dimension_scores),
-                'applicable': applicable,
-                'resolved': resolved,
-                'pending': pending,
-                'technical_errors': technical,
-                'no_evidence': no_evidence,
-                'components': components,
-            },
-            'weights_snapshot': weights_snapshot,
-        },
+        defaults=values,
     )[0]
 
 

@@ -5,15 +5,17 @@ import os
 import re
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Case, When
+from django.db.models import Case, Count, Max, When
 from django.core.files.storage import default_storage
 from ..models import AppUser, University, Evidence, Evaluation, CategoryResult, FinalResult, Feedback, EvidenceValidationResult, UniversityEvaluationSummary, IntegratedTransparencyResult, EvaluationPeriod
 from ..middleware import require_auth, require_role
+from ..cache_utils import stats_cache_key
 from .common import _get_bool, _get_value, _log_error, _parse_body
 
 
@@ -149,7 +151,7 @@ def _dashboard_period_id():
 
 def _get_university_score_data(validations=None, period_id=None, month=None):
     from ..services.evaluator import is_lotaip_dictionary
-    from ..services.lotaip_rubric import summarize_rubrics
+    from ..services.lotaip_rubric import slim_rubric_expression, summarize_rubrics
     period_id = period_id or _dashboard_period_id()
     if period_id is None:
         return {}
@@ -157,19 +159,38 @@ def _get_university_score_data(validations=None, period_id=None, month=None):
         validations = EvidenceValidationResult.objects.select_related(
             "evidence", "evidence__university", "evidence__indicator", "evidence__period"
         )
-    validations = validations.filter(evidence__period_id=period_id)
+    validations = validations.filter(evidence__period_id=period_id, evidence__university_id__isnull=False)
     if month:
         validations = validations.filter(evidence__month=month)
-    groups = {}
-    for vr in validations:
-        if vr.evidence_id and vr.evidence.university_id:
-            groups.setdefault(vr.evidence.university_id, []).append(vr)
+
+    # Leer y resumir las rúbricas es lo caro del dashboard (PostgreSQL descomprime
+    # decenas de MB). Se cachea con una huella barata de los datos: si cambia
+    # cualquier resultado del período, la clave cambia y se recalcula.
+    fingerprint = validations.aggregate(n=Count("id"), last=Max("validated_at"), top=Max("id"))
+    cache_key = "university_scores:{}:{}:{}:{}:{}:{}".format(
+        stats_cache_key(period_id, month), fingerprint["n"],
+        fingerprint["last"].timestamp() if fingerprint["last"] else 0, fingerprint["top"] or 0, period_id, month or "",
+    )
+    summaries = cache.get(cache_key)
+    if summaries is None:
+        # Solo las columnas que usa el ranking: cargar los resultados completos
+        # (automatic_result, observations, texto extraído...) llevaba Gunicorn a 3 GB.
+        groups = {}
+        rows = validations.annotate(
+            slim_rubric=slim_rubric_expression(),
+        ).values_list("evidence__university_id", "evidence__title", "evidence__file_path", "slim_rubric")
+        for university_id, title, file_path, rubric in rows.iterator(chunk_size=1000):
+            if not is_lotaip_dictionary(SimpleNamespace(title=title, file_path=file_path)):
+                groups.setdefault(university_id, []).append(rubric)
+        summaries = {
+            university_id: (summarize_rubrics(rubrics), len(rubrics))
+            for university_id, rubrics in groups.items()
+            if rubrics and all(rubrics)  # Los resultados históricos requieren revalidación.
+        }
+        cache.set(cache_key, summaries, 600)
+
     ranked = []
-    for university_id, rows in groups.items():
-        rows = [vr for vr in rows if not is_lotaip_dictionary(vr.evidence)]
-        if not rows or any(not vr.lotaip_rubric for vr in rows):
-            continue  # Los resultados históricos requieren revalidación.
-        sita = summarize_rubrics([vr.lotaip_rubric for vr in rows])
+    for university_id, (sita, document_count) in summaries.items():
         national_index = sita.get("puntaje")
         integrated = IntegratedTransparencyResult.objects.filter(
             university_id=university_id, period_id=period_id,
@@ -183,7 +204,7 @@ def _get_university_score_data(validations=None, period_id=None, month=None):
         ranked.append((university_id, {
             "transparency_score": national_index,
             "integrated_transparency_score": float(integrated.index_percent),
-            "evaluated_documents": len(rows),
+            "evaluated_documents": document_count,
             "period_id": period_id,
             "lotaip_components": sita.get("componentes") or {},
             "dimensions": [{"code": row.get("code"), "name": row.get("name"), "score": row.get("score")}

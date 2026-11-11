@@ -30,6 +30,7 @@ from ..models import (
 from ..middleware import require_auth, require_role
 from ..services.integrated_transparency import (
     clear_international_dimension_cache,
+    lotaip_score_rows,
     recalculate_integrated_index,
     reevaluate_integrated_indicator,
     serialize_integrated_result,
@@ -425,8 +426,12 @@ def get_validation_result(request, ev_id):
     return JsonResponse(_validation_result_to_dict(vr))
 
 
-def _validation_result_to_dict(vr):
-    """Serializa un EvidenceValidationResult a dict."""
+def _validation_result_to_dict(vr, include_raw=True):
+    """Serializa un EvidenceValidationResult a dict.
+
+    include_raw=False omite automatic_result y manual_override: el resumen por
+    universidad no los usa y duplicaban la rúbrica (varios MB por respuesta).
+    """
     ev = vr.evidence
     months = {
         1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
@@ -453,8 +458,6 @@ def _validation_result_to_dict(vr):
         "puntaje_total": summarize_rubrics([vr.lotaip_rubric])["puntaje_formato"] if vr.lotaip_rubric else float(vr.total_score),
         "rubrica_lotaip": vr.lotaip_rubric or None,
         "engine_version": vr.engine_version or vr.lotaip_rubric.get("engine_version"),
-        "automatic_result": vr.automatic_result or vr.lotaip_rubric,
-        "manual_override": vr.manual_override or {},
         "requires_review": vr.requires_review,
         "requiere_revalidacion": not bool(vr.lotaip_rubric),
         "sita": summarize_rubrics([vr.lotaip_rubric]),
@@ -462,15 +465,18 @@ def _validation_result_to_dict(vr):
         "observaciones": vr.observations or [],
         "fecha_validacion": vr.validated_at.isoformat() if vr.validated_at else None,
     }
+    if include_raw:
+        result["automatic_result"] = vr.automatic_result or vr.lotaip_rubric
+        result["manual_override"] = vr.manual_override or {}
     return result
 
 
-def _monthly_integrated_series(univ_id, period_id, validations):
+def _monthly_integrated_series(univ_id, period_id, validations, score_rows=None):
     """ITI y componente internacional de cada mes con documentos evaluados."""
     series = []
     months = sorted({row.evidence.month for row in validations if row.evidence.month})
     for month in months:
-        sync_national_results(univ_id, period_id, month)
+        sync_national_results(univ_id, period_id, month, score_rows=score_rows)
         result = recalculate_integrated_index(univ_id, period_id, month)
         international = (result.coverage or {}).get('components', {}).get('international', {}).get('score')
         series.append({
@@ -629,6 +635,9 @@ def get_compliance_summary(request, univ_id):
         evidence__period_id=period_id,
     ).select_related(
         "evidence", "evidence__indicator", "evidence__university", "evidence__period"
+    ).defer(
+        # Columnas pesadas que el resumen no usa.
+        "automatic_result", "manual_override", "evidence__extracted_text", "evidence__metadata_json",
     ).order_by("evidence__indicator__code"))
     if month:
         validations = [row for row in validations if str(row.evidence.month) == str(month)]
@@ -637,16 +646,18 @@ def get_compliance_summary(request, univ_id):
     validations = [row for row in validations if not is_lotaip_dictionary(row.evidence)]
 
     # Lista de resultados por literal
-    results = [_validation_result_to_dict(vr) for vr in validations]
+    results = [_validation_result_to_dict(vr, include_raw=False) for vr in validations]
     summary = _summary_from_validations(validations)
     sita = summarize_rubrics([row.lotaip_rubric for row in validations if row.lotaip_rubric])
     national_index = sita.get("puntaje")
     month_value = int(month) if month else None
-    sync_national_results(univ_id, int(period_id), month_value)
+    # Las rúbricas se leen una vez para el período y se reparten por mes.
+    score_rows = lotaip_score_rows(univ_id, int(period_id), month_value)
+    sync_national_results(univ_id, int(period_id), month_value, score_rows=score_rows)
     recalculate_integrated_index(univ_id, int(period_id), month_value)
     integrated = serialize_integrated_result(univ_id, int(period_id), month_value)
     summary["monthly_integrated"] = (
-        [] if month_value else _monthly_integrated_series(univ_id, int(period_id), validations)
+        [] if month_value else _monthly_integrated_series(univ_id, int(period_id), validations, score_rows)
     )
     summary.update({
         "total_index": national_index,
@@ -698,7 +709,9 @@ def get_compliance_summary(request, univ_id):
         import re
         match = re.search(r"(\d+)", item.get("literal", ""))
         if match: by_number.setdefault(int(match.group(1)), []).append(item)
-    numerals = [{**rule.as_dict(), "formats": by_number.get(number, []),
+    # "formats" lleva los ids de los resultados; antes repetía cada resultado
+    # completo (con su rúbrica) y duplicaba el tamaño de la respuesta.
+    numerals = [{**rule.as_dict(), "formats": [item["id"] for item in by_number.get(number, [])],
                  "status": "EVALUATED" if by_number.get(number) else "NOT_PRESENTED"}
                 for number, rule in NUMERAL_CONFIG.items()]
 

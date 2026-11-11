@@ -126,6 +126,14 @@ server {
     server_name _;
     client_max_body_size 50M;
 
+    # Comprimir JSON/JS/CSS: el resumen de una universidad pasa de ~27 MB a ~1 MB.
+    # gzip_proxied any: las peticiones llegan por el túnel de Cloudflare.
+    gzip on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_types application/json application/javascript text/css text/plain image/svg+xml;
+
     root /var/www/sistransp;
     index index.html;
 

@@ -147,7 +147,7 @@ export default function ValidationPage({ readOnly = false }) {
       setUniversities(r.data || []);
     }).catch(() => {});
 
-    api.evidences.list().then(r => {
+    api.evidences.list({ distinct: 'periods' }).then(r => {
       const periodMap = {};
       r.data.forEach(ev => {
         if (ev.period_id && ev.year) {

@@ -133,6 +133,12 @@ def list_evidences(request):
             if year:
                 qs = qs.filter(period__year=year)
 
+            # Solo los períodos con evidencias, sin descargar todas (antes ~4 MB).
+            if request.GET.get("distinct") == "periods":
+                periods = (qs.filter(period__isnull=False).order_by()
+                           .values_list("period_id", "period__year").distinct())
+                return JsonResponse([{"period_id": pid, "year": year_value} for pid, year_value in periods], safe=False)
+
             if page or page_size:
                 try:
                     page_num = max(int(page or 1), 1)
