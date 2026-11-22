@@ -19,62 +19,28 @@ const gapText = (total) => {
 };
 const isFull = (total) => Math.abs(total - 100) <= 0.01;
 
-/* Fracción visual: numerador sobre denominador. */
-function Frac({ top, bottom }) {
-  return (
-    <span className="fx-frac">
-      <span className="fx-frac-top">{top}</span>
-      <span className="fx-frac-bottom">{bottom}</span>
-    </span>
-  );
-}
-
-/* Explicación de la fórmula del índice en dos pasos, con significado de cada símbolo y un ejemplo. */
+/* Explicación en lenguaje simple de cómo se calcula el índice, sin fórmulas. */
 function FormulaExplainer() {
   return (
     <div className="fx">
       <ol className="fx-steps">
         <li className="fx-step">
-          <div className="fx-step-head"><span className="fx-step-num">1</span>Nota de cada dimensión</div>
-          <div className="fx-eq">
-            <span className="fx-var">D<sub>d</sub></span> = 100 ×
-            <Frac top={<>Σ ( w<sub>i</sub> × s<sub>i</sub> )</>} bottom={<>Σ w<sub>i</sub></>} />
-          </div>
-          <p className="fx-say">
-            Es el <strong>promedio ponderado</strong> de los indicadores de la dimensión, expresado de 0 a 100.
-            Los indicadores con más peso influyen más en la nota.
-          </p>
+          <span className="fx-step-num">1</span>
+          <div><strong>Se revisa cada indicador.</strong> Cumple, cumple en parte o no cumple.</div>
         </li>
         <li className="fx-step">
-          <div className="fx-step-head"><span className="fx-step-num">2</span>Índice de Transparencia (ITI)</div>
-          <div className="fx-eq">
-            <span className="fx-var">ITI</span> = Σ ( W<sub>d</sub> × D<sub>d</sub> )
-          </div>
-          <p className="fx-say">
-            Se multiplica la nota de cada una de las <strong>8 dimensiones</strong> por su peso y se suman.
-            Como los pesos suman 100 %, el resultado también va de 0 a 100.
-          </p>
+          <span className="fx-step-num">2</span>
+          <div><strong>Cada dimensión saca una nota de 0 a 100.</strong> Los indicadores con más peso cuentan más.</div>
+        </li>
+        <li className="fx-step">
+          <span className="fx-step-num">3</span>
+          <div><strong>Se juntan las 8 dimensiones</strong> según su peso y sale el índice final, de 0 a 100.</div>
         </li>
       </ol>
-
-      <dl className="fx-legend">
-        <div><dt>s<sub>i</sub></dt><dd>Resultado del indicador: 1 cumple, 0 no cumple, valores intermedios si cumple en parte.</dd></div>
-        <div><dt>w<sub>i</sub></dt><dd>Peso del indicador dentro de su dimensión (se edita abajo).</dd></div>
-        <div><dt>D<sub>d</sub></dt><dd>Nota de la dimensión, de 0 a 100.</dd></div>
-        <div><dt>W<sub>d</sub></dt><dd>Peso de la dimensión en el índice (25 % = 0,25).</dd></div>
-      </dl>
-
-      <div className="fx-example">
-        <span className="fx-example-label">Ejemplo</span>
-        Una dimensión con 3 indicadores de peso 50, 30 y 20 que obtienen 1, 0,5 y 0:
-        {' '}<strong>D = 100 × (50×1 + 30×0,5 + 20×0) / 100 = 65</strong>.
-        Si esa dimensión pesa 20 %, aporta 0,20 × 65 = <strong>13 puntos</strong> al ITI.
-      </div>
-
-      <ul className="fx-rules">
-        <li><strong>“No aplica”</strong> no cuenta: se quita de la suma de arriba y de la de abajo, así no baja la nota.</li>
-        <li><strong>Pendientes o con error técnico</strong> no se cuentan como cero: el índice queda como provisional hasta evaluarlos.</li>
-      </ul>
+      <p className="fx-note">
+        Lo que <strong>no aplica</strong> a una universidad no le baja la nota. Lo que aún está <strong>pendiente</strong> no
+        cuenta como cero: el índice queda como provisional hasta revisarlo.
+      </p>
     </div>
   );
 }
@@ -218,8 +184,8 @@ export default function IntegratedWeightingsPage() {
         <div className="card"><div className="empty-state"><h4>Catálogo no disponible</h4><p>Aplica las migraciones del backend y vuelve a cargar la página.</p></div></div>
       ) : <>
         <div className="grid-21" style={{ marginBottom: 20 }}>
-          <div className="card">
-            <div className="card-header"><span className="card-title">Fórmula aplicada</span><span className={`badge ${validationErrors.length ? 'badge-danger' : 'badge-success'}`}>{validationErrors.length ? 'Pesos por corregir' : 'Distribución válida'}</span></div>
+          <div className="card fx-card">
+            <div className="card-header"><span className="card-title">¿Cómo se calcula el índice?</span><span className={`badge ${validationErrors.length ? 'badge-danger' : 'badge-success'}`}>{validationErrors.length ? 'Pesos por corregir' : 'Distribución válida'}</span></div>
             <FormulaExplainer />
           </div>
           <div className="chart-card">

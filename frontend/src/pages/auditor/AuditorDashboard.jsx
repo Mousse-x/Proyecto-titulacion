@@ -44,9 +44,8 @@ export default function AuditorDashboard() {
       .map((item, index) => ({
         ...item,
         position: index + 1,
-        indicatorTotal: stats.indicators_active || item.evaluated_documents || 0,
       }));
-  }, [query, stats.indicators_active, stats.ranking]);
+  }, [query, stats.ranking]);
 
   return (
     <div className="auditor-ranking-page" style={{ animation: 'slideIn 0.3s ease' }}>
@@ -74,7 +73,7 @@ export default function AuditorDashboard() {
             <div className="auditor-ranking-head">
               <span>Posicion</span>
               <span>Entidad</span>
-              <span>Indices</span>
+              <span>Índice final ITI</span>
             </div>
 
             {loading ? (
@@ -84,9 +83,7 @@ export default function AuditorDashboard() {
                 No hay universidades evaluadas para mostrar.
               </div>
             ) : rankings.map((item) => {
-              const nationalScore = Number(item.transparency_score || 0);
               const integratedScore = Number(item.integrated_transparency_score || 0);
-              const nationalColor = getScoreTone(nationalScore);
               const integratedColor = getScoreTone(integratedScore);
               return (
                 <div
@@ -112,19 +109,15 @@ export default function AuditorDashboard() {
                     </div>
                   </div>
                   <div className="auditor-ranking-indices">
-                    <div className="auditor-ranking-index-label">
-                      <span>Indice nacional</span>
-                      <strong>{nationalScore.toFixed(2)}%</strong>
-                    </div>
-                    <div className="auditor-ranking-percent auditor-ranking-percent-main" style={{ '--score': `${Math.max(nationalScore, 6)}%`, '--score-color': nationalColor }}>
-                      <div className="auditor-ranking-bar" />
-                    </div>
-                    <div className="auditor-ranking-index-label secondary">
-                      <span>Índice final ITI</span>
-                      <strong>{integratedScore.toFixed(2)}%</strong>
-                    </div>
-                    <div className="auditor-ranking-percent auditor-ranking-percent-secondary" style={{ '--score': `${Math.max(integratedScore, 6)}%`, '--score-color': integratedColor }}>
-                      <div className="auditor-ranking-bar" />
+                    <div
+                      className="auditor-ranking-percent auditor-ranking-percent-main auditor-ranking-iti"
+                      style={{ '--score': `${Math.max(integratedScore, 6)}%`, '--score-color': integratedColor }}
+                      role="img"
+                      aria-label={`Índice final ITI: ${integratedScore.toFixed(2)}%`}
+                    >
+                      <div className="auditor-ranking-bar">
+                        <strong>{integratedScore.toFixed(2)}%</strong>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -135,11 +128,22 @@ export default function AuditorDashboard() {
       </div>
 
       <footer className="dashboard-feedback-footer">
-        <div>
-          <strong>Ayuda a mejorar la transparencia</strong>
-          <span>Reporta sugerencias, problemas del sistema o comentarios sobre la informacion evaluada.</span>
+        <div className="dashboard-feedback-inner">
+          <div className="dashboard-feedback-intro">
+            <span className="dashboard-feedback-kicker">Tu opinión cuenta</span>
+            <strong>Ayuda a mejorar la transparencia</strong>
+            <p>Reporta sugerencias, problemas del sistema o comentarios sobre la información evaluada.</p>
+            <ul>
+              <li>Tus comentarios llegan al equipo administrador de SisTransp.</li>
+              <li>Elige «Sistema» para fallos de la aplicación o «Transparencia» para dudas sobre los resultados.</li>
+            </ul>
+          </div>
+          <FeedbackForm compact />
         </div>
-        <FeedbackForm compact />
+        <div className="dashboard-feedback-bottom">
+          <span>© {new Date().getFullYear()} SisTransp · Sistema de Transparencia ESPOCH</span>
+          <span>Índice de Transparencia Institucional de universidades del Ecuador</span>
+        </div>
       </footer>
     </div>
   );

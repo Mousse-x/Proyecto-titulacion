@@ -1,24 +1,52 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { NAV_BY_ROLE } from '../components/layout/navConfig';
+import { NAV_BY_ROLE, pageKey } from '../components/layout/navConfig';
 import {
   DIMENSIONS, ERROR_HELP, FAQ, GLOSSARY, PAGE_HELP, SHORTCUTS, STATUS_HELP,
 } from '../help/helpContent';
-import { pageKey } from '../components/layout/navConfig';
 
 const normalize = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+/* Íconos de línea sencillos (24×24) para cada sección. */
+const ICON_PATHS = {
+  rocket: <><path d="M5 15c-1.5 1.5-2 4-2 6c2 0 4.5-.5 6-2" /><path d="M9 15l-3-3c1-4 4.5-8 12-9c-1 7.5-5 11-9 12Z" /><circle cx="14.5" cy="9.5" r="1.5" /></>,
+  gauge: <><path d="M4 18a8 8 0 1 1 16 0" /><path d="M12 18l4-6" /><circle cx="12" cy="18" r="1" /></>,
+  layers: <><path d="M12 3l9 5l-9 5l-9-5l9-5Z" /><path d="M3 13l9 5l9-5" /></>,
+  flag: <><path d="M5 21V4" /><path d="M5 4h11l-2 4l2 4H5" /></>,
+  screen: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>,
+  alert: <><path d="M12 3l10 18H2L12 3Z" /><path d="M12 10v4M12 17.5v.01" /></>,
+  keyboard: <><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></>,
+  question: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17v.01" /></>,
+  book: <><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z" /><path d="M4 19a2 2 0 0 1 2-2h13" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>,
+  arrow: <path d="M5 12h14M13 6l6 6l-6 6" />,
+};
+function Icon({ name, size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{ICON_PATHS[name]}</svg>
+  );
+}
+
 const SECTIONS = [
-  ['inicio-rapido', 'Inicio rápido'],
-  ['indice', 'Qué es el ITI'],
-  ['dimensiones', 'Las ocho dimensiones'],
-  ['estados', 'Estados de los resultados'],
-  ['pantallas', 'Guía por pantalla'],
-  ['errores', 'Mensajes de error'],
-  ['atajos', 'Atajos de teclado'],
-  ['preguntas', 'Preguntas frecuentes'],
-  ['glosario', 'Glosario'],
+  { id: 'inicio-rapido', label: 'Inicio rápido', icon: 'rocket', desc: 'Lo primero que debes hacer' },
+  { id: 'indice', label: 'Qué es el ITI', icon: 'gauge', desc: 'Cómo se mide la transparencia' },
+  { id: 'dimensiones', label: 'Las ocho dimensiones', icon: 'layers', desc: 'Los temas que se evalúan' },
+  { id: 'estados', label: 'Estados de los resultados', icon: 'flag', desc: 'Qué significa cada etiqueta' },
+  { id: 'pantallas', label: 'Guía por pantalla', icon: 'screen', desc: 'Paso a paso de cada módulo' },
+  { id: 'errores', label: 'Mensajes de error', icon: 'alert', desc: 'Cómo resolver cada uno' },
+  { id: 'atajos', label: 'Atajos de teclado', icon: 'keyboard', desc: 'Trabaja más rápido' },
+  { id: 'preguntas', label: 'Preguntas frecuentes', icon: 'question', desc: 'Dudas más comunes' },
+  { id: 'glosario', label: 'Glosario', icon: 'book', desc: 'Términos y siglas' },
+];
+const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
+
+const SCALE = [
+  { label: 'Alto', range: '90 % o más', kind: 'success' },
+  { label: 'Medio', range: '70 – 89 %', kind: 'info' },
+  { label: 'Bajo', range: '40 – 69 %', kind: 'warning' },
+  { label: 'Crítico', range: 'menos de 40 %', kind: 'danger' },
 ];
 
 const ROLE_TASKS = {
@@ -31,7 +59,7 @@ const ROLE_TASKS = {
   2: [
     'Cargar las evidencias de tu institución en «Documentos LOTAIP».',
     'Revisar el resultado en «Evaluación de transparencia» e «Índice de Transparencia».',
-    'Atender las «Observaciones» del auditor y generar «Reportes».',
+    'Corregir lo que indica «Observaciones» y generar «Reportes».',
   ],
   4: [
     'Consultar el «Índice de Transparencia» de cada universidad.',
@@ -40,10 +68,28 @@ const ROLE_TASKS = {
   ],
 };
 
+function Section({ id, children, extra }) {
+  const s = SECTION_BY_ID[id];
+  return (
+    <section id={id} className="card help-section">
+      <header className="help-section-head">
+        <span className="help-section-icon"><Icon name={s.icon} size={20} /></span>
+        <div>
+          <h2>{s.label}</h2>
+          <p>{s.desc}</p>
+        </div>
+        {extra}
+      </header>
+      {children}
+    </section>
+  );
+}
+
 export default function HelpPage() {
   const { user } = useAuth();
   const role = Number(user?.role_id);
   const [query, setQuery] = useState('');
+  const [active, setActive] = useState(SECTIONS[0].id);
   const q = normalize(query.trim());
   const match = (...texts) => !q || texts.some((t) => normalize(t).includes(q));
 
@@ -59,162 +105,221 @@ export default function HelpPage() {
   const faq = FAQ.filter((f) => match(f.q, f.a));
   const errors = ERROR_HELP.filter((e) => match(e.msg, e.fix));
   const visiblePages = pages.filter((p) => match(p.label, p.help.purpose, ...(p.help.steps || [])));
+  const dimensions = DIMENSIONS.filter((d) => match('dimension', d.code, d.name, d.desc));
+  const showIndex = match('ITI indice transparencia institucional nacional internacional provisional', ...GLOSSARY.slice(0, 4).map((g) => g.def));
+  const showStatus = match('estado cumple sin evidencia error tecnico pendiente', ...STATUS_HELP.map((s) => s.label + s.def));
+
+  const visible = {
+    'inicio-rapido': !q,
+    indice: showIndex,
+    dimensiones: dimensions.length > 0,
+    estados: showStatus,
+    pantallas: visiblePages.length > 0,
+    errores: errors.length > 0,
+    atajos: !q,
+    preguntas: faq.length > 0,
+    glosario: glossary.length > 0,
+  };
+  const anyVisible = Object.values(visible).some(Boolean);
+
+  /* Resalta en el índice la sección que se está leyendo. */
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const nodes = SECTIONS.map((s) => document.getElementById(s.id)).filter(Boolean);
+      if (!nodes.length) return;
+      /* La última sección cuyo título ya pasó la franja superior es la que se está leyendo. */
+      const last = nodes[nodes.length - 1];
+      const atBottom = last.getBoundingClientRect().bottom <= window.innerHeight + 4;
+      const current = atBottom ? last : (nodes.filter((n) => n.getBoundingClientRect().top <= 180).pop() || nodes[0]);
+      setActive(current.id);
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    /* En captura: el desplazamiento puede ocurrir en un contenedor interno, no en window. */
+    window.addEventListener('scroll', onScroll, true);
+    return () => { window.removeEventListener('scroll', onScroll, true); if (frame) cancelAnimationFrame(frame); };
+  }, [q]);
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
-      <div className="page-header">
-        <div className="page-header-info">
-          <h1>Centro de ayuda</h1>
+      <div className="help-hero">
+        <div className="help-hero-text">
+          <span className="help-hero-kicker">Centro de ayuda</span>
+          <h1>¿En qué te podemos ayudar?</h1>
           <p>Cómo usar SisTransp, qué significa cada resultado y cómo resolver los mensajes de error.</p>
         </div>
+        <label className="help-hero-search" htmlFor="help-search">
+          <Icon name="search" size={20} />
+          <span className="sr-only">Buscar en la ayuda</span>
+          <input id="help-search" type="search" value={query} autoComplete="off"
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Busca un tema: ITI, provisional, cargar documento, reporte…" />
+        </label>
+        {q && <div className="help-hero-result">{anyVisible ? `Resultados para «${query.trim()}»` : `Sin resultados para «${query.trim()}»`}</div>}
       </div>
 
-      <div className="help-search">
-        <label className="form-label" htmlFor="help-search">Buscar en la ayuda</label>
-        <input id="help-search" className="form-input" type="search" value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ej.: ITI, provisional, cargar documento, error técnico, reporte…" />
-      </div>
+      {!q && (
+        <div className="help-topics">
+          {SECTIONS.slice(1).map((s) => (
+            <a key={s.id} href={`#${s.id}`} className="help-topic">
+              <span className="help-topic-icon"><Icon name={s.icon} size={20} /></span>
+              <span><strong>{s.label}</strong><small>{s.desc}</small></span>
+            </a>
+          ))}
+        </div>
+      )}
 
       <div className="help-page">
         <nav className="help-toc card" aria-label="Contenido de la ayuda">
-          {SECTIONS.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+          <div className="help-toc-title">Contenido</div>
+          {SECTIONS.filter((s) => visible[s.id]).map((s) => (
+            <a key={s.id} href={`#${s.id}`} className={active === s.id ? 'active' : ''} aria-current={active === s.id ? 'true' : undefined}>
+              <Icon name={s.icon} size={16} />{s.label}
+            </a>
+          ))}
         </nav>
 
-        <div>
-          {!q && (
-            <section id="inicio-rapido" className="card help-section">
-              <h2>Inicio rápido · {user?.role_name}</h2>
-              <ol>
-                {(ROLE_TASKS[role] || ROLE_TASKS[2]).map((t) => <li key={t}>{t}</li>)}
+        <div className="help-content">
+          {visible['inicio-rapido'] && (
+            <Section id="inicio-rapido" extra={user?.role_name && <span className="badge badge-primary help-role">{user.role_name}</span>}>
+              <ol className="help-steps-list">
+                {(ROLE_TASKS[role] || ROLE_TASKS[2]).map((t, i) => <li key={t}><span>{i + 1}</span>{t}</li>)}
               </ol>
-              <p>En cualquier pantalla pulsa <strong>Ayuda</strong> (arriba a la derecha) para ver instrucciones de esa pantalla, o <kbd>Ctrl</kbd> + <kbd>K</kbd> para buscar una pantalla o universidad.</p>
-            </section>
+              <div className="help-callout">
+                En cualquier pantalla pulsa <strong>Ayuda</strong> (arriba a la derecha) para ver las instrucciones de esa pantalla,
+                o <kbd>Ctrl</kbd> + <kbd>K</kbd> para buscar una pantalla o universidad.
+              </div>
+            </Section>
           )}
 
-          {match('ITI indice transparencia institucional nacional internacional provisional', ...GLOSSARY.slice(0, 4).map((g) => g.def)) && (
-            <section id="indice" className="card help-section">
-              <h2>¿Qué es el Índice de Transparencia Institucional (ITI)?</h2>
-              <p>
-                Es un resultado único de 0 a 100 % que resume la transparencia activa de una universidad. Combina dos componentes
-                que en la aplicación se muestran siempre por separado:
+          {visible.indice && (
+            <Section id="indice">
+              <p className="help-lead">
+                Es una nota de <strong>0 a 100 %</strong> que resume qué tan transparente es una universidad. Se arma con dos partes:
               </p>
-              <div className="help-grid">
-                <div className="help-item">
-                  <strong>Componente nacional · LOTAIP</strong>
-                  <p>Cumplimiento de los 24 numerales del artículo 19 de la LOTAIP, a partir de los documentos del Portal Nacional de Transparencia. Se resume en el SITA.</p>
+              <div className="help-grid help-grid-2">
+                <div className="help-item help-item-accent">
+                  <strong>Parte nacional · LOTAIP</strong>
+                  <p>Revisa los 24 numerales del artículo 19 de la LOTAIP con los documentos del Portal Nacional de Transparencia.</p>
                 </div>
-                <div className="help-item">
-                  <strong>Componente internacional · complementario</strong>
-                  <p>Indicadores de referentes internacionales (OGP, OCDE, ODS 16, WCAG, Open Data Charter) verificados con evidencia web citada. Se evalúa una vez al año.</p>
+                <div className="help-item help-item-accent">
+                  <strong>Parte internacional · complementaria</strong>
+                  <p>Revisa buenas prácticas internacionales (OGP, OCDE, ODS 16, WCAG, Open Data Charter) con evidencia en la web. Se evalúa una vez al año.</p>
                 </div>
               </div>
-              <p style={{ marginTop: 12 }}>Ambos alimentan 58 indicadores agrupados en ocho dimensiones. Cada indicador se califica 0, 0,5 o 1:</p>
-              <div className="help-formula">Dd = 100 × Σ(wᵢ × sᵢ) / Σ(wᵢ) &nbsp;·&nbsp; ITI = Σ(W_d × D_d) &nbsp;·&nbsp; SITA = (CTA + ETA + RP + CI) / 4</div>
-              <p>
-                <strong>Clasificación:</strong> Alto ≥ 90 % · Medio 70–89 % · Bajo 40–69 % · Crítico &lt; 40 %.
+              <ol className="help-flow">
+                <li><span>1</span>Cada uno de los 58 indicadores se califica: cumple, cumple en parte o no cumple.</li>
+                <li><span>2</span>Cada dimensión saca una nota de 0 a 100; los indicadores con más peso cuentan más.</li>
+                <li><span>3</span>Las 8 dimensiones se combinan según su peso y sale el ITI.</li>
+              </ol>
+              <div className="help-subtitle">Clasificación</div>
+              <div className="help-scale">
+                {SCALE.map((s) => (
+                  <div key={s.label} className={`help-scale-item help-scale-${s.kind}`}>
+                    <strong>{s.label}</strong><span>{s.range}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="help-muted">
                 El ITI es <strong>Provisional</strong> mientras falten indicadores por resolver y <strong>Definitivo</strong> cuando todos tienen resultado.
               </p>
-            </section>
+            </Section>
           )}
 
-          {match('dimension', ...DIMENSIONS.map((d) => `${d.code} ${d.name} ${d.desc}`)) && (
-            <section id="dimensiones" className="card help-section">
-              <h2>Las ocho dimensiones del ITI</h2>
+          {visible.dimensiones && (
+            <Section id="dimensiones">
               <div className="help-grid">
-                {DIMENSIONS.filter((d) => match('dimension', d.code, d.name, d.desc)).map((d) => (
-                  <div className="help-item" key={d.code}>
-                    <strong>{d.code} · {d.name}</strong>
-                    <span>{d.desc}</span>
+                {dimensions.map((d) => (
+                  <div className="help-item help-dim" key={d.code}>
+                    <span className="help-dim-code">{d.code}</span>
+                    <div><strong>{d.name}</strong><span>{d.desc}</span></div>
                   </div>
                 ))}
               </div>
-              <p style={{ marginTop: 12 }}>El peso de cada dimensión se configura en «Ponderaciones» y debe sumar 100 %.</p>
-            </section>
+              <p className="help-muted">El peso de cada dimensión se configura en «Ponderaciones» y debe sumar 100 %.</p>
+            </Section>
           )}
 
-          {match('estado cumple sin evidencia error tecnico pendiente', ...STATUS_HELP.map((s) => s.label + s.def)) && (
-            <section id="estados" className="card help-section">
-              <h2>Estados de los resultados</h2>
-              <p>La aplicación distingue la <strong>ausencia de evidencias</strong>, el <strong>incumplimiento</strong> y el <strong>error técnico</strong> de procesamiento:</p>
-              <dl className="help-status-list">
+          {visible.estados && (
+            <Section id="estados">
+              <p className="help-lead">La aplicación distingue la <strong>falta de evidencias</strong>, el <strong>incumplimiento</strong> y el <strong>error técnico</strong>:</p>
+              <div className="help-status-grid">
                 {STATUS_HELP.map((s) => (
-                  <div key={s.label}>
-                    <dt><span className={`badge badge-${s.kind}`}>{s.label}</span></dt>
-                    <dd>{s.def}</dd>
+                  <div key={s.label} className="help-status-card">
+                    <span className={`badge badge-${s.kind}`}>{s.label}</span>
+                    <p>{s.def}</p>
                   </div>
                 ))}
-              </dl>
-            </section>
+              </div>
+            </Section>
           )}
 
-          {visiblePages.length > 0 && (
-            <section id="pantallas" className="card help-section">
-              <h2>Guía por pantalla</h2>
-              <div style={{ display: 'grid', gap: 14 }}>
+          {visible.pantallas && (
+            <Section id="pantallas">
+              <div className="help-accordion">
                 {visiblePages.map((p) => (
-                  <div className="help-item" key={p.to}>
-                    <strong><Link to={p.to}>{p.label}</Link></strong>
-                    <p>{p.help.purpose}</p>
-                    {p.help.steps?.length > 0 && (
-                      <ol style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: '0.85rem', color: 'var(--text)' }}>
-                        {p.help.steps.map((s) => <li key={s}>{s}</li>)}
-                      </ol>
-                    )}
+                  <details key={p.to} open={!!q}>
+                    <summary>
+                      <span><strong>{p.label}</strong><small>{p.help.purpose}</small></span>
+                    </summary>
+                    <div className="help-accordion-body">
+                      {p.help.steps?.length > 0 && (
+                        <ol className="help-steps-list help-steps-sm">
+                          {p.help.steps.map((s, i) => <li key={s}><span>{i + 1}</span>{s}</li>)}
+                        </ol>
+                      )}
+                      <Link className="btn btn-sm btn-secondary help-go" to={p.to}>Ir a {p.label} <Icon name="arrow" size={14} /></Link>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {visible.errores && (
+            <Section id="errores">
+              <p className="help-lead">Si el mensaje dice <span className="error-kind">Error técnico</span>, no depende de tus datos: pulsa «Reintentar». Los demás te indican qué corregir.</p>
+              <div className="help-error-list">
+                {errors.map((e) => (
+                  <div key={e.msg} className="help-error">
+                    <div className="help-error-msg"><Icon name="alert" size={16} />{e.msg}</div>
+                    <p>{e.fix}</p>
                   </div>
                 ))}
               </div>
-            </section>
+            </Section>
           )}
 
-          {errors.length > 0 && (
-            <section id="errores" className="card help-section">
-              <h2>Mensajes de error y cómo resolverlos</h2>
-              <p>Los errores marcados como <span className="error-kind">Error técnico</span> no dependen de tus datos: pulsa «Reintentar». Los demás indican qué corregir.</p>
-              <div className="table-wrapper">
-                <table className="table">
-                  <thead><tr><th>Mensaje</th><th>Qué hacer</th></tr></thead>
-                  <tbody>
-                    {errors.map((e) => <tr key={e.msg}><td><strong>{e.msg}</strong></td><td>{e.fix}</td></tr>)}
-                  </tbody>
-                </table>
+          {visible.atajos && (
+            <Section id="atajos">
+              <div className="help-shortcuts">
+                {SHORTCUTS.map((s) => (
+                  <div key={s.desc} className="help-shortcut">
+                    <span className="help-shortcut-keys">{s.keys.map((k, i) => <span key={k}>{i > 0 && <em>+</em>}<kbd>{k}</kbd></span>)}</span>
+                    <span>{s.desc}</span>
+                  </div>
+                ))}
               </div>
-            </section>
+            </Section>
           )}
 
-          {!q && (
-            <section id="atajos" className="card help-section">
-              <h2>Atajos de teclado</h2>
-              <div className="table-wrapper">
-                <table className="table">
-                  <tbody>
-                    {SHORTCUTS.map((s) => (
-                      <tr key={s.desc}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{s.keys.map((k, i) => <span key={k}>{i > 0 && ' + '}<kbd>{k}</kbd></span>)}</td>
-                        <td>{s.desc}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {visible.preguntas && (
+            <Section id="preguntas">
+              <div className="help-accordion">
+                {faq.map((f) => (
+                  <details key={f.q} open={!!q}>
+                    <summary><span><strong>{f.q}</strong></span></summary>
+                    <div className="help-accordion-body"><p>{f.a}</p></div>
+                  </details>
+                ))}
               </div>
-            </section>
+            </Section>
           )}
 
-          {faq.length > 0 && (
-            <section id="preguntas" className="card help-section help-faq">
-              <h2>Preguntas frecuentes</h2>
-              {faq.map((f) => (
-                <details key={f.q} open={!!q}>
-                  <summary>{f.q}</summary>
-                  <p>{f.a}</p>
-                </details>
-              ))}
-            </section>
-          )}
-
-          {glossary.length > 0 && (
-            <section id="glosario" className="card help-section">
-              <h2>Glosario</h2>
+          {visible.glosario && (
+            <Section id="glosario">
               <div className="help-grid">
                 {glossary.map((g) => (
                   <div className="help-item" key={g.term}>
@@ -223,13 +328,14 @@ export default function HelpPage() {
                   </div>
                 ))}
               </div>
-            </section>
+            </Section>
           )}
 
-          {q && !glossary.length && !faq.length && !errors.length && !visiblePages.length && (
+          {!anyVisible && (
             <div className="card empty-state">
-              <h4>Sin resultados para «{query}»</h4>
+              <h4>Sin resultados para «{query.trim()}»</h4>
               <p>Prueba con otra palabra, por ejemplo «ITI», «documento» o «reporte».</p>
+              <button type="button" className="btn btn-secondary" onClick={() => setQuery('')}>Limpiar búsqueda</button>
             </div>
           )}
         </div>

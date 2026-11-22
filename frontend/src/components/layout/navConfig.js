@@ -82,7 +82,7 @@ export const PAGE_META = {
   validation: { title: 'Evaluación de transparencia', sub: 'Evaluación nacional (LOTAIP) e internacional por separado' },
   index: { title: 'Índice de Transparencia', sub: 'Resultado integrado (ITI) y sus ocho dimensiones' },
   comparatives: { title: 'Análisis comparativo', sub: 'Comparar universidades' },
-  observations: { title: 'Observaciones', sub: 'Observaciones del auditor' },
+  observations: { title: 'Observaciones', sub: 'Qué corregir según la evaluación' },
   ayuda: { title: 'Centro de ayuda', sub: 'Guía de uso, glosario del índice y solución de errores' },
 };
 

@@ -23,30 +23,33 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export default function TrendLine({ data, universities = [], xKey = 'label', height = 280 }) {
+/* bold: líneas gruesas, puntos con borde y cuadrícula visible (para comparar pocas series). */
+export default function TrendLine({ data, universities = [], xKey = 'label', height = 280, colors = {}, bold = false }) {
   const values = data.flatMap(row => universities.map(u => row[u]).filter(v => typeof v === 'number'));
   const min = values.length ? Math.max(0, Math.floor(Math.min(...values) / 5) * 5 - 5) : 0;
   const max = values.length ? Math.min(100, Math.ceil(Math.max(...values) / 5) * 5 + 5) : 100;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+        <CartesianGrid strokeDasharray={bold ? undefined : '3 3'} stroke={bold ? 'var(--text-subtle)' : 'rgba(255,255,255,0.05)'} strokeOpacity={bold ? 0.3 : 1} />
         <XAxis dataKey={xKey} tick={{ fill:'var(--text-muted)', fontSize:12 }} axisLine={false} tickLine={false} />
         <YAxis domain={[min, max]} tick={{ fill:'var(--text-subtle)', fontSize:11 }} axisLine={false} tickLine={false} unit="%" />
         <Tooltip content={<CustomTooltip />} />
         <Legend wrapperStyle={{ paddingTop:16, fontSize:'0.8125rem' }} />
         {universities.map((u, index) => {
-          const color = u === AVERAGE ? 'var(--text-muted)' : PALETTE[index % PALETTE.length];
+          const color = colors[u] || (u === AVERAGE ? 'var(--text-muted)' : PALETTE[index % PALETTE.length]);
+          const isAverage = u === AVERAGE;
           return (
             <Line
               key={u}
               type="monotone"
               dataKey={u}
               stroke={color}
-              strokeWidth={u === AVERAGE ? 2 : 2.5}
-              strokeDasharray={u === AVERAGE ? '6 4' : undefined}
-              dot={u === AVERAGE ? false : { fill:color, strokeWidth:0, r:3 }}
-              activeDot={{ r:5, strokeWidth:0 }}
+              strokeWidth={isAverage ? 2 : bold ? 4 : 2.5}
+              strokeOpacity={isAverage && bold ? 0.7 : 1}
+              strokeDasharray={isAverage ? '6 4' : undefined}
+              dot={isAverage ? false : bold ? { fill:color, stroke:'#fff', strokeWidth:2, r:5 } : { fill:color, strokeWidth:0, r:3 }}
+              activeDot={bold ? { r:8, stroke:'#fff', strokeWidth:2 } : { r:5, strokeWidth:0 }}
               connectNulls
             />
           );

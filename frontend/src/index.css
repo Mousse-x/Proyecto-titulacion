@@ -2370,32 +2370,80 @@ select.form-input option {
   margin: 0;
 }
 
+/* Footer del dashboard: franja clara a todo el ancho con el formulario de comentarios */
 .dashboard-feedback-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 18px;
-  width: min(100%, 1180px);
-  margin: 28px auto 0;
-  padding: 22px 20px 8px;
+  margin: 48px -32px -28px;
+  background: var(--bg-card);
   border-top: 1px solid var(--border);
   color: var(--text-muted);
 }
 
-.dashboard-feedback-footer > div {
+.dashboard-feedback-inner {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
+  gap: 40px;
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 36px 32px 28px;
+}
+
+.dashboard-feedback-intro {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
 }
 
-.dashboard-feedback-footer strong {
+.dashboard-feedback-kicker {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.dashboard-feedback-intro strong {
+  font-size: 1.15rem;
+  font-weight: 800;
   color: var(--text);
-  font-size: 0.95rem;
-  font-weight: 700;
 }
 
-.dashboard-feedback-footer span {
-  font-size: 0.82rem;
+.dashboard-feedback-intro p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.dashboard-feedback-intro ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+.dashboard-feedback-footer .feedback-form-actions {
+  justify-content: flex-end;
+}
+
+.dashboard-feedback-bottom {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 14px 32px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+@media (max-width: 900px) {
+  .dashboard-feedback-footer { margin: 40px -16px -20px; }
+  .dashboard-feedback-inner { grid-template-columns: 1fr; gap: 24px; padding: 28px 20px 22px; }
+  .dashboard-feedback-bottom { padding: 12px 20px 16px; }
 }
 
 .feedback-admin-toolbar {

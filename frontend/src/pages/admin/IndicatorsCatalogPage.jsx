@@ -7,9 +7,9 @@ import Badge from '../../components/common/Badge';
 import { api, MEDIA_BASE } from '../../api/client';
 
 const TYPES = {
-  LOTAIP: { label: 'LOTAIP', tab: 'Documentos base LOTAIP', classification: 'NACIONAL' },
-  MIXTO: { label: 'Mixto', tab: 'Indicadores mixtos', classification: 'MIXTO' },
-  COMPLEMENTARIO: { label: 'Complementario', tab: 'Indicadores complementarios', classification: 'INTERNACIONAL' },
+  LOTAIP: { label: 'LOTAIP', tab: 'Documentos base LOTAIP', desc: 'Exigidos por la ley', classification: 'NACIONAL' },
+  MIXTO: { label: 'Mixto', tab: 'Indicadores mixtos', desc: 'LOTAIP + requisito internacional', classification: 'MIXTO' },
+  COMPLEMENTARIO: { label: 'Complementario', tab: 'Indicadores complementarios', desc: 'Solo estándares internacionales', classification: 'INTERNACIONAL' },
 };
 
 const TAB_HINT = {
@@ -268,11 +268,15 @@ export default function IndicatorsCatalogPage({ readOnly = false }) {
         </div>
       </div>
 
+      <p className="ind-tabs-label">Elige qué tipo de indicador quieres ver</p>
       <div className="ind-tabs" role="tablist" aria-label="Tipo de indicador">
         {Object.entries(TYPES).map(([key, config]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key}
             className={`ind-tab${tab === key ? ' active' : ''}`} onClick={() => changeTab(key)}>
-            {config.tab}
+            <span className="ind-tab-text">
+              <span className="ind-tab-title">{config.tab}</span>
+              <span className="ind-tab-desc">{config.desc}</span>
+            </span>
             <span className="ind-tab-count">{counts[key] || 0}</span>
           </button>
         ))}

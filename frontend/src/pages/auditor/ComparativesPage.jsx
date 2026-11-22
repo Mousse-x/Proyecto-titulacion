@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import TransparencyRadar from '../../components/charts/TransparencyRadar';
+import TrendLine from '../../components/charts/TrendLine';
 import { ScoreCard } from '../../components/common/StatCard';
 import Badge from '../../components/common/Badge';
 import PeriodSelect, { SimulatedNotice } from '../../components/common/PeriodSelect';
@@ -7,9 +8,12 @@ import useDashboardStats from '../../hooks/useDashboardStats';
 import { getScoreInk, getScoreLabel } from '../../utils/score';
 import { getUniversityLogo } from '../../data/universityLogos';
 
-const EMPTY_STATS = { ranking: [], available_periods: [] };
+const EMPTY_STATS = { ranking: [], trend: [], available_periods: [] };
 const LOTAIP_COMPONENTS = [['CTA', 'Información completa y actualizada'], ['ETA', 'Estructura de datos abiertos'],
   ['RP', 'Registro dentro del plazo'], ['CI', 'Calidad de la información']];
+// Azul (A) y verde (B): mismos colores en todos los gráficos de la página.
+const COLOR_A = 'var(--primary)';
+const COLOR_B = 'var(--accent)';
 const round = (value) => Number(Number(value || 0).toFixed(2));
 
 export default function ComparativesPage() {
@@ -42,6 +46,11 @@ export default function ComparativesPage() {
   const radarFor = (u) => (u?.dimensions || []).map((d) => ({ subject: d.code, score: round(d.score) }));
   const radarA = radarFor(uA);
   const radarB = radarFor(uB);
+
+  // Evolución mensual: solo las dos universidades elegidas y el promedio del período como referencia.
+  const trend = stats.trend || [];
+  const trendSeries = [...new Set([uA?.name, uB?.name].filter(Boolean)), ...(trend.length ? ['Promedio'] : [])];
+  const trendColors = { [uB?.name]: COLOR_B, [uA?.name]: COLOR_A };
 
   return (
     <div style={{ animation: 'slideIn 0.3s ease' }}>
@@ -99,14 +108,25 @@ export default function ComparativesPage() {
             })}
           </div>
 
+          <div className="chart-card" style={{ marginBottom: 24 }}>
+            <div className="chart-title">📈 Evolución mensual del índice final ITI · {uA?.name} vs {uB?.name}</div>
+            {trend.length < 2 ? (
+              <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.875rem' }}>
+                {trend.length ? 'El período tiene un solo mes evaluado; no hay evolución que mostrar.' : 'Sin índices mensuales calculados en este período.'}
+              </div>
+            ) : (
+              <TrendLine data={trend} universities={trendSeries} colors={trendColors} height={320} bold />
+            )}
+          </div>
+
           <div className="grid-2" style={{ marginBottom: 24 }}>
             <div className="chart-card">
               <div className="chart-title">{uA?.name} - perfil por dimensión</div>
-              <TransparencyRadar data={radarA} color="var(--primary)" height={260} />
+              <TransparencyRadar data={radarA} color={COLOR_A} height={330} />
             </div>
             <div className="chart-card">
               <div className="chart-title">{uB?.name} - perfil por dimensión</div>
-              <TransparencyRadar data={radarB} color="var(--accent)" height={260} />
+              <TransparencyRadar data={radarB} color={COLOR_B} height={330} />
             </div>
           </div>
 
@@ -128,23 +148,23 @@ export default function ComparativesPage() {
                       <span style={{ fontWeight: 700, color: getScoreInk(row.a) }}>{row.a}%</span>
                       <span style={{ color: 'var(--text-subtle)' }}>vs</span>
                       <span style={{ fontWeight: 700, color: getScoreInk(row.b) }}>{row.b}%</span>
-                      <span style={{ fontWeight: 700, color: diff > 0 ? 'var(--primary-light)' : diff < 0 ? 'var(--accent)' : 'var(--text-subtle)' }}>
+                      <span style={{ fontWeight: 700, color: diff > 0 ? COLOR_A : diff < 0 ? COLOR_B : 'var(--text-subtle)' }}>
                         {diff > 0 ? `+${diff} ${uA?.name}` : diff < 0 ? `${Math.abs(diff)} ${uB?.name}` : 'Empate'}
                       </span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--primary-light)', width: 54 }}>{uA?.name}</span>
+                      <span style={{ fontSize: '0.75rem', color: COLOR_A, width: 54 }}>{uA?.name}</span>
                       <div className="progress-bar" style={{ flex: 1 }}>
-                        <div style={{ height: '100%', borderRadius: 3, background: 'var(--primary)', width: `${Math.min(100, row.a)}%` }} />
+                        <div style={{ height: '100%', borderRadius: 3, background: COLOR_A, width: `${Math.min(100, row.a)}%` }} />
                       </div>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, width: 42, textAlign: 'right' }}>{row.a}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--accent)', width: 54 }}>{uB?.name}</span>
+                      <span style={{ fontSize: '0.75rem', color: COLOR_B, width: 54 }}>{uB?.name}</span>
                       <div className="progress-bar" style={{ flex: 1 }}>
-                        <div style={{ height: '100%', borderRadius: 3, background: 'var(--accent)', width: `${Math.min(100, row.b)}%` }} />
+                        <div style={{ height: '100%', borderRadius: 3, background: COLOR_B, width: `${Math.min(100, row.b)}%` }} />
                       </div>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, width: 42, textAlign: 'right' }}>{row.b}</span>
                     </div>

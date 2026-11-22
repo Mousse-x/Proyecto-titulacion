@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ScoreCard } from '../../components/common/StatCard';
-import Badge from '../../components/common/Badge';
 import { api } from '../../api/client';
 import { validationApi } from '../../api/validation';
 import { getScoreColor, getScoreInk, getScoreLabel } from '../../utils/score';
@@ -122,11 +121,8 @@ export default function TransparencyIndexPage() {
     return () => { cancelled = true; };
   }, [selectedId]);
 
-  const { pathname } = useLocation();
-  const rolePrefix = pathname.startsWith('/auditor') ? '/auditor' : '/university';
   const selected = rankings.find((u) => String(u.id) === String(selectedId)) || rankings[0];
   const internationalScore = integratedResult?.component_scores?.international?.score ?? null;
-  const breakdownUrl = `${rolePrefix}/validation?university_id=${selected?.id || selectedId}${selectedPeriod ? `&period_id=${selectedPeriod}` : ''}`;
   const selectedUniversity = universities.find((u) => String(u.id) === String(selectedId)) || selected || {};
   const national = selected?.transparency_score || 0;
   const integrated = integratedResult?.index_percent ?? selected?.integrated_transparency_score ?? null;
@@ -397,41 +393,6 @@ export default function TransparencyIndexPage() {
                   ))}
                 </div>
               )}
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title">Detalle institucional</span>
-              <Link to={breakdownUrl} className="btn btn-secondary btn-sm link-button">Ver indicadores y evidencias →</Link>
-            </div>
-            <div className="table-wrapper">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Componente</th>
-                    <th>Puntaje</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Transparencia nacional LOTAIP</td>
-                    <td><span style={{ fontWeight: 800, color: getScoreInk(national) }}>{national}%</span></td>
-                    <td><Badge status={getScoreLabel(national)} /></td>
-                  </tr>
-                  <tr>
-                    <td>Componente complementario internacional</td>
-                    <td><span style={{ fontWeight: 800, color: internationalScore == null ? 'var(--warning)' : getScoreInk(internationalScore) }}>{internationalScore == null ? 'Pendiente' : `${Number(internationalScore).toFixed(2)}%`}</span></td>
-                    <td><Badge status={internationalScore == null ? 'Pendiente' : getScoreLabel(internationalScore)} /></td>
-                  </tr>
-                  <tr>
-                    <td><strong>Índice de Transparencia Institucional (resultado único)</strong></td>
-                    <td><span style={{ fontWeight: 800, color: integrated == null ? 'var(--warning)' : getScoreInk(integrated) }}>{integrated == null ? 'Pendiente' : `${integrated}%`}</span></td>
-                    <td><Badge status={integrated == null ? 'Provisional' : getScoreLabel(integrated)} /></td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
         </>

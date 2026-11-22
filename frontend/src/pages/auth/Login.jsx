@@ -306,6 +306,13 @@ export default function Login() {
                 <>
                   <h2 className="login-title">Verificación de 2 Pasos</h2>
                   <p className="login-subtitle">Ingresa el código OTP que enviamos a tu correo</p>
+                  <div className="otp-wait-note" role="note">
+                    <span className="otp-wait-icon" aria-hidden="true">⏱</span>
+                    <div>
+                      <strong>El correo puede tardar de 2 a 5 minutos en llegar.</strong>
+                      <span>Si no lo ves, revisa también la carpeta de spam o correo no deseado. No cierres esta ventana mientras esperas.</span>
+                    </div>
+                  </div>
                   <form className="login-form" onSubmit={handleOtp} autoComplete="off">
                     <div className="form-group">
                       <label className="form-label" htmlFor="otp-code">Código OTP (6 dígitos)</label>

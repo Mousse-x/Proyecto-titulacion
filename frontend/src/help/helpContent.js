@@ -196,8 +196,13 @@ export const PAGE_HELP = {
   comparatives: COMPARATIVES_HELP,
   observations: {
     title: 'Observaciones',
-    purpose: 'Observaciones registradas por el auditor sobre los documentos de tu institución.',
-    steps: ['Revisa cada observación y corrige o reemplaza el documento en «Documentos LOTAIP».'],
+    purpose: 'Lo que la evaluación automática encontró en los documentos LOTAIP de tu institución y qué debes corregir.',
+    steps: [
+      'Elige el mes evaluado arriba a la derecha.',
+      'Empieza por «Prioridad alta»: documentos que no cumplen o que tuvieron un error técnico.',
+      'Corrige o reemplaza el archivo en «Documentos LOTAIP».',
+      'Vuelve a ejecutar la evaluación para que la observación desaparezca y se actualice tu nota.',
+    ],
   },
   ayuda: {
     title: 'Centro de ayuda',
