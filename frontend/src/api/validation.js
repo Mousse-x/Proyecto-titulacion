@@ -89,6 +89,11 @@ export const validationApi = {
     const runId = started.run_id;
     if (!runId) throw new Error('El servidor no devolvió el identificador de la evaluación.');
     onProgress?.(started);
+    return validationApi.pollRun(runId, onProgress, options);
+  },
+
+  /** Follow an already started run until it finishes (also used to resume after leaving the page). */
+  pollRun: async (runId, onProgress, options = {}) => {
     let pollFailures = 0;
 
     while (true) {
@@ -99,6 +104,7 @@ export const validationApi = {
         pollFailures = 0;
       } catch (error) {
         if (options.signal?.aborted) throw new DOMException('Evaluación detenida', 'AbortError');
+        if (error.response?.status === 404) throw new Error('La ejecución ya no existe en el servidor.');
         pollFailures += 1;
         if (pollFailures < 30) continue;
         throw validationRequestError(error);

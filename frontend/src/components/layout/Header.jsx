@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../context/FeedbackContext';
 import { api } from '../../api/client';
+import EvaluationIndicator from './EvaluationIndicator';
 import { DASHBOARD_BY_ROLE, NAV_BY_ROLE, PAGE_META, pageKey, sectionForPath } from './navConfig';
 
 /* Icono de usuario con un menú pequeño: nombre, rol y cerrar sesión. */
@@ -115,6 +116,7 @@ export default function Header({ onToggleMenu, menuOpen, onOpenHelp, onOpenSearc
         </div>
       </div>
       <div className="topbar-right">
+        <EvaluationIndicator />
         <button type="button" className="topbar-icon-btn topbar-search" onClick={onOpenSearch}
           title="Búsqueda rápida (Ctrl + K)" aria-label="Buscar (Ctrl + K)">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"

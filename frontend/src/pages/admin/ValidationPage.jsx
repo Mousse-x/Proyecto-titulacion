@@ -1,10 +1,12 @@
 import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import ErrorNotice from '../../components/common/ErrorNotice';
 import { useConfirm, useToast } from '../../context/FeedbackContext';
 import { validationApi } from '../../api/validation';
 import { useAuth } from '../../context/AuthContext';
+import { useEvaluation } from '../../context/EvaluationContext';
+import { SCOPE_LABEL, sameTarget } from '../../utils/evaluationJob';
 import LotaipLinkReviewQueue from '../../components/LotaipLinkReviewQueue';
 import IndexSummary from '../../components/evaluation/IndexSummary';
 import DimensionBars from '../../components/evaluation/DimensionBars';
@@ -16,7 +18,7 @@ import '../../components/evaluation/evaluation.css';
 import { getLotaipDashboard } from '../../utils/lotaipDashboard';
 import { groupLotaipPackages, pendingLotaipPackages } from '../../utils/lotaipPackages';
 
-const SCOPE_LABEL = { lotaip: 'Evaluación nacional LOTAIP', international: 'Evaluación internacional', pending: 'Reintento de comprobaciones pendientes' };
+const EMPTY_PROGRESS = { pct: 0, msg: '', phase: '', detail: '', activity: [] };
 
 /* Resultado del último proceso: permanece visible hasta que el usuario lo oculta (H1.1, H1.3, H9.2). */
 function RunStatusBanner({ run, onRetry, onDismiss }) {
@@ -100,24 +102,31 @@ export default function ValidationPage({ readOnly = false }) {
   const toast = useToast();
   const confirmAction = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { pathname } = useLocation();
+  const evaluation = useEvaluation();
+  const { job, setViewing } = evaluation;
   const lockUniversitySelect = false;
   const [universities, setUniversities] = useState([]);
   const [periods, setPeriods] = useState([]);
-  const [selectedUniv, setSelectedUniv] = useState(searchParams.get('university_id') || '');
-  const [selectedPeriod, setSelectedPeriod] = useState(searchParams.get('period_id') || '');
-  const [selectedMonth, setSelectedMonth] = useState(searchParams.get('month') || '');
-  const [lastRun, setLastRun] = useState(null);
+  // Sin parámetros en la URL y con una evaluación en curso, se abre directamente su selección.
+  const hasUrlSelection = Boolean(searchParams.get('university_id') || searchParams.get('period_id'));
+  const initialTarget = !hasUrlSelection && job?.returnPath?.startsWith(pathname) ? job.target : null;
+  const [selectedUniv, setSelectedUniv] = useState(searchParams.get('university_id') || initialTarget?.universityId || '');
+  const [selectedPeriod, setSelectedPeriod] = useState(searchParams.get('period_id') || initialTarget?.periodId || '');
+  const [selectedMonth, setSelectedMonth] = useState(searchParams.get('month') || initialTarget?.month || '');
   const [loading, setLoading] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [validationScope, setValidationScope] = useState(null);
-  const [activeRunId, setActiveRunId] = useState(null);
-  const [stopping, setStopping] = useState(false);
-  const validationController = useRef(null);
-  const [progress, setProgress] = useState({ pct: 0, msg: '', phase: '', detail: '', activity: [] });
+  // La evaluación en curso vive en EvaluationContext: sigue avanzando aunque se cambie de pantalla.
+  const validating = Boolean(job);
+  const validationScope = job?.scope || null;
+  const activeRunId = job?.runId || null;
+  const stopping = Boolean(job?.stopping);
+  const progress = job?.progress || EMPTY_PROGRESS;
+  const currentTarget = { universityId: selectedUniv, periodId: selectedPeriod, month: selectedMonth };
+  const lastRun = sameTarget(evaluation.lastRun?.target, currentTarget) ? evaluation.lastRun : null;
   const [summary, setSummary] = useState(null);
   const [results, setResults] = useState([]);
   const [numerals, setNumerals] = useState([]);
-  const [activeTab, setActiveTab] = useState('lotaip');
+  const [activeTab, setActiveTab] = useState(job?.scope === 'international' ? 'international' : 'lotaip');
   const tabsRef = useRef(null);
   const [retryingIndicator, setRetryingIndicator] = useState(null);
   const [clearingDimension, setClearingDimension] = useState(null);
@@ -206,6 +215,20 @@ export default function ValidationPage({ readOnly = false }) {
     loadResults();
   }, [selectedUniv, selectedPeriod, loadResults]);
 
+  // Mientras esta pantalla está abierta no se muestra el indicador flotante de la barra superior.
+  useEffect(() => {
+    setViewing(true);
+    return () => setViewing(false);
+  }, [setViewing]);
+
+  // Cuando termina una evaluación (aunque se haya iniciado antes de volver) se recargan los resultados.
+  const seenResultsVersion = useRef(evaluation.resultsVersion);
+  useEffect(() => {
+    if (seenResultsVersion.current === evaluation.resultsVersion) return;
+    seenResultsVersion.current = evaluation.resultsVersion;
+    if (selectedUniv && selectedPeriod && sameTarget(evaluation.lastRun?.target, currentTarget)) loadResults();
+  }, [evaluation.resultsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!selectedUniv || !selectedPeriod) {
       setDocumentCount(null);
@@ -234,106 +257,23 @@ export default function ValidationPage({ readOnly = false }) {
   }, [selectedUniv, selectedPeriod, selectedMonth]);
 
 
-  const handleValidate = async (scope) => {
-    if (!selectedUniv || !selectedPeriod) return;
+  const evaluationTarget = () => ({
+    target: { universityId: selectedUniv, periodId: selectedPeriod, month: selectedMonth },
+    contextLabel,
+    returnPath: `${pathname}?${new URLSearchParams({
+      university_id: selectedUniv, period_id: selectedPeriod, ...(selectedMonth ? { month: selectedMonth } : {}),
+    }).toString()}`,
+  });
+
+  const handleValidate = (scope) => {
+    if (!selectedUniv || !selectedPeriod || validating) return;
     if (scope === 'lotaip' && documentCount === 0) {
       setError('No hay documentos para la universidad, período o mes seleccionado. Carga o importa los documentos en «Documentos LOTAIP» antes de evaluar.');
       return;
     }
-    setLastRun(null);
     setActiveTab(scope === 'international' ? 'international' : 'lotaip');
-    setValidating(true);
-    setValidationScope(scope);
-    setActiveRunId(null);
-    setStopping(false);
-    validationController.current = new AbortController();
-    setProgress({
-      pct: 0,
-      msg: scope === 'international' ? 'Iniciando evaluación internacional...' : 'Iniciando evaluación LOTAIP...',
-      phase: scope === 'international' ? 'Preparando búsqueda web' : 'Preparando evaluación LOTAIP',
-      detail: scope === 'international' ? 'Agrupando indicadores por dimensión.' : 'Creando la ejecución y organizando los documentos seleccionados.',
-      activity: [],
-    });
     setError(null);
-    let attachedToExistingRun = false;
-
-    try {
-      const final = await validationApi.validateAllStream(selectedUniv, selectedPeriod, selectedMonth, (data) => {
-        if (data.status === 'run') {
-          setActiveRunId(data.run_id);
-        }
-        if (data.status === 'progress') {
-          setProgress((current) => {
-            const phase = data.phase || current.phase || 'Procesando evaluación';
-            const detail = data.detail || current.detail || '';
-            const nextActivity = [...(current.activity || [])];
-            const last = nextActivity[nextActivity.length - 1];
-            if (!last || last.phase !== phase || last.detail !== detail) {
-              nextActivity.push({ phase, detail });
-            }
-            return {
-              pct: data.pct ?? current.pct,
-              msg: data.msg || current.msg,
-              phase,
-              detail,
-              activity: nextActivity.slice(-6),
-            };
-          });
-        }
-        if (data.status === 'cancelled') {
-          setProgress((current) => ({ ...current, msg: '⏹ Evaluación detenida' }));
-        }
-      }, { signal: validationController.current.signal, scope });
-      if (final?.status === 'cancelled') {
-        setProgress((current) => ({ ...current, msg: '⏹ Evaluación detenida' }));
-        setLastRun({ status: 'cancelled', scope, at: new Date(), context: contextLabel,
-          message: 'La evaluación se detuvo antes de terminar. Los resultados anteriores se conservan.' });
-        return;
-      }
-      setProgress({ pct: 100, msg: scope === 'international' ? '✅ Evaluación internacional completada' : '✅ Evaluación LOTAIP completada', phase: 'Completada', detail: '', activity: [] });
-      await loadResults();
-      setLastRun({ status: 'completed', scope, at: new Date(), context: contextLabel,
-        message: 'Los resultados y el Índice de Transparencia Institucional se actualizaron. Revisa el detalle en las pestañas inferiores.' });
-      toast.success({ title: `${SCOPE_LABEL[scope]} completada`, message: contextLabel });
-    } catch (e) {
-      if (e.name === 'AbortError') {
-        setLastRun({ status: 'cancelled', scope, at: new Date(), context: contextLabel,
-          message: 'La evaluación se detuvo antes de terminar. Los resultados anteriores se conservan.' });
-      } else {
-        if (e.status === 409 && e.runId) {
-          attachedToExistingRun = true;
-          setActiveRunId(e.runId);
-          setProgress({
-            pct: 0,
-            msg: `Ejecución activa #${e.runId}`,
-            phase: 'Evaluación existente en proceso',
-            detail: 'Puedes esperar a que termine o detenerla para iniciar una evaluación nueva.',
-            activity: [{
-              phase: 'Ejecución recuperada',
-              detail: e.startedAt ? `Iniciada: ${new Date(e.startedAt).toLocaleString()}` : 'La hora de inicio no está disponible.',
-            }],
-          });
-          setError(`${e.message} Usa “Detener evaluación” si la ejecución anterior ya no continúa.`);
-        } else {
-          const technical = !e.status || e.status >= 500;
-          setLastRun({
-            status: 'failed', scope, at: new Date(), context: contextLabel,
-            message: e.message || 'La evaluación se interrumpió por un error.',
-            hint: technical
-              ? 'Es un error técnico de procesamiento (conexión, portal externo o servicio de IA), no un incumplimiento de la universidad. Pulsa «Reintentar».'
-              : 'Revisa la selección de universidad, período y documentos y vuelve a intentarlo.',
-          });
-        }
-      }
-    } finally {
-      if (!attachedToExistingRun) {
-        setValidating(false);
-        setActiveRunId(null);
-        setStopping(false);
-        setValidationScope(null);
-        validationController.current = null;
-      }
-    }
+    evaluation.startValidation({ scope, ...evaluationTarget() });
   };
 
   const handleStopValidation = async () => {
@@ -345,24 +285,8 @@ export default function ValidationPage({ readOnly = false }) {
       cancelLabel: 'Continuar evaluando',
     });
     if (!ok) return;
-    setStopping(true);
     setError(null);
-    setProgress((current) => ({ ...current, msg: 'Deteniendo evaluación...' }));
-    try {
-      await validationApi.cancelRun(activeRunId);
-      setProgress((current) => ({ ...current, msg: '⏹ Evaluación detenida' }));
-      setLastRun({ status: 'cancelled', scope: validationScope || 'lotaip', at: new Date(), context: contextLabel,
-        message: 'Detuviste la evaluación. Los resultados anteriores se conservan.' });
-      validationController.current?.abort();
-      setValidating(false);
-      setActiveRunId(null);
-      setStopping(false);
-      setValidationScope(null);
-      validationController.current = null;
-    } catch (e) {
-      toast.apiError(e, 'No se pudo detener la evaluación.', handleStopValidation);
-      setStopping(false);
-    }
+    await evaluation.stopValidation();
   };
 
   const handleRetryInternational = async (indicatorCode) => {
@@ -415,38 +339,11 @@ export default function ValidationPage({ readOnly = false }) {
     }
   };
 
-  const handleRetryPending = async () => {
+  const handleRetryPending = () => {
     const pending = pendingLotaipPackages(results);
     if (validating || !pending.length) return;
-    setValidating(true);
     setError(null);
-    let failures = 0;
-    try {
-      for (const [index, result] of pending.entries()) {
-        setProgress({ pct: Math.round(index / pending.length * 100),
-          msg: `Recalculando pendientes ${index + 1}/${pending.length}: ${result.literal}`,
-          phase: 'Reintentando comprobaciones pendientes',
-          detail: 'Volviendo a consultar enlaces, extracción e IA para este literal.',
-          activity: [],
-        });
-        try {
-          await validationApi.retryPending(result.evidence_id);
-        } catch {
-          failures += 1;
-        }
-      }
-      await loadResults();
-      setProgress({ pct: 100, msg: 'Reintento finalizado. Los casos no resueltos permanecen pendientes.',
-        phase: 'Reintento finalizado', detail: '', activity: [] });
-      setLastRun(failures
-        ? { status: 'failed', scope: 'pending', at: new Date(), context: contextLabel,
-          message: `No se pudo completar el reintento de ${failures} de ${pending.length} literal(es).`,
-          hint: 'Suele deberse a enlaces caídos o servicios externos no disponibles (error técnico). Pulsa «Reintentar» más tarde.' }
-        : { status: 'completed', scope: 'pending', at: new Date(), context: contextLabel,
-          message: `Se reintentaron ${pending.length} literal(es). Los casos que no pudieron confirmarse siguen como «Pendiente de comprobación».` });
-    } finally {
-      setValidating(false);
-    }
+    evaluation.retryPending({ items: pending, ...evaluationTarget() });
   };
 
   const lotaipPackages = groupLotaipPackages(results);
@@ -541,7 +438,7 @@ export default function ValidationPage({ readOnly = false }) {
         </div>
       )}
 
-      <RunStatusBanner run={!validating ? lastRun : null} onDismiss={() => setLastRun(null)}
+      <RunStatusBanner run={!validating ? lastRun : null} onDismiss={evaluation.dismissLastRun}
         onRetry={lastRun?.scope === 'pending' ? handleRetryPending : (lastRun && !readOnly ? () => handleValidate(lastRun.scope) : null)} />
 
       {activeTab === 'lotaip' && selectedUniv && selectedPeriod && !documentsLoading && documentCount === 0 && (
@@ -551,8 +448,8 @@ export default function ValidationPage({ readOnly = false }) {
         </div>
       )}
 
-      <ErrorNotice error={error} fallback="No se pudieron cargar las evaluaciones."
-        onRetry={typeof error === 'string' ? null : loadResults} onDismiss={() => setError(null)} style={{ marginBottom: 24 }} />
+      <ErrorNotice error={error || job?.error || null} fallback="No se pudieron cargar las evaluaciones."
+        onRetry={!error || typeof error === 'string' ? null : loadResults} onDismiss={() => setError(null)} style={{ marginBottom: 24 }} />
 
       {!selectedUniv || !selectedPeriod ? (
         <div className="card">

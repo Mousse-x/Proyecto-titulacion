@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { FeedbackProvider } from './context/FeedbackContext';
+import { EvaluationProvider } from './context/EvaluationContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 
@@ -46,6 +47,7 @@ export default function App() {
     <AuthProvider>
       <FeedbackProvider>
       <BrowserRouter>
+      <EvaluationProvider>
         <Routes>
           {/* Public */}
           <Route path="/login"                 element={<Login />} />
@@ -93,6 +95,7 @@ export default function App() {
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+      </EvaluationProvider>
       </BrowserRouter>
       </FeedbackProvider>
     </AuthProvider>

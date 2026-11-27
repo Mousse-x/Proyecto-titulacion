@@ -490,3 +490,70 @@ abbr[title] { text-decoration: underline dotted; cursor: help; }
 .auditor-ranking-iti { min-height: 46px; }
 .auditor-ranking-iti .auditor-ranking-bar { display: flex; align-items: center; justify-content: flex-end; width: max(var(--score), 110px); padding: 0 16px; }
 .auditor-ranking-iti .auditor-ranking-bar strong { font-size: 1.35rem; font-weight: 900; line-height: 1; letter-spacing: -.01em; color: #16202e; white-space: nowrap; }
+
+/* Indicador de evaluación en curso (barra superior, a la derecha). */
+.eval-indicator {
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+  height: 34px; padding: 0 12px 0 6px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-card));
+  color: var(--text); font: inherit; cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+  animation: eval-indicator-in .2s ease-out;
+}
+.eval-indicator:hover { background: color-mix(in srgb, var(--primary) 15%, var(--bg-card)); transform: translateY(-1px); }
+.eval-indicator:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.eval-indicator-ring { transform: rotate(-90deg); flex-shrink: 0; }
+.eval-indicator-track { fill: none; stroke: color-mix(in srgb, var(--primary) 18%, transparent); stroke-width: 3; }
+.eval-indicator-fill { fill: none; stroke: var(--primary); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
+.eval-indicator-text { display: inline-flex; align-items: baseline; gap: 6px; line-height: 1; }
+.eval-indicator-scope { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
+.eval-indicator-text strong { font-size: 0.86rem; font-variant-numeric: tabular-nums; color: var(--primary); }
+.eval-indicator-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; font-size: 0.8rem; font-weight: 800; color: #fff;
+  background: var(--primary);
+}
+.eval-indicator.done { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); background: color-mix(in srgb, var(--success) 10%, var(--bg-card)); }
+.eval-indicator.done .eval-indicator-icon { background: var(--success); }
+.eval-indicator.done strong { color: var(--success); }
+.eval-indicator.failed { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 8%, var(--bg-card)); }
+.eval-indicator.failed .eval-indicator-icon { background: var(--danger); }
+.eval-indicator.failed strong { color: var(--danger); }
+@keyframes eval-indicator-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (max-width: 560px) { .eval-indicator-scope { display: none; } .eval-indicator { padding-right: 10px; } }
+@media (prefers-reduced-motion: reduce) { .eval-indicator, .eval-indicator-fill { animation: none; transition: none; } }
+/* Aviso cerrable bajo el indicador: explica que la evaluación continúa (amarillo pastel discreto). */
+.eval-indicator-wrap { position: relative; }
+.eval-indicator-hint {
+  --hint-bg: #fdf8e4; --hint-border: #efe1a8; --hint-text: #6b5a1e;
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 1150;
+  width: 290px; padding: 14px 34px 14px 14px;
+  background: var(--hint-bg); border: 1px solid var(--hint-border); border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(120, 100, 30, .12);
+  transform-origin: top right;
+  opacity: 0;
+  animation: eval-hint-in .55s cubic-bezier(.22, 1, .36, 1) .35s forwards;
+}
+@keyframes eval-hint-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.eval-indicator-hint::before {
+  content: ''; position: absolute; top: -6px; right: 28px; width: 10px; height: 10px;
+  background: var(--hint-bg); border-left: 1px solid var(--hint-border); border-top: 1px solid var(--hint-border);
+  transform: rotate(45deg);
+}
+.eval-indicator-hint strong { display: block; font-size: 0.86rem; color: var(--hint-text); margin-bottom: 4px; }
+.eval-indicator-hint p { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.45; color: color-mix(in srgb, var(--hint-text) 80%, #fff); }
+.eval-indicator-hint .btn {
+  background: #f7edc4; border-color: var(--hint-border); color: var(--hint-text);
+}
+.eval-indicator-hint .btn:hover { background: #f2e3a8; }
+.eval-indicator-hint-close {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 50%;
+  background: transparent; color: color-mix(in srgb, var(--hint-text) 70%, #fff); cursor: pointer; font-size: 0.8rem;
+}
+.eval-indicator-hint-close:hover, .eval-indicator-hint-close:focus-visible { background: #f5e9b8; color: var(--hint-text); outline: none; }
+@media (max-width: 560px) { .eval-indicator-hint { width: min(290px, calc(100vw - 24px)); right: -60px; } .eval-indicator-hint::before { right: 88px; } }
+@media (prefers-reduced-motion: reduce) { .eval-indicator-hint { animation: none; opacity: 1; } }
